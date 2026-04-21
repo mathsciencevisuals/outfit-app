@@ -19,7 +19,10 @@
     "@fitme/config": "workspace:*",
     "@fitme/ui": "workspace:*",
     "expo": "~51.0.28",
-    "expo-image-picker": "~15.0.7",
+    "expo-constants": "~16.0.2",
+    "expo-font": "~12.0.9",
+    "expo-image-picker": "~15.1.0",
+    "expo-linking": "~6.3.1",
     "expo-router": "~3.5.23",
     "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
@@ -31,7 +34,6 @@
   "devDependencies": {
     "@types/node": "^22.7.4",
     "@types/react": "~18.2.79",
-    "eas-cli": "^14.3.0",
     "typescript": "^5.6.3"
   }
 }
