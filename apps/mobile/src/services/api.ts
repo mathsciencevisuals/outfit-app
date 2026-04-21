@@ -28,6 +28,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export const mobileApi = {
+  login: (email: string, password: string): Promise<{ accessToken: string; user: { id: string; email: string } }> =>
+    apiFetch("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    }),
+  register: (email: string, password: string, firstName: string, lastName: string): Promise<{ accessToken: string; user: { id: string; email: string } }> =>
+    apiFetch("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, firstName, lastName })
+    }),
   onboarding: async (): Promise<{ title: string; subtitle: string }> =>
     ({
       title: "Find your best fit faster",

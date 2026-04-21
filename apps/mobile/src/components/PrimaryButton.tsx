@@ -3,10 +3,11 @@ import { Pressable, StyleSheet, Text } from "react-native";
 
 export function PrimaryButton({
   onPress,
-  children
-}: PropsWithChildren<{ onPress?: () => void }>) {
+  children,
+  disabled
+}: PropsWithChildren<{ onPress?: () => void; disabled?: boolean }>) {
   return (
-    <Pressable onPress={onPress} style={styles.button}>
+    <Pressable onPress={disabled ? undefined : onPress} style={[styles.button, disabled && styles.disabled]}>
       <Text style={styles.text}>{children}</Text>
     </Pressable>
   );
@@ -24,5 +25,8 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
     fontWeight: "700",
     fontSize: 16
+  },
+  disabled: {
+    opacity: 0.5
   }
 });
