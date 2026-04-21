@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@fitme/types": ["packages/types/src"],
+      "@fitme/ai-client": ["packages/ai-client/src"],
+      "@fitme/fit-engine": ["packages/fit-engine/src"],
+      "@fitme/recommendation-engine": ["packages/recommendation-engine/src"],
+      "@fitme/ui": ["packages/ui/src"],
+      "@fitme/config/*": ["packages/config/src/*"]
+    }
+  }
+}

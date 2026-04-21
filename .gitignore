@@ -1,0 +1,12 @@
+node_modules
+.turbo
+dist
+coverage
+.next
+.expo
+*.log
+.DS_Store
+apps/api/prisma/dev.db
+postgres_data
+redis_data
+minio_data

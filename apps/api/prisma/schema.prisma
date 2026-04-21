@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum TryOnStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RecommendationReason {
+  FIT
+  STYLE
+  COLOR
+  TREND
+}
+
+model User {
+  id                String              @id @default(cuid())
+  email             String              @unique
+  passwordHash      String
+  role              UserRole            @default(USER)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  profile           Profile?
+  measurements      Measurement[]
+  tryOnRequests     TryOnRequest[]
+  fitAssessments    FitAssessment[]
+  recommendations   Recommendation[]
+  savedLooks        SavedLook[]
+  uploads           Upload[]
+}
+
+model Profile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  firstName         String
+  lastName          String
+  gender            String?
+  age               Int?
+  heightCm          Float?
+  weightKg          Float?
+  bodyShape         String?
+  stylePreference   Json?
+  preferredColors   String[]
+  avoidedColors     String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Measurement {
+  id                String   @id @default(cuid())
+  userId            String
+  chestCm           Float?
+  waistCm           Float?
+  hipsCm            Float?
+  inseamCm          Float?
+  shoulderCm        Float?
+  footLengthCm      Float?
+  source            String   @default("manual")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Brand {
+  id                String      @id @default(cuid())
+  name              String      @unique
+  slug              String      @unique
+  countryCode       String
+  sizingNotes       String?
+  products          Product[]
+  sizeCharts        SizeChart[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+model Product {
+  id                String            @id @default(cuid())
+  brandId           String
+  name              String
+  slug              String            @unique
+  category          String
+  description       String
+  baseColor         String
+  secondaryColors   String[]
+  materials         String[]
+  styleTags         String[]
+  imageUrl          String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  brand             Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  variants          ProductVariant[]
+  fitAssessments    FitAssessment[]
+  recommendations   Recommendation[]
+  savedLookItems    SavedLookItem[]
+}
+
+model ProductVariant {
+  id                String           @id @default(cuid())
+  productId         String
+  sku               String           @unique
+  sizeLabel         String
+  color             String
+  price             Decimal          @db.Decimal(10, 2)
+  currency          String           @default("USD")
+  imageUrl          String?
+  sizeChartEntries  SizeChartEntry[]
+  inventoryOffers   InventoryOffer[]
+  tryOnRequests     TryOnRequest[]
+  product           Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model SizeChart {
+  id                String           @id @default(cuid())
+  brandId           String
+  category          String
+  notes             String?
+  entries           SizeChartEntry[]
+  brand             Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model SizeChartEntry {
+  id                String         @id @default(cuid())
+  sizeChartId       String
+  variantId         String?
+  sizeLabel         String
+  chestMinCm        Float?
+  chestMaxCm        Float?
+  waistMinCm        Float?
+  waistMaxCm        Float?
+  hipsMinCm         Float?
+  hipsMaxCm         Float?
+  inseamMinCm       Float?
+  inseamMaxCm       Float?
+  sizeChart         SizeChart      @relation(fields: [sizeChartId], references: [id], onDelete: Cascade)
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+}
+
+model Shop {
+  id                String           @id @default(cuid())
+  name              String
+  slug              String           @unique
+  url               String
+  region            String
+  inventoryOffers   InventoryOffer[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
+model InventoryOffer {
+  id                String         @id @default(cuid())
+  shopId            String
+  variantId         String
+  externalUrl       String
+  stock             Int
+  price             Decimal        @db.Decimal(10, 2)
+  currency          String         @default("USD")
+  shop              Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  variant           ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+}
+
+model TryOnRequest {
+  id                String        @id @default(cuid())
+  userId            String
+  variantId         String
+  provider          String
+  imageUrl          String
+  status            TryOnStatus   @default(PENDING)
+  requestedAt       DateTime      @default(now())
+  processedAt       DateTime?
+  result            TryOnResult?
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant           ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+}
+
+model TryOnResult {
+  id                String        @id @default(cuid())
+  requestId         String        @unique
+  outputImageUrl    String
+  overlayImageUrl   String?
+  confidence        Float
+  summary           String
+  metadata          Json?
+  request           TryOnRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model FitAssessment {
+  id                String      @id @default(cuid())
+  userId            String
+  productId         String
+  score             Float
+  confidence        Float
+  verdict           String
+  notes             String
+  createdAt         DateTime    @default(now())
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Recommendation {
+  id                String               @id @default(cuid())
+  userId            String
+  productId         String
+  rank              Int
+  score             Float
+  reason            RecommendationReason
+  explanation       String
+  createdAt         DateTime             @default(now())
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product           Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model SavedLook {
+  id                String          @id @default(cuid())
+  userId            String
+  name              String
+  note              String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             SavedLookItem[]
+}
+
+model SavedLookItem {
+  id                String      @id @default(cuid())
+  savedLookId       String
+  productId         String
+  savedLook         SavedLook   @relation(fields: [savedLookId], references: [id], onDelete: Cascade)
+  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ProviderConfig {
+  id                String   @id @default(cuid())
+  provider          String   @unique
+  displayName       String
+  baseUrl           String?
+  apiKeyHint        String?
+  isEnabled         Boolean  @default(true)
+  config            Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Upload {
+  id                String   @id @default(cuid())
+  userId            String
+  key               String   @unique
+  mimeType          String
+  bucket            String
+  publicUrl         String
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
