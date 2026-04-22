@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Injectable, Module, Param, Put } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { IsArray, IsNumber, IsOptional, IsString } from "class-validator";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
@@ -125,35 +126,107 @@ class UsersService {
   async updateProfile(user: AuthenticatedUser, userId: string, dto: UpdateProfileDto) {
     this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot update this profile");
 
-    const upload = dto.avatarUploadId
-      ? await (this.prisma.upload as any).findUnique({ where: { id: dto.avatarUploadId } })
-      : null;
+    let avatarUrl: string | null = dto.avatarUrl ?? null;
+    if (dto.avatarUploadId) {
+      const [upload] = await this.prisma.$queryRaw<
+        Array<{ id: string; userId: string; publicUrl: string }>
+      >(Prisma.sql`
+        SELECT id, "userId", "publicUrl"
+        FROM "Upload"
+        WHERE id = ${dto.avatarUploadId}
+        LIMIT 1
+      `);
 
-    if (dto.avatarUploadId && (!upload || upload.userId !== userId)) {
-      throw new BadRequestException("Profile image upload is invalid for this user");
+      if (!upload || upload.userId !== userId) {
+        throw new BadRequestException("Profile image upload is invalid for this user");
+      }
+
+      avatarUrl = upload.publicUrl;
     }
 
-    const data = {
-      ...dto,
-      avatarUploadId: upload?.id ?? dto.avatarUploadId ?? null,
-      avatarUrl: upload?.publicUrl ?? dto.avatarUrl ?? null,
-      stylePreference: dto.stylePreference as Prisma.InputJsonValue | undefined
-    };
-
-    const profile = await (this.prisma.profile as any).upsert({
-      where: { userId },
-      update: data,
-      create: {
-        userId,
-        ...data
-      },
-      include: { avatarUpload: true }
-    });
+    const [profile] = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        firstName: string;
+        lastName: string;
+        gender: string | null;
+        age: number | null;
+        heightCm: number | null;
+        weightKg: number | null;
+        bodyShape: string | null;
+        stylePreference: Prisma.JsonValue | null;
+        preferredColors: string[] | null;
+        avoidedColors: string[] | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>
+    >(Prisma.sql`
+      INSERT INTO "Profile" (
+        id,
+        "userId",
+        "firstName",
+        "lastName",
+        gender,
+        age,
+        "heightCm",
+        "weightKg",
+        "bodyShape",
+        "stylePreference",
+        "preferredColors",
+        "avoidedColors",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${userId},
+        ${dto.firstName},
+        ${dto.lastName},
+        ${dto.gender ?? null},
+        ${dto.age ?? null},
+        ${dto.heightCm ?? null},
+        ${dto.weightKg ?? null},
+        ${dto.bodyShape ?? null},
+        CAST(${JSON.stringify(dto.stylePreference ?? null)} AS jsonb),
+        ${this.toTextArray(dto.preferredColors)},
+        ${this.toTextArray(dto.avoidedColors)},
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT ("userId") DO UPDATE SET
+        "firstName" = EXCLUDED."firstName",
+        "lastName" = EXCLUDED."lastName",
+        gender = EXCLUDED.gender,
+        age = EXCLUDED.age,
+        "heightCm" = EXCLUDED."heightCm",
+        "weightKg" = EXCLUDED."weightKg",
+        "bodyShape" = EXCLUDED."bodyShape",
+        "stylePreference" = EXCLUDED."stylePreference",
+        "preferredColors" = EXCLUDED."preferredColors",
+        "avoidedColors" = EXCLUDED."avoidedColors",
+        "updatedAt" = NOW()
+      RETURNING
+        id,
+        "userId",
+        "firstName",
+        "lastName",
+        gender,
+        age,
+        "heightCm",
+        "weightKg",
+        "bodyShape",
+        "stylePreference",
+        "preferredColors",
+        "avoidedColors",
+        "createdAt",
+        "updatedAt"
+    `);
 
     const completionSignals = [
       profile.firstName,
       profile.lastName,
-      profile.avatarUrl,
+      avatarUrl,
       profile.heightCm,
       profile.bodyShape,
       profile.preferredColors?.length ? "palette" : null
@@ -252,6 +325,14 @@ class UsersService {
       isWishlist: false,
       items: items.filter((item) => item.savedLookId === look.id)
     }));
+  }
+
+  private toTextArray(values: string[]) {
+    if (values.length === 0) {
+      return Prisma.sql`ARRAY[]::text[]`;
+    }
+
+    return Prisma.sql`ARRAY[${Prisma.join(values)}]::text[]`;
   }
 }
 

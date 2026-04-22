@@ -11,6 +11,8 @@ import {
   Query
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
@@ -44,35 +46,37 @@ class SavedLooksService {
     private readonly authorizationService: AuthorizationService
   ) {}
 
-  list(user: AuthenticatedUser, userId?: string) {
+  async list(user: AuthenticatedUser, userId?: string) {
     const targetUserId = userId ?? user.id;
     this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these saved looks");
 
-    return (this.prisma.savedLook as any).findMany({
-      where: { userId: targetUserId },
-      include: { items: { include: { product: true } }, user: true },
-      orderBy: { updatedAt: "desc" }
-    });
+    return this.readLooks(targetUserId);
   }
 
-  create(user: AuthenticatedUser, dto: SavedLookDto) {
+  async create(user: AuthenticatedUser, dto: SavedLookDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this saved look");
-    return (this.prisma.savedLook as any).create({
-      data: {
-        userId: dto.userId,
-        name: dto.name,
-        note: dto.note ?? null,
-        isWishlist: dto.isWishlist ?? false,
-        items: {
-          create: dto.productIds.map((productId) => ({ productId }))
-        }
-      },
-      include: { items: { include: { product: true } } }
-    });
+    const lookId = randomUUID();
+
+    await this.prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "SavedLook" (id, "userId", name, note, "createdAt", "updatedAt")
+      VALUES (${lookId}, ${dto.userId}, ${dto.name}, ${dto.note ?? null}, NOW(), NOW())
+    `);
+
+    if (dto.productIds.length > 0) {
+      await this.prisma.savedLookItem.createMany({
+        data: dto.productIds.map((productId) => ({
+          id: randomUUID(),
+          savedLookId: lookId,
+          productId
+        }))
+      });
+    }
+
+    return this.readLook(lookId);
   }
 
   async update(user: AuthenticatedUser, id: string, dto: SavedLookDto) {
-    const existing = await (this.prisma.savedLook as any).findUnique({ where: { id } });
+    const existing = await this.readLookRecord(id);
     if (!existing) {
       return null;
     }
@@ -81,28 +85,94 @@ class SavedLooksService {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot reassign this saved look");
 
     await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: id } });
-    return (this.prisma.savedLook as any).update({
-      where: { id },
-      data: {
-        name: dto.name,
-        note: dto.note ?? null,
-        isWishlist: dto.isWishlist ?? false,
-        items: {
-          create: dto.productIds.map((productId) => ({ productId }))
-        }
-      },
-      include: { items: { include: { product: true } } }
-    });
+    await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE "SavedLook"
+      SET name = ${dto.name},
+          note = ${dto.note ?? null},
+          "updatedAt" = NOW()
+      WHERE id = ${id}
+    `);
+
+    if (dto.productIds.length > 0) {
+      await this.prisma.savedLookItem.createMany({
+        data: dto.productIds.map((productId) => ({
+          id: randomUUID(),
+          savedLookId: id,
+          productId
+        }))
+      });
+    }
+
+    return this.readLook(id);
   }
 
   async delete(user: AuthenticatedUser, id: string) {
-    const existing = await (this.prisma.savedLook as any).findUnique({ where: { id } });
+    const existing = await this.readLookRecord(id);
     if (!existing) {
       return null;
     }
 
     this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot delete this saved look");
-    return this.prisma.savedLook.delete({ where: { id } });
+    await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: id } });
+    await this.prisma.$executeRaw(Prisma.sql`DELETE FROM "SavedLook" WHERE id = ${id}`);
+    return { id };
+  }
+
+  private async readLookRecord(id: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ id: string; userId: string; name: string; note: string | null; createdAt: Date; updatedAt: Date }>
+    >(Prisma.sql`
+      SELECT id, "userId", name, note, "createdAt", "updatedAt"
+      FROM "SavedLook"
+      WHERE id = ${id}
+      LIMIT 1
+    `);
+
+    return rows[0] ?? null;
+  }
+
+  private async readLook(id: string) {
+    const look = await this.readLookRecord(id);
+    if (!look) {
+      return null;
+    }
+
+    const items = await this.prisma.savedLookItem.findMany({
+      where: { savedLookId: id },
+      include: { product: true }
+    });
+
+    return {
+      ...look,
+      isWishlist: false,
+      items
+    };
+  }
+
+  private async readLooks(userId: string) {
+    const looks = await this.prisma.$queryRaw<
+      Array<{ id: string; userId: string; name: string; note: string | null; createdAt: Date; updatedAt: Date }>
+    >(Prisma.sql`
+      SELECT id, "userId", name, note, "createdAt", "updatedAt"
+      FROM "SavedLook"
+      WHERE "userId" = ${userId}
+      ORDER BY "updatedAt" DESC
+    `);
+
+    if (looks.length === 0) {
+      return [];
+    }
+
+    const items = await this.prisma.savedLookItem.findMany({
+      where: { savedLookId: { in: looks.map((look) => look.id) } },
+      include: { product: true }
+    });
+
+    return looks.map((look) => ({
+      ...look,
+      isWishlist: false,
+      items: items.filter((item) => item.savedLookId === look.id)
+    }));
   }
 }
 
