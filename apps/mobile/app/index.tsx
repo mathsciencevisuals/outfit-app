@@ -1,5 +1,8 @@
 import { Redirect } from "expo-router";
 
+import { useAppStore } from "../src/store/app-store";
+
 export default function IndexRoute() {
-  return <Redirect href="/onboarding" />;
+  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
+  return <Redirect href={isAuthenticated ? "/profile" : "/onboarding"} />;
 }

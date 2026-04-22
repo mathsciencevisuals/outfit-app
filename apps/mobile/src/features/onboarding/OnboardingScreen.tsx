@@ -18,7 +18,7 @@ export function OnboardingScreen() {
         subtitle={data?.subtitle ?? "Build your profile and start discovering better fits."}
       >
         <Text>Capture your style, measurements, and preferred brands to unlock fit-first discovery.</Text>
-        <PrimaryButton onPress={() => router.push("/profile")}>Start setup</PrimaryButton>
+        <PrimaryButton onPress={() => router.push("/auth")}>Start setup</PrimaryButton>
       </SectionCard>
     </Screen>
   );

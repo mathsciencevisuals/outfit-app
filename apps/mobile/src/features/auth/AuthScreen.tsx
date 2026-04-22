@@ -32,7 +32,7 @@ export function AuthScreen() {
       setToken(result.accessToken);
       setUserId(result.user.id);
       setAuthenticated(true);
-      router.replace("/onboarding");
+      router.replace("/profile");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {

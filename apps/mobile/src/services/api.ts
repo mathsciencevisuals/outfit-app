@@ -8,12 +8,15 @@ import type {
   TryOnResult,
   UserProfile
 } from "../types/api";
+import { useAppStore } from "../store/app-store";
 import { env } from "../utils/env";
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = useAppStore.getState().token;
   const response = await fetch(`${env.EXPO_PUBLIC_API_URL}${path}`, {
     headers: {
       "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {})
     },
     ...init
