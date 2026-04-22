@@ -12,6 +12,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { compare, hash } from "bcryptjs";
 import { IsEmail, IsString, MinLength } from "class-validator";
 
@@ -61,17 +62,32 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
-        passwordHash,
-        profile: {
-          create: {
-            firstName: dto.firstName,
-            lastName: dto.lastName,
-            preferredColors: [],
-            avoidedColors: []
-          }
-        }
+        passwordHash
       }
     });
+
+    await this.prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "Profile" (
+        id,
+        "userId",
+        "firstName",
+        "lastName",
+        "preferredColors",
+        "avoidedColors",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${user.id},
+        ${dto.firstName},
+        ${dto.lastName},
+        ARRAY[]::text[],
+        ARRAY[]::text[],
+        NOW(),
+        NOW()
+      )
+    `);
 
     const profile = await this.getSafeProfile(user.id);
     return this.issueAuthResponse({ ...user, profile });
