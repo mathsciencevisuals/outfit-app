@@ -1,4 +1,4 @@
-name: Android Preview Build
+name: Android Internal Preview Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   android_preview:
-    name: Build Android APK
+    name: Build Android Internal APK
     type: build
     params:
       platform: android
