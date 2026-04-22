@@ -7,6 +7,7 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "resourceClass": "large",
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://fitmeapi-production.up.railway.app"
