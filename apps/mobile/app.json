@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "FitMe",
+    "owner": "mathsciencevisuals",
     "slug": "fitme",
     "scheme": "fitme",
     "version": "1.0.0",
