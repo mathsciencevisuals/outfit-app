@@ -36,5 +36,10 @@
     "@types/node": "^22.7.4",
     "@types/react": "~18.2.79",
     "typescript": "^5.6.3"
+  },
+  "expo": {
+    "install": {
+      "exclude": ["@fitme/api", "prisma", "@prisma/client"]
+    }
   }
 }
