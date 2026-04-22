@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "prisma generate && nest build",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate || true",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/apps/api/src/main.js",
     "lint": "tsc --noEmit",
