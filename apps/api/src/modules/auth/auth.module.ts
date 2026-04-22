@@ -11,6 +11,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { Prisma } from "@prisma/client";
 import { compare, hash } from "bcryptjs";
 import { IsEmail, IsString, MinLength } from "class-validator";
 
@@ -69,43 +70,99 @@ export class AuthService {
             avoidedColors: []
           }
         }
-      },
-      include: { profile: true }
+      }
     });
 
-    return this.issueAuthResponse(user);
+    const profile = await this.getSafeProfile(user.id);
+    return this.issueAuthResponse({ ...user, profile });
   }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-      include: { profile: true }
+      where: { email: dto.email }
     });
 
     if (!user || !(await compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    return this.issueAuthResponse(user);
+    const profile = await this.getSafeProfile(user.id);
+    return this.issueAuthResponse({ ...user, profile });
   }
 
   async session(user: AuthenticatedUser) {
     const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      include: { profile: true }
+      where: { id: user.id }
     });
 
     if (!dbUser) {
       throw new UnauthorizedException("Account no longer exists");
     }
 
+    const profile = await this.getSafeProfile(dbUser.id);
+
     return {
       user: {
         id: dbUser.id,
         email: dbUser.email,
         role: dbUser.role,
-        profile: dbUser.profile
+        profile
       }
+    };
+  }
+
+  private async getSafeProfile(userId: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        firstName: string;
+        lastName: string;
+        gender: string | null;
+        age: number | null;
+        heightCm: number | null;
+        weightKg: number | null;
+        bodyShape: string | null;
+        stylePreference: Prisma.JsonValue | null;
+        preferredColors: string[] | null;
+        avoidedColors: string[] | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        "userId",
+        "firstName",
+        "lastName",
+        gender,
+        age,
+        "heightCm",
+        "weightKg",
+        "bodyShape",
+        "stylePreference",
+        "preferredColors",
+        "avoidedColors",
+        "createdAt",
+        "updatedAt"
+      FROM "Profile"
+      WHERE "userId" = ${userId}
+      LIMIT 1
+    `);
+
+    const profile = rows[0];
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      ...profile,
+      avatarUploadId: null,
+      avatarUrl: null,
+      budgetMin: null,
+      budgetMax: null,
+      budgetLabel: null,
+      closetStatus: "COMING_SOON"
     };
   }
 

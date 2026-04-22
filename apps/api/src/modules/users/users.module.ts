@@ -93,19 +93,36 @@ class UsersService {
   async getProfile(user: AuthenticatedUser, userId: string) {
     this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot access this profile");
 
-    const dbUser: any = await this.prisma.user.findUnique({
+    const exists = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { profile: { include: { avatarUpload: true } }, measurements: true, savedLooks: { include: { items: { include: { product: true } } } } }
-    } as any);
+      select: { id: true }
+    });
 
-    if (!dbUser?.profile) {
+    if (!exists) {
+      return null;
+    }
+
+    const [profile, measurements, savedLooks] = await Promise.all([
+      this.getSafeProfile(userId),
+      this.prisma.measurement.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" }
+      } as any),
+      (this.prisma.savedLook as any).findMany({
+        where: { userId },
+        include: { items: { include: { product: true } } },
+        orderBy: { createdAt: "desc" }
+      })
+    ]);
+
+    if (!profile) {
       return null;
     }
 
     return {
-      ...dbUser.profile,
-      measurements: dbUser.measurements ?? [],
-      savedLooks: dbUser.savedLooks ?? []
+      ...profile,
+      measurements: measurements ?? [],
+      savedLooks: savedLooks ?? []
     };
   }
 
@@ -151,6 +168,61 @@ class UsersService {
     }
 
     return profile;
+  }
+
+  private async getSafeProfile(userId: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        firstName: string;
+        lastName: string;
+        gender: string | null;
+        age: number | null;
+        heightCm: number | null;
+        weightKg: number | null;
+        bodyShape: string | null;
+        stylePreference: Prisma.JsonValue | null;
+        preferredColors: string[] | null;
+        avoidedColors: string[] | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        "userId",
+        "firstName",
+        "lastName",
+        gender,
+        age,
+        "heightCm",
+        "weightKg",
+        "bodyShape",
+        "stylePreference",
+        "preferredColors",
+        "avoidedColors",
+        "createdAt",
+        "updatedAt"
+      FROM "Profile"
+      WHERE "userId" = ${userId}
+      LIMIT 1
+    `);
+
+    const profile = rows[0];
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      ...profile,
+      avatarUploadId: null,
+      avatarUrl: null,
+      budgetMin: null,
+      budgetMax: null,
+      budgetLabel: null,
+      closetStatus: "COMING_SOON"
+    };
   }
 }
 
