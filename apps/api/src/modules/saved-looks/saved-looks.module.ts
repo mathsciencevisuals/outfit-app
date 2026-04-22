@@ -10,9 +10,12 @@ import {
   Put,
   Query
 } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IsArray, IsOptional, IsString } from "class-validator";
 
+import { AuthorizationService } from "../../common/auth/authorization.service";
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
 
 class SavedLookDto {
@@ -32,17 +35,24 @@ class SavedLookDto {
 
 @Injectable()
 class SavedLooksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authorizationService: AuthorizationService
+  ) {}
 
-  list(userId?: string) {
+  list(user: AuthenticatedUser, userId?: string) {
+    const targetUserId = userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these saved looks");
+
     return this.prisma.savedLook.findMany({
-      where: userId ? { userId } : undefined,
+      where: { userId: targetUserId },
       include: { items: { include: { product: true } }, user: true },
       orderBy: { updatedAt: "desc" }
     });
   }
 
-  create(dto: SavedLookDto) {
+  create(user: AuthenticatedUser, dto: SavedLookDto) {
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this saved look");
     return this.prisma.savedLook.create({
       data: {
         userId: dto.userId,
@@ -56,7 +66,15 @@ class SavedLooksService {
     });
   }
 
-  async update(id: string, dto: SavedLookDto) {
+  async update(user: AuthenticatedUser, id: string, dto: SavedLookDto) {
+    const existing = await this.prisma.savedLook.findUnique({ where: { id } });
+    if (!existing) {
+      return null;
+    }
+
+    this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot update this saved look");
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot reassign this saved look");
+
     await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: id } });
     return this.prisma.savedLook.update({
       where: { id },
@@ -71,34 +89,41 @@ class SavedLooksService {
     });
   }
 
-  delete(id: string) {
+  async delete(user: AuthenticatedUser, id: string) {
+    const existing = await this.prisma.savedLook.findUnique({ where: { id } });
+    if (!existing) {
+      return null;
+    }
+
+    this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot delete this saved look");
     return this.prisma.savedLook.delete({ where: { id } });
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("saved-looks")
 @Controller("saved-looks")
 class SavedLooksController {
   constructor(private readonly service: SavedLooksService) {}
 
   @Get()
-  list(@Query("userId") userId?: string) {
-    return this.service.list(userId);
+  list(@CurrentUser() user: AuthenticatedUser, @Query("userId") userId?: string) {
+    return this.service.list(user, userId);
   }
 
   @Post()
-  create(@Body() dto: SavedLookDto) {
-    return this.service.create(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: SavedLookDto) {
+    return this.service.create(user, dto);
   }
 
   @Put(":id")
-  update(@Param("id") id: string, @Body() dto: SavedLookDto) {
-    return this.service.update(id, dto);
+  update(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() dto: SavedLookDto) {
+    return this.service.update(user, id, dto);
   }
 
   @Delete(":id")
-  delete(@Param("id") id: string) {
-    return this.service.delete(id);
+  delete(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.service.delete(user, id);
   }
 }
 

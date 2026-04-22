@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Injectable, Module, Param, Post, Put, Query } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 
+import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 class VariantDto {
@@ -135,6 +136,7 @@ class ProductsService {
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("products")
 @Controller("products")
 class ProductsController {
@@ -150,11 +152,13 @@ class ProductsController {
     return this.service.get(id);
   }
 
+  @Roles("ADMIN")
   @Post()
   create(@Body() dto: ProductDto) {
     return this.service.create(dto);
   }
 
+  @Roles("ADMIN")
   @Put(":id")
   update(@Param("id") id: string, @Body() dto: ProductDto) {
     return this.service.update(id, dto);

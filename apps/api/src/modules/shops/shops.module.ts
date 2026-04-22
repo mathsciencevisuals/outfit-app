@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Injectable, Module, Param, Post, Put } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 
+import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 class OfferDto {
@@ -94,6 +95,7 @@ class ShopsService {
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("shops")
 @Controller("shops")
 class ShopsController {
@@ -114,11 +116,13 @@ class ShopsController {
     return this.service.get(id);
   }
 
+  @Roles("ADMIN")
   @Post()
   create(@Body() dto: ShopDto) {
     return this.service.create(dto);
   }
 
+  @Roles("ADMIN")
   @Put(":id")
   update(@Param("id") id: string, @Body() dto: ShopDto) {
     return this.service.update(id, dto);

@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Injectable, Module, Post, Query } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IsString } from "class-validator";
 
 import { computeFit } from "@fitme/fit-engine";
+import { AuthorizationService } from "../../common/auth/authorization.service";
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
 
 class FitAssessmentDto {
@@ -15,17 +18,25 @@ class FitAssessmentDto {
 
 @Injectable()
 class FitService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authorizationService: AuthorizationService
+  ) {}
 
-  list(userId?: string) {
+  list(user: AuthenticatedUser, userId?: string) {
+    const targetUserId = userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these fit assessments");
+
     return this.prisma.fitAssessment.findMany({
-      where: userId ? { userId } : undefined,
+      where: { userId: targetUserId },
       include: { product: true, user: true },
       orderBy: { createdAt: "desc" }
     });
   }
 
-  async assess(dto: FitAssessmentDto) {
+  async assess(user: AuthenticatedUser, dto: FitAssessmentDto) {
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this fit assessment");
+
     const latestMeasurement = await this.prisma.measurement.findFirst({
       where: { userId: dto.userId },
       orderBy: { createdAt: "desc" }
@@ -78,19 +89,20 @@ class FitService {
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("fit")
 @Controller("fit")
 class FitController {
   constructor(private readonly service: FitService) {}
 
   @Get("assessments")
-  list(@Query("userId") userId?: string) {
-    return this.service.list(userId);
+  list(@CurrentUser() user: AuthenticatedUser, @Query("userId") userId?: string) {
+    return this.service.list(user, userId);
   }
 
   @Post("assessments")
-  assess(@Body() dto: FitAssessmentDto) {
-    return this.service.assess(dto);
+  assess(@CurrentUser() user: AuthenticatedUser, @Body() dto: FitAssessmentDto) {
+    return this.service.assess(user, dto);
   }
 }
 

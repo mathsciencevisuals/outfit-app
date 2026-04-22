@@ -1,7 +1,10 @@
 import { Body, Controller, Delete, Get, Injectable, Module, Param, Post, Put, Query } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IsNumber, IsOptional, IsString } from "class-validator";
 
+import { AuthorizationService } from "../../common/auth/authorization.service";
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
 
 class MeasurementDto {
@@ -39,51 +42,72 @@ class MeasurementDto {
 
 @Injectable()
 class MeasurementsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authorizationService: AuthorizationService
+  ) {}
 
-  list(userId?: string) {
+  list(user: AuthenticatedUser, userId?: string) {
+    const targetUserId = userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these measurements");
+
     return this.prisma.measurement.findMany({
-      where: userId ? { userId } : undefined,
+      where: { userId: targetUserId },
       orderBy: { createdAt: "desc" }
     });
   }
 
-  create(dto: MeasurementDto) {
+  create(user: AuthenticatedUser, dto: MeasurementDto) {
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create these measurements");
     return this.prisma.measurement.create({ data: dto });
   }
 
-  update(id: string, dto: MeasurementDto) {
+  async update(user: AuthenticatedUser, id: string, dto: MeasurementDto) {
+    const existing = await this.prisma.measurement.findUnique({ where: { id } });
+    if (!existing) {
+      return null;
+    }
+
+    this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot update these measurements");
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot reassign these measurements");
     return this.prisma.measurement.update({ where: { id }, data: dto });
   }
 
-  delete(id: string) {
+  async delete(user: AuthenticatedUser, id: string) {
+    const existing = await this.prisma.measurement.findUnique({ where: { id } });
+    if (!existing) {
+      return null;
+    }
+
+    this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot delete these measurements");
     return this.prisma.measurement.delete({ where: { id } });
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("measurements")
 @Controller("measurements")
 class MeasurementsController {
   constructor(private readonly measurementsService: MeasurementsService) {}
 
   @Get()
-  list(@Query("userId") userId?: string) {
-    return this.measurementsService.list(userId);
+  list(@CurrentUser() user: AuthenticatedUser, @Query("userId") userId?: string) {
+    return this.measurementsService.list(user, userId);
   }
 
   @Post()
-  create(@Body() dto: MeasurementDto) {
-    return this.measurementsService.create(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: MeasurementDto) {
+    return this.measurementsService.create(user, dto);
   }
 
   @Put(":id")
-  update(@Param("id") id: string, @Body() dto: MeasurementDto) {
-    return this.measurementsService.update(id, dto);
+  update(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() dto: MeasurementDto) {
+    return this.measurementsService.update(user, id, dto);
   }
 
   @Delete(":id")
-  delete(@Param("id") id: string) {
-    return this.measurementsService.delete(id);
+  delete(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.measurementsService.delete(user, id);
   }
 }
 

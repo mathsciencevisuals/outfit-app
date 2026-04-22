@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FitMe UI Review Pack</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Serif+Display:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-kicker">Outfit App</div>
+          <h1>Static UI review</h1>
+          <p>
+            Click through the current mobile product surfaces as static HTML before sending the next
+            set of UX updates.
+          </p>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-label">Core flow</div>
+          <div class="nav-links" id="nav-core"></div>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-label">Commerce flow</div>
+          <div class="nav-links" id="nav-commerce"></div>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-label">Growth flow</div>
+          <div class="nav-links" id="nav-growth"></div>
+        </div>
+      </aside>
+
+      <main class="review-stage">
+        <section class="stage-header">
+          <div>
+            <div class="stage-kicker">Navigation review pack</div>
+            <h2 id="screen-title">Onboarding</h2>
+            <p id="screen-subtitle">
+              Premium static review of the current mobile app hierarchy and route surfaces.
+            </p>
+          </div>
+          <div class="screen-meta">
+            <span class="meta-pill" id="screen-route">/onboarding</span>
+            <span class="meta-pill accent" id="screen-tag">Core</span>
+          </div>
+        </section>
+
+        <section class="stage-content">
+          <div class="phone-frame">
+            <div class="phone-topbar">
+              <span>9:41</span>
+              <span>FitMe Preview</span>
+              <span>100%</span>
+            </div>
+            <div class="phone-screen" id="phone-screen"></div>
+            <div class="phone-tabs" id="phone-tabs"></div>
+          </div>
+
+          <aside class="review-notes">
+            <div class="note-card">
+              <div class="note-label">Review focus</div>
+              <p id="review-focus">
+                Check hierarchy, screen density, CTA clarity, and how the route fits into the overall
+                user journey.
+              </p>
+            </div>
+
+            <div class="note-card">
+              <div class="note-label">Main CTA</div>
+              <p id="primary-cta">Start setup</p>
+            </div>
+
+            <div class="note-card">
+              <div class="note-label">Next routes</div>
+              <div class="route-chip-list" id="next-routes"></div>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

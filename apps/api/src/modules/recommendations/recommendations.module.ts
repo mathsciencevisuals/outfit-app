@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Injectable, Module, Post, Query } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IsString } from "class-validator";
 
 import { rankProducts } from "@fitme/recommendation-engine";
+import { AuthorizationService } from "../../common/auth/authorization.service";
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
 
 class GenerateRecommendationsDto {
@@ -12,17 +15,25 @@ class GenerateRecommendationsDto {
 
 @Injectable()
 class RecommendationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authorizationService: AuthorizationService
+  ) {}
 
-  list(userId?: string) {
+  list(user: AuthenticatedUser, userId?: string) {
+    const targetUserId = userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these recommendations");
+
     return this.prisma.recommendation.findMany({
-      where: userId ? { userId } : undefined,
+      where: { userId: targetUserId },
       include: { product: { include: { brand: true, variants: true } } },
       orderBy: [{ rank: "asc" }, { score: "desc" }]
     });
   }
 
-  async generate(dto: GenerateRecommendationsDto) {
+  async generate(user: AuthenticatedUser, dto: GenerateRecommendationsDto) {
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot generate these recommendations");
+
     const profile = await this.prisma.profile.findUnique({ where: { userId: dto.userId } });
     const fitAssessments = await this.prisma.fitAssessment.findMany({ where: { userId: dto.userId } });
     const products = await this.prisma.product.findMany({ include: { variants: true } });
@@ -64,23 +75,24 @@ class RecommendationsService {
       }))
     });
 
-    return this.list(dto.userId);
+    return this.list(user, dto.userId);
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("recommendations")
 @Controller("recommendations")
 class RecommendationsController {
   constructor(private readonly service: RecommendationsService) {}
 
   @Get()
-  list(@Query("userId") userId?: string) {
-    return this.service.list(userId);
+  list(@CurrentUser() user: AuthenticatedUser, @Query("userId") userId?: string) {
+    return this.service.list(user, userId);
   }
 
   @Post("generate")
-  generate(@Body() dto: GenerateRecommendationsDto) {
-    return this.service.generate(dto);
+  generate(@CurrentUser() user: AuthenticatedUser, @Body() dto: GenerateRecommendationsDto) {
+    return this.service.generate(user, dto);
   }
 }
 

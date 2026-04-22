@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   USER
   ADMIN
+  OPERATOR
 }
 
 enum TryOnStatus {
@@ -26,20 +27,85 @@ enum RecommendationReason {
   TREND
 }
 
+enum RewardTransactionType {
+  EARN
+  SPEND
+  ADJUSTMENT
+}
+
+enum RewardReason {
+  FIRST_TRY_ON
+  LOOK_SHARE
+  REFERRAL_INVITE
+  REFERRAL_SUCCESS
+  PROFILE_COMPLETE
+  CHALLENGE_PARTICIPATION
+  COUPON_UNLOCK
+  COUPON_REDEEM
+  ADMIN_ADJUSTMENT
+}
+
+enum ReferralEventType {
+  CODE_CREATED
+  INVITE_SENT
+  SIGNUP
+  CONVERTED
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  BONUS
+}
+
+enum CouponRedemptionStatus {
+  UNLOCKED
+  REDEEMED
+  EXPIRED
+}
+
+enum CampaignTheme {
+  CAMPUS_CASUAL
+  INTERVIEW_READY
+  FEST_LOOK
+  BUDGET_UNDER_999
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ChallengeStatus {
+  JOINED
+  COMPLETED
+  CLAIMED
+}
+
 model User {
-  id                String              @id @default(cuid())
-  email             String              @unique
-  passwordHash      String
-  role              UserRole            @default(USER)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  profile           Profile?
-  measurements      Measurement[]
-  tryOnRequests     TryOnRequest[]
-  fitAssessments    FitAssessment[]
-  recommendations   Recommendation[]
-  savedLooks        SavedLook[]
-  uploads           Upload[]
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
+  passwordHash            String
+  role                    UserRole                 @default(USER)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  profile                 Profile?
+  measurements            Measurement[]
+  tryOnRequests           TryOnRequest[]
+  fitAssessments          FitAssessment[]
+  recommendations         Recommendation[]
+  savedLooks              SavedLook[]
+  uploads                 Upload[]
+  rewardWallet            RewardWallet?
+  rewardTransactions      RewardTransaction[]
+  referralCode            ReferralCode?
+  referralEventsSent      ReferralEvent[]          @relation("ReferrerEvents")
+  referralEventsReceived  ReferralEvent[]          @relation("ReferredEvents")
+  couponRedemptions       CouponRedemption[]
+  lookRatings             LookRating[]
+  shareEvents             ShareEvent[]
+  challengeParticipations ChallengeParticipation[]
 }
 
 model Profile {
@@ -106,6 +172,7 @@ model Product {
   fitAssessments    FitAssessment[]
   recommendations   Recommendation[]
   savedLookItems    SavedLookItem[]
+  lookRatings       LookRating[]
 }
 
 model ProductVariant {
@@ -133,7 +200,7 @@ model SizeChart {
 }
 
 model SizeChartEntry {
-  id                String         @id @default(cuid())
+  id                String          @id @default(cuid())
   sizeChartId       String
   variantId         String?
   sizeLabel         String
@@ -145,7 +212,7 @@ model SizeChartEntry {
   hipsMaxCm         Float?
   inseamMinCm       Float?
   inseamMaxCm       Float?
-  sizeChart         SizeChart      @relation(fields: [sizeChartId], references: [id], onDelete: Cascade)
+  sizeChart         SizeChart       @relation(fields: [sizeChartId], references: [id], onDelete: Cascade)
   variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 }
 
@@ -173,41 +240,46 @@ model InventoryOffer {
 }
 
 model TryOnRequest {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   userId            String
   variantId         String
+  sourceUploadId    String?
   provider          String
   imageUrl          String
-  status            TryOnStatus   @default(PENDING)
-  requestedAt       DateTime      @default(now())
+  status            TryOnStatus    @default(PENDING)
+  statusMessage     String?
+  requestedAt       DateTime       @default(now())
   processedAt       DateTime?
   result            TryOnResult?
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   variant           ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  sourceUpload      Upload?        @relation(fields: [sourceUploadId], references: [id], onDelete: SetNull)
+  lookRatings       LookRating[]
+  shareEvents       ShareEvent[]
 }
 
 model TryOnResult {
-  id                String        @id @default(cuid())
-  requestId         String        @unique
+  id                String       @id @default(cuid())
+  requestId         String       @unique
   outputImageUrl    String
   overlayImageUrl   String?
   confidence        Float
   summary           String
   metadata          Json?
-  request           TryOnRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request           TryOnRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 }
 
 model FitAssessment {
-  id                String      @id @default(cuid())
+  id                String   @id @default(cuid())
   userId            String
   productId         String
   score             Float
   confidence        Float
   verdict           String
   notes             String
-  createdAt         DateTime    @default(now())
-  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model Recommendation {
@@ -224,22 +296,24 @@ model Recommendation {
 }
 
 model SavedLook {
-  id                String          @id @default(cuid())
+  id                String       @id @default(cuid())
   userId            String
   name              String
   note              String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   items             SavedLookItem[]
+  ratings           LookRating[]
+  shareEvents       ShareEvent[]
 }
 
 model SavedLookItem {
-  id                String      @id @default(cuid())
+  id                String    @id @default(cuid())
   savedLookId       String
   productId         String
-  savedLook         SavedLook   @relation(fields: [savedLookId], references: [id], onDelete: Cascade)
-  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  savedLook         SavedLook @relation(fields: [savedLookId], references: [id], onDelete: Cascade)
+  product           Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model ProviderConfig {
@@ -255,12 +329,177 @@ model ProviderConfig {
 }
 
 model Upload {
-  id                String   @id @default(cuid())
+  id                String         @id @default(cuid())
   userId            String
-  key               String   @unique
+  key               String         @unique
   mimeType          String
   bucket            String
   publicUrl         String
-  createdAt         DateTime @default(now())
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tryOnRequests     TryOnRequest[]
+}
+
+model RewardWallet {
+  id                  String              @id @default(cuid())
+  userId              String              @unique
+  balancePoints       Int                 @default(0)
+  lifetimeEarned      Int                 @default(0)
+  lifetimeSpent       Int                 @default(0)
+  tierLabel           String              @default("Starter")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions        RewardTransaction[]
+  couponRedemptions   CouponRedemption[]
+}
+
+model RewardTransaction {
+  id                  String                 @id @default(cuid())
+  walletId            String
+  userId              String
+  type                RewardTransactionType
+  reason              RewardReason
+  amountPoints        Int
+  balanceAfter        Int
+  description         String
+  referenceKey        String?                @unique
+  metadata            Json?
+  createdAt           DateTime               @default(now())
+  wallet              RewardWallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ReferralCode {
+  id                  String           @id @default(cuid())
+  userId              String           @unique
+  code                String           @unique
+  isActive            Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events              ReferralEvent[]
+}
+
+model ReferralEvent {
+  id                  String            @id @default(cuid())
+  referralCodeId      String
+  referrerUserId      String
+  referredUserId      String?
+  eventType           ReferralEventType
+  rewardPoints        Int               @default(0)
+  metadata            Json?
+  createdAt           DateTime          @default(now())
+  referralCode        ReferralCode      @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
+  referrer            User              @relation("ReferrerEvents", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referredUser        User?             @relation("ReferredEvents", fields: [referredUserId], references: [id], onDelete: SetNull)
+}
+
+model Coupon {
+  id                  String                   @id @default(cuid())
+  campaignId          String?
+  code                String                   @unique
+  title               String
+  description         String?
+  type                CouponType
+  discountValue       Int
+  rewardCostPoints    Int?
+  unlockThreshold     Int?
+  minSpend            Int?
+  isActive            Boolean                  @default(true)
+  startsAt            DateTime?
+  endsAt              DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  campaign            Campaign?                @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  redemptions         CouponRedemption[]
+}
+
+model CouponRedemption {
+  id                  String                 @id @default(cuid())
+  couponId            String
+  userId              String
+  walletId            String?
+  status              CouponRedemptionStatus @default(UNLOCKED)
+  pointsSpent         Int                    @default(0)
+  createdAt           DateTime               @default(now())
+  redeemedAt          DateTime?
+  coupon              Coupon                 @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet              RewardWallet?          @relation(fields: [walletId], references: [id], onDelete: SetNull)
+}
+
+model Campaign {
+  id                      String                   @id @default(cuid())
+  slug                    String                   @unique
+  title                   String
+  description             String
+  theme                   CampaignTheme
+  status                  CampaignStatus           @default(DRAFT)
+  targetAudience          String                   @default("students")
+  budgetLabel             String?
+  startsAt                DateTime?
+  endsAt                  DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  banners                 CampaignBanner[]
+  coupons                 Coupon[]
+  challengeParticipations ChallengeParticipation[]
+}
+
+model CampaignBanner {
+  id                  String      @id @default(cuid())
+  campaignId          String
+  title               String
+  subtitle            String
+  ctaLabel            String
+  ctaRoute            String
+  imageUrl            String?
+  themeTone           String?
+  isActive            Boolean     @default(true)
+  position            Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  campaign            Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model LookRating {
+  id                  String       @id @default(cuid())
+  userId              String
+  savedLookId         String?
+  tryOnRequestId      String?
+  productId           String?
+  rating              Int
+  comment             String?
+  createdAt           DateTime     @default(now())
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedLook           SavedLook?   @relation(fields: [savedLookId], references: [id], onDelete: SetNull)
+  tryOnRequest        TryOnRequest? @relation(fields: [tryOnRequestId], references: [id], onDelete: SetNull)
+  product             Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model ShareEvent {
+  id                  String        @id @default(cuid())
+  userId              String
+  savedLookId         String?
+  tryOnRequestId      String?
+  channel             String
+  rewardGranted       Int           @default(0)
+  createdAt           DateTime      @default(now())
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedLook           SavedLook?    @relation(fields: [savedLookId], references: [id], onDelete: SetNull)
+  tryOnRequest        TryOnRequest? @relation(fields: [tryOnRequestId], references: [id], onDelete: SetNull)
+}
+
+model ChallengeParticipation {
+  id                  String           @id @default(cuid())
+  userId              String
+  campaignId          String?
+  challengeName       String
+  status              ChallengeStatus  @default(JOINED)
+  rewardPoints        Int              @default(0)
+  createdAt           DateTime         @default(now())
+  completedAt         DateTime?
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign            Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 }

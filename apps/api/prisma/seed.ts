@@ -1,10 +1,4 @@
-import {
-  Prisma,
-  PrismaClient,
-  RecommendationReason,
-  TryOnStatus,
-  UserRole
-} from "@prisma/client";
+import { Prisma, PrismaClient, TryOnStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -44,7 +38,18 @@ const productDefinitions: Array<[string, string, string, string, string[], strin
   ["Northline", "Canvas Sneaker", "footwear", "white", ["tan"], ["casual", "street"]]
 ];
 
-async function main() {
+async function resetDatabase() {
+  await (prisma as any).challengeParticipation.deleteMany();
+  await (prisma as any).shareEvent.deleteMany();
+  await (prisma as any).lookRating.deleteMany();
+  await (prisma as any).couponRedemption.deleteMany();
+  await (prisma as any).coupon.deleteMany();
+  await (prisma as any).campaignBanner.deleteMany();
+  await (prisma as any).campaign.deleteMany();
+  await (prisma as any).referralEvent.deleteMany();
+  await (prisma as any).referralCode.deleteMany();
+  await (prisma as any).rewardTransaction.deleteMany();
+  await (prisma as any).rewardWallet.deleteMany();
   await prisma.savedLookItem.deleteMany();
   await prisma.savedLook.deleteMany();
   await prisma.recommendation.deleteMany();
@@ -63,6 +68,10 @@ async function main() {
   await prisma.measurement.deleteMany();
   await prisma.profile.deleteMany();
   await prisma.user.deleteMany();
+}
+
+async function main() {
+  await resetDatabase();
 
   const brandMap = new Map<string, { id: string }>();
   for (const brand of brands) {
@@ -100,14 +109,12 @@ async function main() {
         materials: category === "outerwear" ? ["nylon", "cotton"] : ["cotton", "elastane"],
         styleTags,
         imageUrl: `https://images.example.com/${slug}.jpg`,
-        variants: {
-          create: variants
-        }
+        variants: { create: variants }
       },
       include: { variants: true }
     });
 
-    const sizeChart = await prisma.sizeChart.create({
+    await prisma.sizeChart.create({
       data: {
         brandId: brand.id,
         category,
@@ -143,7 +150,7 @@ async function main() {
       });
     }
 
-    products.push({ ...product, sizeChartId: sizeChart.id });
+    products.push(product);
   }
 
   const demoPassword = await hash("fitme1234", 10);
@@ -152,12 +159,13 @@ async function main() {
       id: "user-demo",
       email: "demo@fitme.dev",
       passwordHash: demoPassword,
+      role: "USER" as any,
       profile: {
         create: {
           firstName: "Demo",
           lastName: "User",
           gender: "female",
-          age: 29,
+          age: 21,
           heightCm: 168,
           weightKg: 61,
           bodyShape: "athletic",
@@ -175,12 +183,29 @@ async function main() {
       id: "user-admin",
       email: "admin@fitme.dev",
       passwordHash: demoPassword,
-      role: UserRole.ADMIN,
+      role: "ADMIN" as any,
       profile: {
         create: {
           firstName: "Admin",
           lastName: "User",
           preferredColors: ["black"],
+          avoidedColors: []
+        }
+      }
+    }
+  });
+
+  await prisma.user.create({
+    data: {
+      id: "user-operator",
+      email: "operator@fitme.dev",
+      passwordHash: demoPassword,
+      role: "OPERATOR" as any,
+      profile: {
+        create: {
+          firstName: "Operator",
+          lastName: "User",
+          preferredColors: ["olive"],
           avoidedColors: []
         }
       }
@@ -200,7 +225,7 @@ async function main() {
   });
 
   const firstProduct = products[0];
-  const fitAssessment = await prisma.fitAssessment.create({
+  await prisma.fitAssessment.create({
     data: {
       userId: demoUser.id,
       productId: firstProduct.id,
@@ -246,11 +271,13 @@ async function main() {
     data: {
       userId: demoUser.id,
       variantId: firstProduct.variants[1].id,
+      sourceUploadId: upload.id,
       provider: "mock",
       imageUrl: upload.publicUrl,
       status: TryOnStatus.COMPLETED,
+      statusMessage: "Try-on completed",
       processedAt: new Date()
-    }
+    } as any
   });
 
   await prisma.tryOnResult.create({
@@ -259,60 +286,321 @@ async function main() {
       outputImageUrl: `${upload.publicUrl}?rendered=1`,
       overlayImageUrl: `${firstProduct.imageUrl}?overlay=1`,
       confidence: 0.88,
-      summary: "Seeded mock try-on output.",
-      metadata: { mode: "seed" }
+      summary: "Mock try-on generated successfully with a balanced drape estimate.",
+      metadata: { provider: "mock" }
     }
   });
 
-  const recommendationProducts = products.slice(0, 6);
   await prisma.recommendation.createMany({
-    data: recommendationProducts.map((product, index) => ({
+    data: products.slice(0, 6).map((product, index) => ({
       userId: demoUser.id,
       productId: product.id,
       rank: index + 1,
-      score: 95 - index * 5,
-      reason:
-        index < 2 ? RecommendationReason.FIT : index < 4 ? RecommendationReason.STYLE : RecommendationReason.COLOR,
-      explanation: `Seeded recommendation ${index + 1}`
+      score: 92 - index * 4,
+      reason: index < 2 ? "FIT" : index < 4 ? "STYLE" : "COLOR",
+      explanation: `Seeded recommendation ${index + 1} for demo flows`
     }))
   });
 
-  await prisma.savedLook.create({
+  const savedLook = await prisma.savedLook.create({
     data: {
       userId: demoUser.id,
-      name: "Weekend Layered Look",
-      note: "Balanced for city walking and casual dinner.",
-      items: {
+      name: "Commute Layers",
+      note: "Balanced smart-casual stack for weekday rotation.",
+      items: { create: products.slice(0, 3).map((product) => ({ productId: product.id })) }
+    },
+    include: { items: true }
+  });
+
+  const wallet = await (prisma as any).rewardWallet.create({
+    data: {
+      userId: demoUser.id,
+      balancePoints: 320,
+      lifetimeEarned: 420,
+      lifetimeSpent: 100,
+      tierLabel: "Insider"
+    }
+  });
+
+  await (prisma as any).rewardTransaction.createMany({
+    data: [
+      {
+        walletId: wallet.id,
+        userId: demoUser.id,
+        type: "EARN",
+        reason: "PROFILE_COMPLETE",
+        amountPoints: 80,
+        balanceAfter: 80,
+        description: "Completed profile essentials",
+        referenceKey: "seed-profile-complete"
+      },
+      {
+        walletId: wallet.id,
+        userId: demoUser.id,
+        type: "EARN",
+        reason: "FIRST_TRY_ON",
+        amountPoints: 120,
+        balanceAfter: 200,
+        description: "First try-on reward",
+        referenceKey: "seed-first-tryon"
+      },
+      {
+        walletId: wallet.id,
+        userId: demoUser.id,
+        type: "EARN",
+        reason: "LOOK_SHARE",
+        amountPoints: 20,
+        balanceAfter: 220,
+        description: "Shared a look to WhatsApp",
+        referenceKey: "seed-share"
+      },
+      {
+        walletId: wallet.id,
+        userId: demoUser.id,
+        type: "EARN",
+        reason: "CHALLENGE_PARTICIPATION",
+        amountPoints: 100,
+        balanceAfter: 320,
+        description: "Completed campus challenge",
+        referenceKey: "seed-challenge"
+      },
+      {
+        walletId: wallet.id,
+        userId: demoUser.id,
+        type: "SPEND",
+        reason: "COUPON_UNLOCK",
+        amountPoints: 100,
+        balanceAfter: 220,
+        description: "Unlocked budget coupon",
+        referenceKey: "seed-coupon-unlock"
+      }
+    ]
+  });
+
+  const referralCode = await (prisma as any).referralCode.create({
+    data: {
+      userId: demoUser.id,
+      code: "FIT-CAMPUS21"
+    }
+  });
+
+  await (prisma as any).referralEvent.createMany({
+    data: [
+      {
+        referralCodeId: referralCode.id,
+        referrerUserId: demoUser.id,
+        eventType: "CODE_CREATED",
+        rewardPoints: 0
+      },
+      {
+        referralCodeId: referralCode.id,
+        referrerUserId: demoUser.id,
+        eventType: "INVITE_SENT",
+        rewardPoints: 40,
+        metadata: { channel: "instagram_dm" }
+      },
+      {
+        referralCodeId: referralCode.id,
+        referrerUserId: demoUser.id,
+        referredUserId: adminUser.id,
+        eventType: "CONVERTED",
+        rewardPoints: 150,
+        metadata: { source: "campus-ambassador" }
+      }
+    ]
+  });
+
+  const campusCampaign = await (prisma as any).campaign.create({
+    data: {
+      slug: "campus-casual-week",
+      title: "Campus Casual Week",
+      description: "Student-first layers and budget looks for all-day campus wear.",
+      theme: "CAMPUS_CASUAL",
+      status: "ACTIVE",
+      targetAudience: "students",
+      budgetLabel: "Under 999",
+      startsAt: new Date("2026-04-15T00:00:00.000Z"),
+      endsAt: new Date("2026-05-15T00:00:00.000Z"),
+      banners: {
         create: [
-          { productId: products[0].id },
-          { productId: products[2].id },
-          { productId: products[19].id }
+          {
+            title: "Campus Casual",
+            subtitle: "Back-to-class layers built for long days and fast outfit decisions.",
+            ctaLabel: "See rewards",
+            ctaRoute: "/rewards",
+            themeTone: "earth",
+            isActive: true,
+            position: 0
+          },
+          {
+            title: "Challenge Unlock",
+            subtitle: "Join the weekly campus look challenge and stack points faster.",
+            ctaLabel: "Join challenge",
+            ctaRoute: "/challenges",
+            themeTone: "sage",
+            isActive: true,
+            position: 1
+          }
+        ]
+      }
+    },
+    include: { banners: true }
+  });
+
+  const interviewCampaign = await (prisma as any).campaign.create({
+    data: {
+      slug: "interview-ready-edit",
+      title: "Interview Ready Edit",
+      description: "Sharper silhouettes and trust-building pieces for student interviews.",
+      theme: "INTERVIEW_READY",
+      status: "ACTIVE",
+      targetAudience: "students",
+      budgetLabel: "Premium picks",
+      startsAt: new Date("2026-04-10T00:00:00.000Z"),
+      endsAt: new Date("2026-05-20T00:00:00.000Z"),
+      banners: {
+        create: [
+          {
+            title: "Interview Ready",
+            subtitle: "Try fitted blazers, trousers, and polished campus formal looks.",
+            ctaLabel: "Open coupons",
+            ctaRoute: "/coupons",
+            themeTone: "navy",
+            isActive: true,
+            position: 0
+          }
+        ]
+      }
+    },
+    include: { banners: true }
+  });
+
+  const festCampaign = await (prisma as any).campaign.create({
+    data: {
+      slug: "fest-look-push",
+      title: "Fest Look Push",
+      description: "High-energy festive styling built around try-on and social sharing.",
+      theme: "FEST_LOOK",
+      status: "ACTIVE",
+      targetAudience: "students",
+      budgetLabel: "Mix and match",
+      startsAt: new Date("2026-04-18T00:00:00.000Z"),
+      endsAt: new Date("2026-05-25T00:00:00.000Z"),
+      banners: {
+        create: [
+          {
+            title: "Fest Look",
+            subtitle: "Share your best rendered outfit and earn extra campus points.",
+            ctaLabel: "Share now",
+            ctaRoute: "/saved-looks",
+            themeTone: "sunset",
+            isActive: true,
+            position: 0
+          }
         ]
       }
     }
   });
 
-  console.log(
-    JSON.stringify(
+  const under999Coupon = await (prisma as any).coupon.create({
+    data: {
+      campaignId: campusCampaign.id,
+      code: "UNDER999",
+      title: "Budget Under 999",
+      description: "Unlock student-friendly essentials below the campus budget line.",
+      type: "FIXED_AMOUNT",
+      discountValue: 150,
+      rewardCostPoints: 100,
+      unlockThreshold: 200,
+      minSpend: 799,
+      isActive: true,
+      startsAt: new Date("2026-04-15T00:00:00.000Z"),
+      endsAt: new Date("2026-05-15T00:00:00.000Z")
+    }
+  });
+
+  const interviewCoupon = await (prisma as any).coupon.create({
+    data: {
+      campaignId: interviewCampaign.id,
+      code: "INTERVIEW10",
+      title: "Interview Edit 10% Off",
+      description: "Confidence-driven workwear savings for student interview prep.",
+      type: "PERCENTAGE",
+      discountValue: 10,
+      unlockThreshold: 300,
+      isActive: true,
+      startsAt: new Date("2026-04-10T00:00:00.000Z"),
+      endsAt: new Date("2026-05-20T00:00:00.000Z")
+    }
+  });
+
+  await (prisma as any).couponRedemption.createMany({
+    data: [
       {
-        seededBrands: brands.length,
-        seededShops: shopRecords.length,
-        seededProducts: products.length,
-        demoUserId: demoUser.id,
-        adminUserId: adminUser.id,
-        fitAssessmentId: fitAssessment.id
+        couponId: under999Coupon.id,
+        userId: demoUser.id,
+        walletId: wallet.id,
+        status: "UNLOCKED",
+        pointsSpent: 100
       },
-      null,
-      2
-    )
-  );
+      {
+        couponId: interviewCoupon.id,
+        userId: demoUser.id,
+        walletId: wallet.id,
+        status: "REDEEMED",
+        pointsSpent: 0,
+        redeemedAt: new Date("2026-04-21T10:00:00.000Z")
+      }
+    ]
+  });
+
+  await (prisma as any).lookRating.create({
+    data: {
+      userId: demoUser.id,
+      savedLookId: savedLook.id,
+      tryOnRequestId: tryOnRequest.id,
+      productId: firstProduct.id,
+      rating: 5,
+      comment: "Great fit balance for classes and commute."
+    }
+  });
+
+  await (prisma as any).shareEvent.create({
+    data: {
+      userId: demoUser.id,
+      savedLookId: savedLook.id,
+      tryOnRequestId: tryOnRequest.id,
+      channel: "whatsapp",
+      rewardGranted: 20
+    }
+  });
+
+  await (prisma as any).challengeParticipation.createMany({
+    data: [
+      {
+        userId: demoUser.id,
+        campaignId: campusCampaign.id,
+        challengeName: "Campus Casual Week",
+        status: "CLAIMED",
+        rewardPoints: 100,
+        completedAt: new Date("2026-04-20T12:00:00.000Z")
+      },
+      {
+        userId: demoUser.id,
+        campaignId: festCampaign.id,
+        challengeName: "Fest Look Push",
+        status: "JOINED",
+        rewardPoints: 40
+      }
+    ]
+  });
 }
 
 main()
   .catch(async (error) => {
     console.error(error);
-    process.exitCode = 1;
     await prisma.$disconnect();
+    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();

@@ -1,6 +1,7 @@
 import { Controller, Get, Injectable, Module } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 
+import { Public } from "../../common/auth/public.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 @Injectable()
@@ -16,6 +17,7 @@ class HealthService {
   }
 }
 
+@Public()
 @ApiTags("health")
 @Controller("health")
 class HealthController {

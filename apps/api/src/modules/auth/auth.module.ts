@@ -2,16 +2,21 @@ import {
   Body,
   ConflictException,
   Controller,
+  Get,
   Injectable,
   Module,
   Post,
   UnauthorizedException
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { compare, hash } from "bcryptjs";
 import { IsEmail, IsString, MinLength } from "class-validator";
 
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
+import { Public } from "../../common/auth/public.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 class RegisterDto {
@@ -39,7 +44,11 @@ class LoginDto {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService, private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService
+  ) {}
 
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -80,15 +89,37 @@ export class AuthService {
     return this.issueAuthResponse(user);
   }
 
+  async session(user: AuthenticatedUser) {
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      include: { profile: true }
+    });
+
+    if (!dbUser) {
+      throw new UnauthorizedException("Account no longer exists");
+    }
+
+    return {
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        role: dbUser.role,
+        profile: dbUser.profile
+      }
+    };
+  }
+
   private issueAuthResponse(user: { id: string; email: string; role: string; profile: unknown }) {
     const accessToken = this.jwtService.sign({
       sub: user.id,
       email: user.email,
-      role: user.role
+      role: user.role,
+      type: "access"
     });
 
     return {
       accessToken,
+      expiresIn: this.configService.getOrThrow<string>("ACCESS_TOKEN_TTL"),
       user: {
         id: user.id,
         email: user.email,
@@ -104,14 +135,22 @@ export class AuthService {
 class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post("register")
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
+  @Public()
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @ApiBearerAuth()
+  @Get("session")
+  session(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.session(user);
   }
 }
 

@@ -1,16 +1,18 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
+import { SegmentedControl } from "../../components/SegmentedControl";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
 
 export function AuthScreen() {
   const router = useRouter();
-  const { setUserId, setToken, setAuthenticated } = useAppStore();
+  const setSession = useAppStore((state) => state.setSession);
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -29,9 +31,7 @@ export function AuthScreen() {
           ? await mobileApi.login(email, password)
           : await mobileApi.register(email, password, firstName, lastName);
 
-      setToken(result.accessToken);
-      setUserId(result.user.id);
-      setAuthenticated(true);
+      setSession({ token: result.accessToken, user: result.user });
       router.replace("/profile");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -40,12 +40,28 @@ export function AuthScreen() {
     }
   };
 
+  const disabled =
+    loading ||
+    !email.trim() ||
+    !password.trim() ||
+    (mode === "register" && (!firstName.trim() || !lastName.trim()));
+
   return (
     <Screen>
       <SectionCard
-        title={mode === "login" ? "Sign in" : "Create account"}
-        subtitle="Access your FitMe profile"
+        eyebrow="Member Access"
+        title={mode === "login" ? "Return to your fit profile" : "Create your FitMe account"}
+        subtitle="Keep measurements, recommendations, and try-on progress connected across sessions."
       >
+        <View style={styles.heroRow}>
+          <Pill label={mode === "login" ? "Secure sign in" : "New account"} tone="accent" />
+          <Pill label="JWT session" tone="neutral" />
+        </View>
+        <SegmentedControl
+          options={["Sign in", "Create account"]}
+          selected={mode === "login" ? "Sign in" : "Create account"}
+          onSelect={(value) => setMode(value === "Sign in" ? "login" : "register")}
+        />
         {mode === "register" && (
           <View style={styles.row}>
             <TextInput
@@ -54,6 +70,7 @@ export function AuthScreen() {
               value={firstName}
               onChangeText={setFirstName}
               autoCapitalize="words"
+              placeholderTextColor="#978b7d"
             />
             <TextInput
               style={[styles.input, styles.half]}
@@ -61,6 +78,7 @@ export function AuthScreen() {
               value={lastName}
               onChangeText={setLastName}
               autoCapitalize="words"
+              placeholderTextColor="#978b7d"
             />
           </View>
         )}
@@ -71,6 +89,7 @@ export function AuthScreen() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          placeholderTextColor="#978b7d"
         />
         <TextInput
           style={styles.input}
@@ -78,44 +97,54 @@ export function AuthScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          placeholderTextColor="#978b7d"
         />
-        {error && <Text style={styles.error}>{error}</Text>}
-        <PrimaryButton onPress={submit} disabled={loading}>
-          {loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <PrimaryButton onPress={submit} disabled={disabled}>
+          {loading ? "Saving session..." : mode === "login" ? "Enter FitMe" : "Create account"}
         </PrimaryButton>
-        <Text style={styles.toggle} onPress={() => setMode(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "No account? Register" : "Have an account? Sign in"}
-        </Text>
+        <Pressable onPress={() => setMode(mode === "login" ? "register" : "login")}>
+          <Text style={styles.toggle}>
+            {mode === "login" ? "Need an account? Create one" : "Already registered? Sign in"}
+          </Text>
+        </Pressable>
       </SectionCard>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  heroRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    borderColor: "#e4d7c5",
+    backgroundColor: "#fbf8f3",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
     fontSize: 16,
+    color: "#172033"
   },
   row: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10
   },
   half: {
-    flex: 1,
+    flex: 1
   },
   error: {
-    color: "#dc2626",
-    marginBottom: 8,
+    color: "#b42318",
     fontSize: 14,
+    lineHeight: 20
   },
   toggle: {
     textAlign: "center",
-    marginTop: 12,
     color: "#6b7280",
     fontSize: 14,
-  },
+    fontWeight: "600"
+  }
 });

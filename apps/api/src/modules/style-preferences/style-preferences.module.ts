@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Injectable, Module, Param, Put } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { IsArray, IsObject, IsString } from "class-validator";
 
+import { AuthorizationService } from "../../common/auth/authorization.service";
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
 
 class StylePreferenceDto {
@@ -21,13 +24,18 @@ class StylePreferenceDto {
 
 @Injectable()
 class StylePreferencesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authorizationService: AuthorizationService
+  ) {}
 
-  async get(userId: string) {
+  async get(user: AuthenticatedUser, userId: string) {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot view these style preferences");
     return this.prisma.profile.findUnique({ where: { userId } });
   }
 
-  update(userId: string, dto: Omit<StylePreferenceDto, "userId">) {
+  update(user: AuthenticatedUser, userId: string, dto: Omit<StylePreferenceDto, "userId">) {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot update these style preferences");
     return this.prisma.profile.update({
       where: { userId },
       data: {
@@ -39,19 +47,24 @@ class StylePreferencesService {
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("style-preferences")
 @Controller("style-preferences")
 class StylePreferencesController {
   constructor(private readonly service: StylePreferencesService) {}
 
   @Get(":userId")
-  get(@Param("userId") userId: string) {
-    return this.service.get(userId);
+  get(@CurrentUser() user: AuthenticatedUser, @Param("userId") userId: string) {
+    return this.service.get(user, userId);
   }
 
   @Put(":userId")
-  update(@Param("userId") userId: string, @Body() dto: Omit<StylePreferenceDto, "userId">) {
-    return this.service.update(userId, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("userId") userId: string,
+    @Body() dto: Omit<StylePreferenceDto, "userId">
+  ) {
+    return this.service.update(user, userId, dto);
   }
 }
 

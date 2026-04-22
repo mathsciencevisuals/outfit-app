@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Injectable, Module, Param, Post, Put } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IsOptional, IsString } from "class-validator";
 
+import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 class BrandDto {
@@ -40,26 +41,31 @@ class BrandsService {
   }
 }
 
+@ApiBearerAuth()
 @ApiTags("brands")
 @Controller("brands")
 class BrandsController {
   constructor(private readonly service: BrandsService) {}
 
+  @Roles("ADMIN", "OPERATOR")
   @Get()
   list() {
     return this.service.list();
   }
 
+  @Roles("ADMIN", "OPERATOR")
   @Get(":id")
   get(@Param("id") id: string) {
     return this.service.get(id);
   }
 
+  @Roles("ADMIN")
   @Post()
   create(@Body() dto: BrandDto) {
     return this.service.create(dto);
   }
 
+  @Roles("ADMIN")
   @Put(":id")
   update(@Param("id") id: string, @Body() dto: BrandDto) {
     return this.service.update(id, dto);
