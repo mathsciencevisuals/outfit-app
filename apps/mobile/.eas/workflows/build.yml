@@ -12,4 +12,3 @@ jobs:
     params:
       platform: android
       profile: preview
-      projectRootDirectory: apps/mobile
