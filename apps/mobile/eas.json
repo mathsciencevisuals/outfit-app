@@ -13,6 +13,7 @@
         "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true"
       },
       "android": {
+        "image": "latest",
         "buildType": "apk"
       }
     },
@@ -23,6 +24,7 @@
         "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true"
       },
       "android": {
+        "image": "latest",
         "buildType": "app-bundle"
       }
     }
