@@ -7,26 +7,22 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
-      "channel": "preview",
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://fitmeapi-production.up.railway.app",
         "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true"
       },
       "android": {
-        "image": "latest",
         "buildType": "apk"
       }
     },
     "production": {
-      "channel": "production",
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://fitmeapi-production.up.railway.app",
         "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true"
       },
       "android": {
-        "image": "latest",
         "buildType": "app-bundle"
       }
     }
