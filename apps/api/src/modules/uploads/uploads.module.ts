@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Body,
   Controller,
@@ -24,6 +25,8 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
 
+const { memoryStorage } = require("multer") as { memoryStorage: () => unknown };
+
 class CreateUploadDto {
   @IsString()
   userId!: string;
@@ -34,6 +37,10 @@ class CreateUploadDto {
   @IsOptional()
   @IsString()
   fileName?: string;
+
+  @IsOptional()
+  @IsString()
+  purpose?: string;
 }
 
 class UploadFileDto {
@@ -52,7 +59,7 @@ class UploadsService {
     private readonly authorizationService: AuthorizationService
   ) {
     const endpoint = this.configService.getOrThrow<string>("MINIO_ENDPOINT");
-    const port = this.configService.getOrThrow<number>("MINIO_PORT");
+    const port = Number(this.configService.getOrThrow<number>("MINIO_PORT"));
     const useSsl = this.configService.get<boolean>("MINIO_USE_SSL") ?? false;
 
     this.bucket = this.configService.getOrThrow<string>("MINIO_BUCKET");
@@ -74,21 +81,21 @@ class UploadsService {
     return this.prisma.upload.findMany({
       where: { userId: targetUserId },
       orderBy: { createdAt: "desc" }
-    });
+    } as any);
   }
 
   async create(user: AuthenticatedUser, dto: CreateUploadDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this upload");
 
-    const key = `uploads/${dto.userId}/${randomUUID()}${this.resolveExtension(dto.mimeType, dto.fileName)}`;
-    const publicUrl = this.buildPublicUrl(key);
-    const upload = await this.prisma.upload.create({
+    const key = `${dto.purpose ?? "general"}/${dto.userId}/${randomUUID()}${this.resolveExtension(dto.mimeType, dto.fileName)}`;
+    const upload = await (this.prisma.upload as any).create({
       data: {
         userId: dto.userId,
         mimeType: dto.mimeType,
         key,
         bucket: this.bucket,
-        publicUrl
+        purpose: dto.purpose ?? "general",
+        publicUrl: this.buildPublicUrl(key)
       }
     });
 
@@ -103,7 +110,7 @@ class UploadsService {
     user: AuthenticatedUser,
     uploadId: string,
     dto: UploadFileDto,
-    file?: { buffer?: Buffer; mimetype?: string }
+    file?: { buffer?: Buffer; mimetype?: string; size?: number }
   ) {
     if (!file?.buffer) {
       throw new BadRequestException("A file is required");
@@ -111,7 +118,7 @@ class UploadsService {
 
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot upload this file");
 
-    const upload = await this.prisma.upload.findUnique({
+    const upload = await (this.prisma.upload as any).findUnique({
       where: { id: uploadId }
     });
 
@@ -119,17 +126,28 @@ class UploadsService {
       throw new BadRequestException("Upload session is invalid for this user");
     }
 
-    await this.ensureBucketExists();
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: upload.bucket,
-        Key: upload.key,
-        Body: file.buffer,
-        ContentType: upload.mimeType || file.mimetype
-      })
-    );
+    try {
+      await this.ensureBucketExists();
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: upload.bucket,
+          Key: upload.key,
+          Body: file.buffer,
+          ContentType: file.mimetype ?? upload.mimeType,
+          ContentLength: file.size
+        })
+      );
+    } catch (error: unknown) {
+      throw new BadGatewayException(error instanceof Error ? error.message : "Upload storage is unavailable");
+    }
 
-    return upload;
+    return (this.prisma.upload as any).update({
+      where: { id: upload.id },
+      data: {
+        mimeType: file.mimetype ?? upload.mimeType,
+        publicUrl: this.buildPublicUrl(upload.key)
+      }
+    });
   }
 
   private async ensureBucketExists() {
@@ -147,7 +165,7 @@ class UploadsService {
     }
 
     const endpoint = this.configService.getOrThrow<string>("MINIO_ENDPOINT");
-    const port = this.configService.getOrThrow<number>("MINIO_PORT");
+    const port = Number(this.configService.getOrThrow<number>("MINIO_PORT"));
     const useSsl = this.configService.get<boolean>("MINIO_USE_SSL") ?? false;
     return `${useSsl ? "https" : "http"}://${endpoint}:${port}/${this.bucket}/${key}`;
   }
@@ -189,12 +207,17 @@ class UploadsController {
   }
 
   @Post(":id/file")
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 }
+    })
+  )
   uploadFile(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
     @Body() dto: UploadFileDto,
-    @UploadedFile() file?: { buffer?: Buffer; mimetype?: string }
+    @UploadedFile() file?: { buffer?: Buffer; mimetype?: string; size?: number }
   ) {
     return this.service.uploadFile(user, id, dto, file);
   }

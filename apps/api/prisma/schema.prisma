@@ -113,17 +113,24 @@ model Profile {
   userId            String   @unique
   firstName         String
   lastName          String
+  avatarUploadId    String?
+  avatarUrl         String?
   gender            String?
   age               Int?
   heightCm          Float?
   weightKg          Float?
   bodyShape         String?
+  budgetMin         Float?
+  budgetMax         Float?
+  budgetLabel       String?
+  closetStatus      String   @default("COMING_SOON")
   stylePreference   Json?
   preferredColors   String[]
   avoidedColors     String[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatarUpload      Upload?  @relation("ProfileAvatarUpload", fields: [avatarUploadId], references: [id], onDelete: SetNull)
 }
 
 model Measurement {
@@ -244,8 +251,12 @@ model TryOnRequest {
   userId            String
   variantId         String
   sourceUploadId    String?
+  garmentUploadId   String?
   provider          String
   imageUrl          String
+  garmentImageUrl   String?
+  fitStyle          String?        @default("balanced")
+  comparisonLabel   String?
   status            TryOnStatus    @default(PENDING)
   statusMessage     String?
   requestedAt       DateTime       @default(now())
@@ -254,6 +265,7 @@ model TryOnRequest {
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   variant           ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
   sourceUpload      Upload?        @relation(fields: [sourceUploadId], references: [id], onDelete: SetNull)
+  garmentUpload     Upload?        @relation("GarmentUpload", fields: [garmentUploadId], references: [id], onDelete: SetNull)
   lookRatings       LookRating[]
   shareEvents       ShareEvent[]
 }
@@ -300,6 +312,7 @@ model SavedLook {
   userId            String
   name              String
   note              String?
+  isWishlist        Boolean      @default(false)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -334,10 +347,13 @@ model Upload {
   key               String         @unique
   mimeType          String
   bucket            String
+  purpose           String         @default("general")
   publicUrl         String
   createdAt         DateTime       @default(now())
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   tryOnRequests     TryOnRequest[]
+  garmentTryOns     TryOnRequest[] @relation("GarmentUpload")
+  profileAvatars    Profile[]      @relation("ProfileAvatarUpload")
 }
 
 model RewardWallet {

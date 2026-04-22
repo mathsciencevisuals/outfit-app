@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Injectable, Module, Param, Put } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Injectable, Module, Param, Put } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { IsArray, IsNumber, IsOptional, IsString } from "class-validator";
@@ -16,6 +16,14 @@ class UpdateProfileDto {
 
   @IsString()
   lastName!: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUploadId?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
 
   @IsOptional()
   @IsString()
@@ -38,6 +46,22 @@ class UpdateProfileDto {
   bodyShape?: string;
 
   @IsOptional()
+  @IsNumber()
+  budgetMin?: number;
+
+  @IsOptional()
+  @IsNumber()
+  budgetMax?: number;
+
+  @IsOptional()
+  @IsString()
+  budgetLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  closetStatus?: string;
+
+  @IsOptional()
   stylePreference?: Record<string, unknown>;
 
   @IsArray()
@@ -56,44 +80,73 @@ class UsersService {
   ) {}
 
   listUsers() {
-    return this.prisma.user.findMany({ include: { profile: true } });
+    return this.prisma.user.findMany({ include: { profile: true } } as any);
   }
 
   getUser(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
       include: { profile: true, measurements: true, savedLooks: true }
-    });
+    } as any);
   }
 
-  getProfile(user: AuthenticatedUser, userId: string) {
+  async getProfile(user: AuthenticatedUser, userId: string) {
     this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot access this profile");
-    return this.prisma.profile.findUnique({ where: { userId } });
+
+    const dbUser: any = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: { include: { avatarUpload: true } }, measurements: true, savedLooks: { include: { items: { include: { product: true } } } } }
+    } as any);
+
+    if (!dbUser?.profile) {
+      return null;
+    }
+
+    return {
+      ...dbUser.profile,
+      measurements: dbUser.measurements ?? [],
+      savedLooks: dbUser.savedLooks ?? []
+    };
   }
 
   async updateProfile(user: AuthenticatedUser, userId: string, dto: UpdateProfileDto) {
     this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot update this profile");
 
+    const upload = dto.avatarUploadId
+      ? await (this.prisma.upload as any).findUnique({ where: { id: dto.avatarUploadId } })
+      : null;
+
+    if (dto.avatarUploadId && (!upload || upload.userId !== userId)) {
+      throw new BadRequestException("Profile image upload is invalid for this user");
+    }
+
     const data = {
       ...dto,
+      avatarUploadId: upload?.id ?? dto.avatarUploadId ?? null,
+      avatarUrl: upload?.publicUrl ?? dto.avatarUrl ?? null,
       stylePreference: dto.stylePreference as Prisma.InputJsonValue | undefined
     };
 
-    const profile = await this.prisma.profile.upsert({
+    const profile = await (this.prisma.profile as any).upsert({
       where: { userId },
       update: data,
-      create: { userId, ...data }
+      create: {
+        userId,
+        ...data
+      },
+      include: { avatarUpload: true }
     });
 
     const completionSignals = [
       profile.firstName,
       profile.lastName,
+      profile.avatarUrl,
       profile.heightCm,
       profile.bodyShape,
       profile.preferredColors?.length ? "palette" : null
     ].filter(Boolean).length;
 
-    if (completionSignals >= 5) {
+    if (completionSignals >= 6) {
       await this.rewardsService.awardProfileCompletion(userId);
     }
 

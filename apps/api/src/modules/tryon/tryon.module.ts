@@ -40,7 +40,19 @@ class CreateTryOnRequestDto {
 
   @IsOptional()
   @IsString()
+  garmentUploadId?: string;
+
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  fitStyle?: string;
+
+  @IsOptional()
+  @IsString()
+  comparisonLabel?: string;
 
   @IsOptional()
   @IsString()
@@ -87,16 +99,19 @@ export class TryOnService {
           ? undefined
           : { userId: user.id };
 
-    return (this.prisma.tryOnRequest as any).findMany({
-      where,
-      include: {
-        result: true,
-        sourceUpload: true,
-        variant: { include: { product: true } },
-        user: true
-      } as any,
-      orderBy: { requestedAt: "desc" }
-    }).then((requests: any[]) => requests.map((request: any) => this.serializeRequest(request)));
+    return (this.prisma.tryOnRequest as any)
+      .findMany({
+        where,
+        include: {
+          result: true,
+          sourceUpload: true,
+          garmentUpload: true,
+          variant: { include: { product: true, inventoryOffers: true } },
+          user: true
+        },
+        orderBy: { requestedAt: "desc" }
+      })
+      .then((requests: any[]) => requests.map((request: any) => this.serializeRequest(request)));
   }
 
   async get(user: AuthenticatedUser, id: string) {
@@ -105,9 +120,10 @@ export class TryOnService {
       include: {
         result: true,
         sourceUpload: true,
-        variant: { include: { product: true } },
+        garmentUpload: true,
+        variant: { include: { product: { include: { brand: true } }, inventoryOffers: { include: { shop: true } } } },
         user: true
-      } as any
+      }
     });
 
     if (request) {
@@ -124,9 +140,16 @@ export class TryOnService {
     const upload = dto.uploadId
       ? await (this.prisma.upload as any).findUnique({ where: { id: dto.uploadId } })
       : null;
+    const garmentUpload = dto.garmentUploadId
+      ? await (this.prisma.upload as any).findUnique({ where: { id: dto.garmentUploadId } })
+      : null;
 
     if (dto.uploadId && (!upload || upload.userId !== dto.userId)) {
       throw new BadRequestException("Try-on upload is missing or does not belong to the user");
+    }
+
+    if (dto.garmentUploadId && (!garmentUpload || garmentUpload.userId !== dto.userId)) {
+      throw new BadRequestException("Garment upload is missing or does not belong to the user");
     }
 
     const imageUrl = upload?.publicUrl ?? dto.imageUrl;
@@ -138,17 +161,22 @@ export class TryOnService {
       data: {
         userId: dto.userId,
         variantId: dto.variantId,
-        sourceUploadId: upload?.id,
+        sourceUploadId: upload?.id ?? null,
+        garmentUploadId: garmentUpload?.id ?? null,
         imageUrl,
+        garmentImageUrl: garmentUpload?.publicUrl ?? null,
         provider,
+        fitStyle: dto.fitStyle ?? "balanced",
+        comparisonLabel: dto.comparisonLabel ?? null,
         statusMessage: "Queued for processing"
-      } as any,
+      },
       include: {
         result: true,
         sourceUpload: true,
+        garmentUpload: true,
         variant: { include: { product: true } },
         user: true
-      } as any
+      }
     });
 
     await this.queue.add(
@@ -160,6 +188,7 @@ export class TryOnService {
         removeOnFail: 50
       }
     );
+
     await this.rewardsService.awardFirstTryOn(dto.userId);
     return this.serializeRequest(request);
   }
@@ -175,8 +204,9 @@ export class TryOnService {
       where: { id },
       include: {
         sourceUpload: true,
+        garmentUpload: true,
         variant: { include: { product: true } }
-      } as any
+      }
     });
 
     if (!request) {
@@ -192,7 +222,7 @@ export class TryOnService {
       data: {
         status: "PROCESSING",
         statusMessage: "Generating try-on preview"
-      } as any
+      }
     });
 
     try {
@@ -203,8 +233,13 @@ export class TryOnService {
       const result = await provider.generate({
         requestId: request.id,
         personImageUrl: request.imageUrl,
-        garmentImageUrl: request.variant.imageUrl ?? request.variant.product.imageUrl ?? request.imageUrl,
-        prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color}`
+        garmentImageUrl:
+          request.garmentImageUrl ??
+          request.garmentUpload?.publicUrl ??
+          request.variant.imageUrl ??
+          request.variant.product.imageUrl ??
+          request.imageUrl,
+        prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color} with ${request.fitStyle ?? "balanced"} fit styling`
       });
 
       await (this.prisma.tryOnResult as any).upsert({
@@ -214,7 +249,13 @@ export class TryOnService {
           overlayImageUrl: result.overlayImageUrl,
           confidence: result.confidence,
           summary: result.summary,
-          metadata: result.metadata as Prisma.InputJsonValue | undefined
+          metadata: {
+            ...(result.metadata ?? {}),
+            fitStyle: request.fitStyle ?? "balanced",
+            comparisonLabel: request.comparisonLabel,
+            selectedColor: request.variant.color,
+            selectedSize: request.variant.sizeLabel
+          } as Prisma.InputJsonValue
         },
         create: {
           requestId: request.id,
@@ -222,7 +263,13 @@ export class TryOnService {
           overlayImageUrl: result.overlayImageUrl,
           confidence: result.confidence,
           summary: result.summary,
-          metadata: result.metadata as Prisma.InputJsonValue | undefined
+          metadata: {
+            ...(result.metadata ?? {}),
+            fitStyle: request.fitStyle ?? "balanced",
+            comparisonLabel: request.comparisonLabel,
+            selectedColor: request.variant.color,
+            selectedSize: request.variant.sizeLabel
+          } as Prisma.InputJsonValue
         }
       });
 
@@ -232,7 +279,7 @@ export class TryOnService {
           status: "COMPLETED",
           statusMessage: "Try-on completed",
           processedAt: new Date()
-        } as any
+        }
       });
     } catch (error: unknown) {
       await (this.prisma.tryOnRequest as any).update({
@@ -241,7 +288,7 @@ export class TryOnService {
           status: "FAILED",
           statusMessage: error instanceof Error ? error.message.slice(0, 300) : "Try-on processing failed",
           processedAt: new Date()
-        } as any
+        }
       });
     }
 

@@ -14,7 +14,7 @@ import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
 import type { Recommendation } from "../../types/api";
 
-const filterOptions = ["All", "High score", "Style-led"];
+const filterOptions = ["All", "Color-led", "Avoid clashes"];
 
 export function RecommendationsScreen() {
   const router = useRouter();
@@ -27,11 +27,11 @@ export function RecommendationsScreen() {
 
   const recommendations = data ?? [];
   const filtered = useMemo(() => {
-    if (activeFilter === "High score") {
-      return recommendations.filter((item) => item.score >= 80);
+    if (activeFilter === "Color-led") {
+      return recommendations.filter((item) => (item.matchingColors?.length ?? 0) > 0);
     }
-    if (activeFilter === "Style-led") {
-      return recommendations.filter((item) => (item.explanation ?? "").toLowerCase().includes("style"));
+    if (activeFilter === "Avoid clashes") {
+      return recommendations.filter((item) => (item.incompatibleColors?.length ?? 0) === 0);
     }
     return recommendations;
   }, [activeFilter, recommendations]);
@@ -77,7 +77,7 @@ export function RecommendationsScreen() {
       <SectionCard
         eyebrow="Recommendations"
         title="What fits your profile best"
-        subtitle="These picks are already ranked by the recommendation engine and shaped into a shopping-ready shortlist."
+        subtitle="These picks are now stronger on color clarity, showing both matching colors and combinations to avoid."
       >
         <View style={styles.row}>
           <Pill label={recommendationBadge(best)} tone="success" />
@@ -86,9 +86,9 @@ export function RecommendationsScreen() {
         <View style={styles.metricRow}>
           <MetricTile label="Top score" value={`${Math.round(best.score)}`} caption="Best current product match" />
           <MetricTile
-            label="Best pick"
-            value={best.product?.brand?.name ?? "FitMe"}
-            caption={best.product?.name ?? "Recommendation lead"}
+            label="Color match"
+            value={`${best.matchingColors?.length ?? 0}`}
+            caption={best.matchingColors?.join(", ") || "No explicit match"}
           />
         </View>
         <SegmentedControl options={filterOptions} selected={activeFilter} onSelect={setActiveFilter} />
@@ -104,27 +104,34 @@ export function RecommendationsScreen() {
       ) : (
         <SectionCard eyebrow="Curated Cards" title="Recommendation shortlist">
           {filtered.map((item: Recommendation) => (
-            <ProductCard
-              key={item.id ?? item.productId}
-              title={item.product?.name ?? item.productId}
-              subtitle={productSubtitle(item.product)}
-              badge={recommendationBadge(item)}
-              scoreLabel={`Score ${Math.round(item.score)}`}
-              highlight={item.explanation ?? "Routed here through fit-aware ranking."}
-              primaryLabel="Compare shops"
-              onPrimaryPress={() => router.push("/shops")}
-              secondaryLabel="Try on now"
-              onSecondaryPress={() => router.push("/tryon-upload")}
-            />
+            <View key={item.id ?? item.productId} style={styles.cardWrap}>
+              <ProductCard
+                title={item.product?.name ?? item.productId}
+                subtitle={productSubtitle(item.product)}
+                badge={recommendationBadge(item)}
+                scoreLabel={`Score ${Math.round(item.score)}`}
+                highlight={item.explanation ?? "Routed here through fit-aware ranking."}
+                primaryLabel="Compare shops"
+                onPrimaryPress={() => router.push("/shops")}
+                secondaryLabel="Try on now"
+                onSecondaryPress={() => router.push("/tryon-upload")}
+              />
+              <View style={styles.colorRow}>
+                {(item.matchingColors?.length ?? 0) > 0 ? (
+                  <Pill label={`Matches: ${item.matchingColors?.join(", ")}`} tone="success" />
+                ) : (
+                  <Pill label="No strong color match yet" tone="warning" />
+                )}
+                {(item.incompatibleColors?.length ?? 0) > 0 ? (
+                  <Pill label={`Avoid: ${item.incompatibleColors?.join(", ")}`} tone="warning" />
+                ) : (
+                  <Pill label="No major color clash" tone="accent" />
+                )}
+              </View>
+            </View>
           ))}
         </SectionCard>
       )}
-
-      <SectionCard eyebrow="Buy Path" title="Move to commerce">
-        <Text style={styles.supportText}>
-          When you are ready to buy, compare retail partners first so the best-ranked look stays grounded in actual offer visibility.
-        </Text>
-      </SectionCard>
     </Screen>
   );
 }
@@ -139,9 +146,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10
   },
-  supportText: {
-    color: "#667085",
-    fontSize: 14,
-    lineHeight: 21
+  cardWrap: {
+    gap: 10
+  },
+  colorRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
   }
 });

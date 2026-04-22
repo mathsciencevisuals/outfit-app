@@ -11,7 +11,7 @@ const publicRoutes = new Set(["onboarding", "auth"]);
 
 export default function RootLayout() {
   const segments = useSegments();
-  const { token, isAuthenticated, authChecked, finishAuthCheck, logout } = useAppStore();
+  const { token, isAuthenticated, authChecked, finishAuthCheck, logout, setSession, setProfile } = useAppStore();
 
   useEffect(() => {
     let mounted = true;
@@ -23,25 +23,35 @@ export default function RootLayout() {
       }
 
       try {
-        await mobileApi.session();
+        const session = await mobileApi.session();
         if (!mounted) {
           return;
+        }
+
+        setSession({ token, user: session.user });
+        if (session.user.profile) {
+          setProfile(session.user.profile);
+        } else {
+          const profile = await mobileApi.profile(session.user.id);
+          if (mounted) {
+            setProfile(profile);
+          }
         }
         finishAuthCheck();
       } catch {
         if (!mounted) {
           return;
         }
-        logout();
+        await logout();
       }
     };
 
-    validate();
+    void validate();
 
     return () => {
       mounted = false;
     };
-  }, [token, finishAuthCheck, logout]);
+  }, [token, finishAuthCheck, logout, setProfile, setSession]);
 
   const rootSegment = segments[0];
   const isPublicRoute = rootSegment == null || publicRoutes.has(rootSegment);

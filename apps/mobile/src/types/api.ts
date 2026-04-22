@@ -18,10 +18,48 @@ export type CampaignTheme = "CAMPUS_CASUAL" | "INTERVIEW_READY" | "FEST_LOOK" | 
 export type CampaignStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
 export type ChallengeStatus = "JOINED" | "COMPLETED" | "CLAIMED";
 
+export interface Measurement {
+  id: string;
+  userId: string;
+  chestCm?: number | null;
+  waistCm?: number | null;
+  hipsCm?: number | null;
+  inseamCm?: number | null;
+  shoulderCm?: number | null;
+  footLengthCm?: number | null;
+  source?: string;
+}
+
+export interface UploadAsset {
+  id: string;
+  key: string;
+  mimeType: string;
+  bucket: string;
+  purpose?: string;
+  publicUrl: string;
+  createdAt: string;
+}
+
+export interface SavedLookItem {
+  id: string;
+  productId: string;
+  product?: Product;
+}
+
+export interface SavedLook {
+  id: string;
+  name: string;
+  note?: string | null;
+  isWishlist?: boolean;
+  items?: SavedLookItem[];
+}
+
 export interface UserProfile {
   id: string;
   firstName: string;
   lastName: string;
+  avatarUploadId?: string | null;
+  avatarUrl?: string | null;
   gender?: string | null;
   age?: number | null;
   heightCm?: number | null;
@@ -29,7 +67,13 @@ export interface UserProfile {
   bodyShape?: string | null;
   preferredColors?: string[];
   avoidedColors?: string[];
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  budgetLabel?: string | null;
+  closetStatus?: string | null;
   stylePreference?: Record<string, unknown> | null;
+  measurements?: Measurement[];
+  savedLooks?: SavedLook[];
 }
 
 export interface SessionUser {
@@ -49,24 +93,13 @@ export interface SessionResponse {
   user: SessionUser;
 }
 
-export interface Measurement {
-  id: string;
-  userId: string;
-  chestCm?: number | null;
-  waistCm?: number | null;
-  hipsCm?: number | null;
-  inseamCm?: number | null;
-  shoulderCm?: number | null;
-  footLengthCm?: number | null;
-  source?: string;
-}
-
 export interface InventoryOffer {
   id: string;
   externalUrl: string;
   stock: number;
   price: number;
   currency: string;
+  shop?: Shop;
   variant?: ProductVariant & {
     product?: Product;
   };
@@ -103,6 +136,8 @@ export interface Recommendation {
   product?: Product;
   score: number;
   explanation?: string;
+  matchingColors?: string[];
+  incompatibleColors?: string[];
 }
 
 export interface Shop {
@@ -111,28 +146,6 @@ export interface Shop {
   region: string;
   url?: string;
   inventoryOffers?: InventoryOffer[];
-}
-
-export interface SavedLookItem {
-  id: string;
-  productId: string;
-  product?: Product;
-}
-
-export interface SavedLook {
-  id: string;
-  name: string;
-  note?: string | null;
-  items?: SavedLookItem[];
-}
-
-export interface UploadAsset {
-  id: string;
-  key: string;
-  mimeType: string;
-  bucket: string;
-  publicUrl: string;
-  createdAt: string;
 }
 
 export interface UploadSession {
@@ -157,12 +170,17 @@ export interface TryOnRequest {
   variantId: string;
   provider: string;
   imageUrl: string;
+  garmentImageUrl?: string | null;
   sourceUploadId?: string | null;
+  garmentUploadId?: string | null;
+  fitStyle?: string | null;
+  comparisonLabel?: string | null;
   status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
   statusMessage?: string | null;
   requestedAt: string;
   processedAt?: string | null;
   sourceUpload?: UploadAsset | null;
+  garmentUpload?: UploadAsset | null;
   result?: TryOnExecutionResult | null;
   variant?: ProductVariant & { product?: Product };
 }

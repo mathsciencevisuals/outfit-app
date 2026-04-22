@@ -11,7 +11,7 @@ import {
   Query
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { IsArray, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
@@ -29,6 +29,10 @@ class SavedLookDto {
   @IsString()
   note?: string;
 
+  @IsOptional()
+  @IsBoolean()
+  isWishlist?: boolean;
+
   @IsArray()
   productIds!: string[];
 }
@@ -44,7 +48,7 @@ class SavedLooksService {
     const targetUserId = userId ?? user.id;
     this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these saved looks");
 
-    return this.prisma.savedLook.findMany({
+    return (this.prisma.savedLook as any).findMany({
       where: { userId: targetUserId },
       include: { items: { include: { product: true } }, user: true },
       orderBy: { updatedAt: "desc" }
@@ -53,11 +57,12 @@ class SavedLooksService {
 
   create(user: AuthenticatedUser, dto: SavedLookDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this saved look");
-    return this.prisma.savedLook.create({
+    return (this.prisma.savedLook as any).create({
       data: {
         userId: dto.userId,
         name: dto.name,
-        note: dto.note,
+        note: dto.note ?? null,
+        isWishlist: dto.isWishlist ?? false,
         items: {
           create: dto.productIds.map((productId) => ({ productId }))
         }
@@ -67,7 +72,7 @@ class SavedLooksService {
   }
 
   async update(user: AuthenticatedUser, id: string, dto: SavedLookDto) {
-    const existing = await this.prisma.savedLook.findUnique({ where: { id } });
+    const existing = await (this.prisma.savedLook as any).findUnique({ where: { id } });
     if (!existing) {
       return null;
     }
@@ -76,11 +81,12 @@ class SavedLooksService {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot reassign this saved look");
 
     await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: id } });
-    return this.prisma.savedLook.update({
+    return (this.prisma.savedLook as any).update({
       where: { id },
       data: {
         name: dto.name,
-        note: dto.note,
+        note: dto.note ?? null,
+        isWishlist: dto.isWishlist ?? false,
         items: {
           create: dto.productIds.map((productId) => ({ productId }))
         }
@@ -90,7 +96,7 @@ class SavedLooksService {
   }
 
   async delete(user: AuthenticatedUser, id: string) {
-    const existing = await this.prisma.savedLook.findUnique({ where: { id } });
+    const existing = await (this.prisma.savedLook as any).findUnique({ where: { id } });
     if (!existing) {
       return null;
     }

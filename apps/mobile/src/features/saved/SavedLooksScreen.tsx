@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Pill } from "../../components/Pill";
@@ -17,8 +17,14 @@ export function SavedLooksScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
   const [view, setView] = useState("Grid");
+  const [scope, setScope] = useState("Saved");
   const { data, loading, error } = useAsyncResource(() => mobileApi.savedLooks(userId), [userId]);
   const looks = data ?? [];
+
+  const filtered = useMemo(
+    () => looks.filter((look) => (scope === "Wishlist" ? Boolean(look.isWishlist) : !look.isWishlist)),
+    [looks, scope]
+  );
 
   if (loading) {
     return (
@@ -46,7 +52,7 @@ export function SavedLooksScreen() {
       <Screen>
         <EmptyState
           title="No looks saved yet"
-          message="Save outfits after recommendations and shop comparison to build a reusable shortlist."
+          message="Save outfits after recommendations and try-on to build a reusable shortlist."
           actionLabel="Go to discover"
           onAction={() => router.push("/discover")}
         />
@@ -59,33 +65,46 @@ export function SavedLooksScreen() {
       <SectionCard
         eyebrow="Saved Looks"
         title="Your reusable outfit shortlist"
-        subtitle="Saved looks capture the bridge between inspiration, try-on confidence, and buy-ready comparison."
+        subtitle="Saved outfits and wishlist items stay visible here instead of hiding behind broken placeholders."
       >
         <View style={styles.heroRow}>
-          <Pill label={`${looks.length} looks saved`} tone="success" />
-          <Pill label="Private shortlist" tone="neutral" />
+          <Pill label={`${looks.length} looks total`} tone="success" />
+          <Pill label={`${looks.filter((look) => look.isWishlist).length} wishlist`} tone="neutral" />
         </View>
+        <SegmentedControl options={["Saved", "Wishlist"]} selected={scope} onSelect={setScope} />
         <SegmentedControl options={["Grid", "List"]} selected={view} onSelect={setView} />
       </SectionCard>
 
       <SectionCard eyebrow="Collection" title={view === "Grid" ? "Grid view" : "List view"}>
-        <View style={view === "Grid" ? styles.grid : styles.list}>
-          {looks.map((look: SavedLook) => (
-            <View key={look.id} style={view === "Grid" ? styles.gridCard : styles.listCard}>
-              <View style={styles.artBoard} />
-              <Text style={styles.lookTitle}>{look.name}</Text>
-              <Text style={styles.lookNote}>{look.note ?? "No note yet. Revisit after your next try-on."}</Text>
-              <View style={styles.lookActions}>
-                <PrimaryButton size="sm" onPress={() => router.push("/shops")}>
-                  Compare offers
-                </PrimaryButton>
-                <PrimaryButton size="sm" variant="secondary" onPress={() => router.push("/discover")}>
-                  Find similar
-                </PrimaryButton>
+        {filtered.length === 0 ? (
+          <EmptyState
+            title={scope === "Wishlist" ? "No wishlist items yet" : "No saved outfits yet"}
+            message="Save a try-on look or recommendation to populate this section."
+            actionLabel="Go to recommendations"
+            onAction={() => router.push("/recommendations")}
+          />
+        ) : (
+          <View style={view === "Grid" ? styles.grid : styles.list}>
+            {filtered.map((look: SavedLook) => (
+              <View key={look.id} style={view === "Grid" ? styles.gridCard : styles.listCard}>
+                <View style={styles.artBoard} />
+                <View style={styles.lookMeta}>
+                  <Text style={styles.lookTitle}>{look.name}</Text>
+                  <Pill label={look.isWishlist ? "Wishlist" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
+                </View>
+                <Text style={styles.lookNote}>{look.note ?? "No note yet. Revisit after your next try-on."}</Text>
+                <View style={styles.lookActions}>
+                  <PrimaryButton size="sm" onPress={() => router.push("/shops")}>
+                    Compare offers
+                  </PrimaryButton>
+                  <PrimaryButton size="sm" variant="secondary" onPress={() => router.push("/discover")}>
+                    Find similar
+                  </PrimaryButton>
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </SectionCard>
     </Screen>
   );
@@ -126,6 +145,9 @@ const styles = StyleSheet.create({
     height: 112,
     borderRadius: 18,
     backgroundColor: "#ebddca"
+  },
+  lookMeta: {
+    gap: 8
   },
   lookTitle: {
     color: "#172033",

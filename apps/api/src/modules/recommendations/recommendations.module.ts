@@ -13,6 +13,18 @@ class GenerateRecommendationsDto {
   userId!: string;
 }
 
+function colorBreakdown(product: {
+  baseColor: string;
+  secondaryColors: string[];
+}, profile: { preferredColors: string[]; avoidedColors: string[] }) {
+  const productColors = [product.baseColor, ...product.secondaryColors].filter(Boolean);
+  const normalizedPreferred = profile.preferredColors.map((color) => color.toLowerCase());
+  const normalizedAvoided = profile.avoidedColors.map((color) => color.toLowerCase());
+  const matchingColors = productColors.filter((color) => normalizedPreferred.includes(color.toLowerCase()));
+  const incompatibleColors = productColors.filter((color) => normalizedAvoided.includes(color.toLowerCase()));
+  return { matchingColors, incompatibleColors };
+}
+
 @Injectable()
 class RecommendationsService {
   constructor(
@@ -20,23 +32,49 @@ class RecommendationsService {
     private readonly authorizationService: AuthorizationService
   ) {}
 
-  list(user: AuthenticatedUser, userId?: string) {
+  async list(user: AuthenticatedUser, userId?: string) {
     const targetUserId = userId ?? user.id;
     this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these recommendations");
 
-    return this.prisma.recommendation.findMany({
-      where: { userId: targetUserId },
-      include: { product: { include: { brand: true, variants: true } } },
-      orderBy: [{ rank: "asc" }, { score: "desc" }]
+    const [recommendations, profile] = await Promise.all([
+      this.prisma.recommendation.findMany({
+        where: { userId: targetUserId },
+        include: { product: { include: { brand: true, variants: true } } },
+        orderBy: [{ rank: "asc" }, { score: "desc" }]
+      }),
+      (this.prisma.profile as any).findUnique({ where: { userId: targetUserId } })
+    ]);
+
+    if (!profile) {
+      return recommendations;
+    }
+
+    return recommendations.map((recommendation) => {
+      const breakdown = colorBreakdown(recommendation.product, profile);
+      const explanationParts = [recommendation.explanation];
+
+      if (breakdown.matchingColors.length > 0) {
+        explanationParts.push(`Matches your colors: ${breakdown.matchingColors.join(", ")}.`);
+      }
+      if (breakdown.incompatibleColors.length > 0) {
+        explanationParts.push(`Watch for clashes with: ${breakdown.incompatibleColors.join(", ")}.`);
+      }
+
+      return {
+        ...recommendation,
+        matchingColors: breakdown.matchingColors,
+        incompatibleColors: breakdown.incompatibleColors,
+        explanation: explanationParts.filter(Boolean).join(" ")
+      };
     });
   }
 
   async generate(user: AuthenticatedUser, dto: GenerateRecommendationsDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot generate these recommendations");
 
-    const profile = await this.prisma.profile.findUnique({ where: { userId: dto.userId } });
+    const profile = await (this.prisma.profile as any).findUnique({ where: { userId: dto.userId } });
     const fitAssessments = await this.prisma.fitAssessment.findMany({ where: { userId: dto.userId } });
-    const products = await this.prisma.product.findMany({ include: { variants: true } });
+    const products = await this.prisma.product.findMany({ include: { variants: true, brand: true } });
 
     if (!profile) {
       return [];
@@ -49,12 +87,18 @@ class RecommendationsService {
       : [];
 
     const ranked = rankProducts(
-      products.map((product) => ({
-        productId: product.id,
-        styleTags: product.styleTags,
-        colors: [product.baseColor, ...product.secondaryColors],
-        fitScore: fitScores.get(product.id) ?? 60
-      })),
+      products.map((product) => {
+        const breakdown = colorBreakdown(product, profile);
+        const fitScore = fitScores.get(product.id) ?? 60;
+        const colorBonus = breakdown.matchingColors.length * 8 - breakdown.incompatibleColors.length * 10;
+
+        return {
+          productId: product.id,
+          styleTags: product.styleTags,
+          colors: [product.baseColor, ...product.secondaryColors],
+          fitScore: Math.max(20, Math.min(100, fitScore + colorBonus))
+        };
+      }),
       {
         preferredStyles,
         preferredColors: profile.preferredColors,
@@ -65,14 +109,26 @@ class RecommendationsService {
     await this.prisma.recommendation.deleteMany({ where: { userId: dto.userId } });
 
     await this.prisma.recommendation.createMany({
-      data: ranked.map((item, index) => ({
-        userId: dto.userId,
-        productId: item.productId,
-        rank: index + 1,
-        score: item.score,
-        reason: index < 4 ? "FIT" : index < 7 ? "STYLE" : "COLOR",
-        explanation: item.explanation
-      }))
+      data: ranked.map((item, index) => {
+        const product = products.find((candidate) => candidate.id === item.productId)!;
+        const breakdown = colorBreakdown(product, profile);
+        const explanation = [
+          item.explanation,
+          breakdown.matchingColors.length > 0 ? `Strong color affinity with ${breakdown.matchingColors.join(", ")}.` : "",
+          breakdown.incompatibleColors.length > 0 ? `Less aligned because of ${breakdown.incompatibleColors.join(", ")}.` : ""
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        return {
+          userId: dto.userId,
+          productId: item.productId,
+          rank: index + 1,
+          score: item.score,
+          reason: breakdown.matchingColors.length > 0 ? "COLOR" : index < 4 ? "FIT" : "STYLE",
+          explanation
+        };
+      })
     });
 
     return this.list(user, dto.userId);

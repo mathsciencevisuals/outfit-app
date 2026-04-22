@@ -1,7 +1,6 @@
-import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
 import { InfoRow } from "../../components/InfoRow";
 import { MetricTile } from "../../components/MetricTile";
@@ -30,9 +29,11 @@ function confidenceTone(confidence?: number) {
 export function TryOnResultScreen() {
   const router = useRouter();
   const requestId = useAppStore((state) => state.lastTryOnRequestId);
+  const userId = useAppStore((state) => state.userId);
   const [data, setData] = useState<TryOnRequest | null>(null);
   const [loading, setLoading] = useState(Boolean(requestId));
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!requestId) {
@@ -69,7 +70,7 @@ export function TryOnResultScreen() {
     };
 
     setLoading(true);
-    load();
+    void load();
 
     return () => {
       mounted = false;
@@ -98,14 +99,32 @@ export function TryOnResultScreen() {
     if (!data.result?.overlayImageUrl) {
       derivedIssues.push("No overlay asset was returned, so garment placement feedback is limited.");
     }
-    if ((data.statusMessage ?? "").toLowerCase().includes("mock")) {
-      derivedIssues.push("This run may still reflect mock provider behavior rather than a production rendering pipeline.");
-    }
 
     return derivedIssues.length > 0
       ? derivedIssues
       : ["No blocking issues surfaced. This preview is strong enough to move into recommendation and shop comparison."];
-  }, [data]);
+  }, [confidence, data]);
+
+  const saveLook = async () => {
+    if (!data?.variant?.product?.id) {
+      return;
+    }
+    const saved = await mobileApi.saveLook(userId, {
+      name: data.comparisonLabel ?? `${data.variant.product.name} look`,
+      note: data.result?.summary ?? "Saved from try-on result",
+      productIds: [data.variant.product.id],
+      isWishlist: false
+    });
+    setActionMessage(`Saved ${saved.name}`);
+  };
+
+  const shareLook = async () => {
+    if (!data) {
+      return;
+    }
+    await mobileApi.shareLook({ tryOnRequestId: data.id, channel: "share_sheet" });
+    setActionMessage("Share event captured");
+  };
 
   if (loading) {
     return (
@@ -146,54 +165,56 @@ export function TryOnResultScreen() {
       <SectionCard
         eyebrow="Try-On Review"
         title={data.variant?.product?.name ?? "Latest try-on preview"}
-        subtitle="Review the generated look, fit confidence, open issues, next alternatives, and retail follow-through before you buy."
+        subtitle="Review the generated look, fit confidence, open issues, comparisons, and save/share actions before you buy."
       >
         <View style={styles.row}>
           <Pill label={data.status} tone={data.status === "COMPLETED" ? "success" : data.status === "FAILED" ? "warning" : "accent"} />
-          <Pill label={data.provider} tone="neutral" />
+          <Pill label={data.fitStyle ?? "balanced"} tone="neutral" />
           <Pill label={`${Math.round(confidence * 100)}% confidence`} tone={confidenceTone(confidence)} />
         </View>
-        <View style={styles.previewPanel}>
-          <View style={styles.previewOrbOne} />
-          <View style={styles.previewOrbTwo} />
-          <Text style={styles.previewLabel}>Look preview</Text>
-          <Text style={styles.previewText}>
-            {data.result?.summary ?? data.statusMessage ?? "The try-on request is still moving through the processing pipeline."}
-          </Text>
+        <View style={styles.compareRow}>
+          <View style={styles.compareCard}>
+            {data.sourceUpload?.publicUrl ? <Image source={{ uri: data.sourceUpload.publicUrl }} style={styles.compareImage} /> : null}
+            <Text style={styles.compareLabel}>Original</Text>
+          </View>
+          <View style={styles.compareCard}>
+            {data.result?.outputImageUrl ? <Image source={{ uri: data.result.outputImageUrl }} style={styles.compareImage} /> : null}
+            <Text style={styles.compareLabel}>AI try-on</Text>
+          </View>
         </View>
+        {actionMessage ? <Text style={styles.message}>{actionMessage}</Text> : null}
       </SectionCard>
 
-      <SectionCard eyebrow="Fit Review" title="Fit and confidence">
+      <SectionCard eyebrow="Fit Review" title="Fit and variation details">
         <View style={styles.metricRow}>
           <MetricTile label="Confidence" value={`${Math.round(confidence * 100)}%`} caption="Provider-reported confidence" />
           <MetricTile label="Status" value={data.status} caption={data.statusMessage ?? "Latest queue state"} />
         </View>
         <InfoRow label="Product" value={data.variant?.product?.name ?? "Current try-on target"} />
-        <InfoRow label="Variant" value={data.variant?.sizeLabel ?? "Auto-selected variant"} />
-        <InfoRow label="Source image" value={data.sourceUpload?.key ?? "Uploaded asset"} />
+        <InfoRow label="Selected size" value={String(data.result?.metadata?.selectedSize ?? data.variant?.sizeLabel ?? "Auto")} />
+        <InfoRow label="Selected color" value={String(data.result?.metadata?.selectedColor ?? data.variant?.color ?? "Catalog")} />
+        <InfoRow label="Fit style" value={String(data.result?.metadata?.fitStyle ?? data.fitStyle ?? "balanced")} />
       </SectionCard>
 
       <SectionCard eyebrow="Issues" title="What to watch">
         {issues.map((issue) => (
           <View key={issue} style={styles.issueRow}>
-            <Feather name="alert-circle" size={18} color="#8a4f12" />
             <Text style={styles.issueText}>{issue}</Text>
           </View>
         ))}
       </SectionCard>
 
-      <SectionCard eyebrow="Alternatives" title="What to do next">
-        <PrimaryButton onPress={() => router.push("/recommendations")}>See alternatives</PrimaryButton>
-        <PrimaryButton onPress={() => router.push("/tryon-upload")} variant="secondary">
-          Upload another photo
+      <SectionCard eyebrow="Actions" title="Save, share, and compare">
+        <PrimaryButton onPress={saveLook}>Save look</PrimaryButton>
+        <PrimaryButton onPress={shareLook} variant="secondary">
+          Share look
         </PrimaryButton>
-      </SectionCard>
-
-      <SectionCard eyebrow="Buy Options" title="Move into offers">
-        <Text style={styles.buyText}>
-          This result is connected to the same product and recommendation graph, so the next safe step is comparing shops rather than guessing where to buy.
-        </Text>
-        <PrimaryButton onPress={() => router.push("/shops")}>Compare buy options</PrimaryButton>
+        <PrimaryButton onPress={() => router.push("/recommendations")} variant="secondary">
+          See alternatives
+        </PrimaryButton>
+        <PrimaryButton onPress={() => router.push("/shops")} variant="ghost">
+          Compare buy options
+        </PrimaryButton>
       </SectionCard>
     </Screen>
   );
@@ -205,66 +226,49 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap"
   },
-  previewPanel: {
-    minHeight: 200,
-    borderRadius: 24,
-    backgroundColor: "#ede2d1",
-    borderWidth: 1,
-    borderColor: "#dfcfb6",
-    padding: 18,
-    justifyContent: "flex-end",
+  compareRow: {
+    flexDirection: "row",
+    gap: 12
+  },
+  compareCard: {
+    flex: 1,
+    borderRadius: 22,
     overflow: "hidden",
+    backgroundColor: "#f6efe5",
+    borderWidth: 1,
+    borderColor: "#e6d7c0",
+    padding: 12,
     gap: 8
   },
-  previewOrbOne: {
-    position: "absolute",
-    top: -20,
-    right: -10,
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    backgroundColor: "#cfb698"
+  compareImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 18,
+    backgroundColor: "#eadcc7"
   },
-  previewOrbTwo: {
-    position: "absolute",
-    bottom: -30,
-    left: -24,
-    width: 110,
-    height: 110,
-    borderRadius: 999,
-    backgroundColor: "#c8d3d0"
-  },
-  previewLabel: {
-    color: "#6f5e49",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1.2
-  },
-  previewText: {
+  compareLabel: {
     color: "#172033",
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: "600"
+    fontSize: 14,
+    fontWeight: "700"
   },
   metricRow: {
     flexDirection: "row",
     gap: 10
   },
   issueRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10
+    borderRadius: 18,
+    backgroundColor: "#fbf8f3",
+    borderWidth: 1,
+    borderColor: "#eadcc7",
+    padding: 12
   },
   issueText: {
-    flex: 1,
     color: "#5d687d",
     fontSize: 14,
     lineHeight: 21
   },
-  buyText: {
-    color: "#667085",
-    fontSize: 14,
-    lineHeight: 21
+  message: {
+    color: "#5f697d",
+    fontSize: 14
   }
 });
