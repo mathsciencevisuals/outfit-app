@@ -1,17 +1,2 @@
--- DropIndex
-DROP INDEX "TryOnRequest_sourceUploadId_idx";
-
--- AlterTable
-ALTER TABLE "Campaign" ALTER COLUMN "updatedAt" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "CampaignBanner" ALTER COLUMN "updatedAt" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "Coupon" ALTER COLUMN "updatedAt" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "ReferralCode" ALTER COLUMN "updatedAt" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "RewardWallet" ALTER COLUMN "updatedAt" DROP DEFAULT;
+-- This migration was generated against a later local schema state and is intentionally a no-op.
+-- The actual growth/monetization tables are created in 20260422133000_growth_monetization.
