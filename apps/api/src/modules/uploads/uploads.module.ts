@@ -16,6 +16,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { extname } from "path";
 import { IsOptional, IsString } from "class-validator";
@@ -78,29 +79,49 @@ class UploadsService {
     const targetUserId = userId ?? user.id;
     this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these uploads");
 
-    return this.prisma.upload.findMany({
-      where: { userId: targetUserId },
-      orderBy: { createdAt: "desc" }
-    } as any);
+    return this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        key: string;
+        mimeType: string;
+        bucket: string;
+        publicUrl: string;
+        createdAt: Date;
+      }>
+    >(Prisma.sql`
+      SELECT id, "userId", key, "mimeType", bucket, "publicUrl", "createdAt"
+      FROM "Upload"
+      WHERE "userId" = ${targetUserId}
+      ORDER BY "createdAt" DESC
+    `);
   }
 
   async create(user: AuthenticatedUser, dto: CreateUploadDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this upload");
 
     const key = `${dto.purpose ?? "general"}/${dto.userId}/${randomUUID()}${this.resolveExtension(dto.mimeType, dto.fileName)}`;
-    const upload = await (this.prisma.upload as any).create({
-      data: {
-        userId: dto.userId,
-        mimeType: dto.mimeType,
-        key,
-        bucket: this.bucket,
-        purpose: dto.purpose ?? "general",
-        publicUrl: this.buildPublicUrl(key)
-      }
-    });
+    const id = randomUUID();
+    const publicUrl = this.buildPublicUrl(key);
+
+    const [upload] = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        key: string;
+        mimeType: string;
+        bucket: string;
+        publicUrl: string;
+        createdAt: Date;
+      }>
+    >(Prisma.sql`
+      INSERT INTO "Upload" (id, "userId", key, "mimeType", bucket, "publicUrl", "createdAt")
+      VALUES (${id}, ${dto.userId}, ${key}, ${dto.mimeType}, ${this.bucket}, ${publicUrl}, NOW())
+      RETURNING id, "userId", key, "mimeType", bucket, "publicUrl", "createdAt"
+    `);
 
     return {
-      upload,
+      upload: { ...upload, purpose: dto.purpose ?? "general" },
       uploadPath: `/uploads/${upload.id}/file`,
       method: "POST" as const
     };
@@ -118,9 +139,22 @@ class UploadsService {
 
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot upload this file");
 
-    const upload = await (this.prisma.upload as any).findUnique({
-      where: { id: uploadId }
-    });
+    const [upload] = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        key: string;
+        mimeType: string;
+        bucket: string;
+        publicUrl: string;
+        createdAt: Date;
+      }>
+    >(Prisma.sql`
+      SELECT id, "userId", key, "mimeType", bucket, "publicUrl", "createdAt"
+      FROM "Upload"
+      WHERE id = ${uploadId}
+      LIMIT 1
+    `);
 
     if (!upload || upload.userId !== dto.userId) {
       throw new BadRequestException("Upload session is invalid for this user");
@@ -141,13 +175,25 @@ class UploadsService {
       throw new BadGatewayException(error instanceof Error ? error.message : "Upload storage is unavailable");
     }
 
-    return (this.prisma.upload as any).update({
-      where: { id: upload.id },
-      data: {
-        mimeType: file.mimetype ?? upload.mimeType,
-        publicUrl: this.buildPublicUrl(upload.key)
-      }
-    });
+    const [updated] = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        key: string;
+        mimeType: string;
+        bucket: string;
+        publicUrl: string;
+        createdAt: Date;
+      }>
+    >(Prisma.sql`
+      UPDATE "Upload"
+      SET "mimeType" = ${file.mimetype ?? upload.mimeType},
+          "publicUrl" = ${this.buildPublicUrl(upload.key)}
+      WHERE id = ${upload.id}
+      RETURNING id, "userId", key, "mimeType", bucket, "publicUrl", "createdAt"
+    `);
+
+    return updated;
   }
 
   private async ensureBucketExists() {

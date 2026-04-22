@@ -108,11 +108,7 @@ class UsersService {
         where: { userId },
         orderBy: { createdAt: "desc" }
       } as any),
-      (this.prisma.savedLook as any).findMany({
-        where: { userId },
-        include: { items: { include: { product: true } } },
-        orderBy: { createdAt: "desc" }
-      })
+      this.getSafeSavedLooks(userId)
     ]);
 
     if (!profile) {
@@ -223,6 +219,39 @@ class UsersService {
       budgetLabel: null,
       closetStatus: "COMING_SOON"
     };
+  }
+
+  private async getSafeSavedLooks(userId: string) {
+    const looks = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        userId: string;
+        name: string;
+        note: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>
+    >(Prisma.sql`
+      SELECT id, "userId", name, note, "createdAt", "updatedAt"
+      FROM "SavedLook"
+      WHERE "userId" = ${userId}
+      ORDER BY "updatedAt" DESC
+    `);
+
+    if (looks.length === 0) {
+      return [];
+    }
+
+    const items = await this.prisma.savedLookItem.findMany({
+      where: { savedLookId: { in: looks.map((look) => look.id) } },
+      include: { product: true }
+    });
+
+    return looks.map((look) => ({
+      ...look,
+      isWishlist: false,
+      items: items.filter((item) => item.savedLookId === look.id)
+    }));
   }
 }
 
