@@ -1,6 +1,7 @@
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
@@ -65,8 +66,19 @@ export function SavedLooksScreen() {
       <SectionCard
         eyebrow="Saved Looks"
         title="Your reusable outfit shortlist"
-        subtitle="Saved outfits now carry live offer context and complementary products so you can move from memory to commerce."
+        subtitle="Saved outfits carry live offer context and related follow-up actions so you can move from memory to commerce."
       >
+        <View style={styles.topRow}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.headerLabel}>Collection state</Text>
+            <Text style={styles.headerText}>Use this as a memory layer between recommendations, try-on, and shop comparison.</Text>
+          </View>
+          <Pressable onPress={() => router.push("/profile")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
+            <Feather name="user" size={14} color="#182033" />
+            <Text style={styles.profileChipText}>Profile</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.heroRow}>
           <Pill label={`${looks.length} looks total`} tone="success" />
           <Pill label={`${looks.filter((look) => look.isWishlist).length} wishlist`} tone="neutral" />
@@ -75,7 +87,7 @@ export function SavedLooksScreen() {
         <SegmentedControl options={["Grid", "List"]} selected={view} onSelect={setView} />
       </SectionCard>
 
-      <SectionCard eyebrow="Collection" title={view === "Grid" ? "Grid view" : "List view"}>
+      <SectionCard eyebrow="Collection" title={view === "Grid" ? "Grid view" : "List view"} subtitle="Each card keeps comparison and discovery CTAs visible so the next step is obvious.">
         {filtered.length === 0 ? (
           <EmptyState
             title={scope === "Wishlist" ? "No wishlist items yet" : "No saved outfits yet"}
@@ -87,19 +99,22 @@ export function SavedLooksScreen() {
           <View style={view === "Grid" ? styles.grid : styles.list}>
             {filtered.map((look: SavedLook) => (
               <View key={look.id} style={view === "Grid" ? styles.gridCard : styles.listCard}>
-                <View style={styles.artBoard} />
+                <View style={styles.artBoard}>
+                  <View style={styles.artOrbLarge} />
+                  <View style={styles.artOrbSmall} />
+                  <Pill label={look.isWishlist ? "Wishlist" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
+                </View>
                 <View style={styles.lookMeta}>
                   <Text style={styles.lookTitle}>{look.name}</Text>
                   <View style={styles.pillRow}>
-                    <Pill label={look.isWishlist ? "Wishlist" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
                     {(look.occasionTags ?? []).slice(0, 2).map((tag) => (
                       <Pill key={tag} label={tag} tone="info" />
                     ))}
+                    <Pill label={`${look.items?.length ?? 0} items`} tone="neutral" />
                   </View>
                 </View>
                 <Text style={styles.lookNote}>{look.note ?? "No note yet. Revisit after your next try-on."}</Text>
                 <View style={styles.pillRow}>
-                  <Pill label={`${look.items?.length ?? 0} items`} tone="neutral" />
                   {look.offerSummary?.lowestPrice != null ? <Pill label={`From $${Math.round(look.offerSummary.lowestPrice)}`} tone="warning" /> : null}
                   <Pill label={look.offerSummary?.availabilityLabel ?? "No live offers"} tone="success" />
                 </View>
@@ -128,6 +143,47 @@ export function SavedLooksScreen() {
 }
 
 const styles = StyleSheet.create({
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 4
+  },
+  headerLabel: {
+    color: "#846746",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  headerText: {
+    color: "#647183",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  profileChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#efe3cf",
+    borderWidth: 1,
+    borderColor: "#dcc8ab"
+  },
+  profileChipText: {
+    color: "#182033",
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  pressed: {
+    opacity: 0.92
+  },
   heroRow: {
     flexDirection: "row",
     gap: 8,
@@ -143,33 +199,55 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     width: "48%",
-    borderRadius: 22,
-    backgroundColor: "#fbf8f3",
+    borderRadius: 24,
+    backgroundColor: "#fcf8f2",
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: "#e5d7c0",
     padding: 12,
-    gap: 10
+    gap: 12
   },
   listCard: {
-    borderRadius: 22,
-    backgroundColor: "#fbf8f3",
+    borderRadius: 24,
+    backgroundColor: "#fcf8f2",
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: "#e5d7c0",
     padding: 14,
-    gap: 10
+    gap: 12
   },
   artBoard: {
-    height: 112,
-    borderRadius: 18,
-    backgroundColor: "#ebddca"
+    height: 118,
+    borderRadius: 20,
+    backgroundColor: "#efe3cf",
+    overflow: "hidden",
+    padding: 12,
+    justifyContent: "space-between"
+  },
+  artOrbLarge: {
+    position: "absolute",
+    top: -24,
+    right: -10,
+    width: 92,
+    height: 92,
+    borderRadius: 999,
+    backgroundColor: "#d7c1a4"
+  },
+  artOrbSmall: {
+    position: "absolute",
+    left: 10,
+    bottom: -18,
+    width: 62,
+    height: 62,
+    borderRadius: 999,
+    backgroundColor: "#d8e1dd"
   },
   lookMeta: {
     gap: 8
   },
   lookTitle: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 17,
-    fontWeight: "700"
+    fontWeight: "700",
+    lineHeight: 22
   },
   pillRow: {
     flexDirection: "row",

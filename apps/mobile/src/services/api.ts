@@ -228,12 +228,11 @@ export const mobileApi = {
   refreshProfile: (userId: string): Promise<UserProfile> => refreshProfileIntoStore(userId),
   fitProfile: (): Promise<FitProfileResponse> => apiFetch("/users/me/fit-profile"),
   updateProfile: async (userId: string, input: ProfileInput): Promise<UserProfile> => {
-    const updated = await apiFetch<UserProfile>(`/profile/${userId}`, {
+    await apiFetch<UserProfile>(`/profile/${userId}`, {
       method: "PUT",
       body: JSON.stringify(input)
     });
-    useAppStore.getState().setProfile(updated);
-    return updated;
+    return refreshProfileIntoStore(userId);
   },
   fitAssess: (input: {
     userId: string;

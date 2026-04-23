@@ -19,15 +19,15 @@ export function SectionCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 28,
+    backgroundColor: "rgba(255,251,245,0.96)",
+    borderRadius: 30,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#eadcc7",
-    shadowColor: "#7f6240",
+    borderColor: "#e6d8c2",
+    shadowColor: "#5f4930",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
-    shadowRadius: 24,
+    shadowRadius: 20,
     elevation: 3,
     gap: 6
   },
@@ -36,18 +36,18 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 1.4,
     textTransform: "uppercase",
-    color: "#8a6d4a"
+    color: "#8b6b47"
   },
   title: {
     fontSize: 24,
     lineHeight: 30,
     fontWeight: "700",
-    color: "#172033"
+    color: "#182033"
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
-    color: "#5d687d"
+    color: "#5d6678"
   },
   content: {
     marginTop: 10,

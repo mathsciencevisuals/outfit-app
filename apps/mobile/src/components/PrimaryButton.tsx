@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1
+    borderWidth: 1.5
   },
   buttonMedium: {
     minHeight: 54,
@@ -60,16 +60,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10
   },
   primary: {
-    backgroundColor: "#172033",
-    borderColor: "#172033"
+    backgroundColor: "#182033",
+    borderColor: "#182033"
   },
   secondary: {
-    backgroundColor: "#efe4d3",
-    borderColor: "#e3d4be"
+    backgroundColor: "#efe2cf",
+    borderColor: "#dcc8ab"
   },
   ghost: {
-    backgroundColor: "transparent",
-    borderColor: "#d5c3a8"
+    backgroundColor: "rgba(255,250,243,0.72)",
+    borderColor: "#d9c4a4"
   },
   text: {
     fontSize: 15,
@@ -77,13 +77,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2
   },
   primaryText: {
-    color: "#fffaf5"
+    color: "#fffaf4"
   },
   secondaryText: {
-    color: "#172033"
+    color: "#182033"
   },
   ghostText: {
-    color: "#5c4a35"
+    color: "#6a553b"
   },
   inline: {
     alignSelf: "flex-start"
@@ -92,6 +92,6 @@ const styles = StyleSheet.create({
     opacity: 0.45
   },
   pressed: {
-    transform: [{ scale: 0.99 }]
+    transform: [{ scale: 0.985 }]
   }
 });

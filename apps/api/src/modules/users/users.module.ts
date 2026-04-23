@@ -156,8 +156,10 @@ class UsersService {
 
     const existingProfile = await this.getSafeProfile(userId);
 
-    let avatarUploadId: string | null = dto.avatarUploadId ?? null;
-    let avatarUrl: string | null = dto.avatarUrl ?? null;
+    let avatarUploadId: string | null =
+      dto.avatarUploadId === undefined ? existingProfile?.avatarUploadId ?? null : dto.avatarUploadId ?? null;
+    let avatarUrl: string | null =
+      dto.avatarUrl === undefined ? existingProfile?.avatarUrl ?? null : dto.avatarUrl ?? null;
     const fitPreference = dto.fitPreference ?? existingProfile?.fitPreference ?? "regular";
 
     if (avatarUploadId) {
@@ -176,6 +178,8 @@ class UsersService {
 
       avatarUploadId = upload.id;
       avatarUrl = upload.publicUrl;
+    } else if (avatarUrl == null) {
+      avatarUrl = null;
     }
 
     const [profile] = await this.prisma.$queryRaw<Array<SafeProfileRow>>(Prisma.sql`

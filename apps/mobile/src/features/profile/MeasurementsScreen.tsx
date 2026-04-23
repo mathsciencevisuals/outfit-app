@@ -1,6 +1,7 @@
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
@@ -157,14 +158,26 @@ export function MeasurementsScreen() {
     <Screen>
       <SectionCard
         eyebrow="Fit Profile"
-        title="Body measurements and preference"
+        title="Measurements"
         subtitle="These values drive size recommendation, confidence, issue detection, and recommendation ranking."
       >
+        <View style={styles.topRow}>
+          <View style={styles.headingBlock}>
+            <Text style={styles.headingLabel}>Calibration status</Text>
+            <Text style={styles.headingCopy}>Keep this layer current so fit and recommendation quality stay stable.</Text>
+          </View>
+          <Pressable onPress={() => router.push("/profile")} style={({ pressed }) => [styles.backChip, pressed && styles.pressed]}>
+            <Feather name="user" size={14} color="#182033" />
+            <Text style={styles.backChipText}>Profile</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.row}>
           <Pill label={`Coverage ${coverage}/7`} tone={coverage >= 5 ? "success" : "warning"} />
           <Pill label={`Preference ${fitPreference}`} tone="neutral" />
           <Pill label={fitProfile?.guidance ?? "Add more measurements for better confidence"} tone="accent" />
         </View>
+
         <View style={styles.metricRow}>
           <MetricTile label="Height" value={heightCm || "--"} caption="cm" />
           <MetricTile label="Chest" value={chestCm || "--"} caption="cm" />
@@ -179,34 +192,46 @@ export function MeasurementsScreen() {
         </View>
       </SectionCard>
 
-      <SectionCard eyebrow="Preference" title="How close should the garment wear?">
-        <Text style={styles.supportText}>
-          Slim accepts slightly tighter suggestions, regular aims for balance, and relaxed tolerates extra room.
-        </Text>
+      <SectionCard
+        eyebrow="Preference"
+        title="How should garments wear?"
+        subtitle="Slim accepts slightly tighter recommendations, regular stays balanced, and relaxed tolerates more room."
+      >
         <SegmentedControl options={fitPreferenceOptions} selected={fitPreference} onSelect={(value) => setFitPreference(value as FitPreference)} />
       </SectionCard>
 
-      <SectionCard eyebrow="Manual Entry" title="Update your values">
+      <SectionCard
+        eyebrow="Manual Entry"
+        title="Update your values"
+        subtitle="Add or refine measurements to strengthen size recommendations and fit warnings."
+      >
         <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={heightCm} onChangeText={setHeightCm} placeholder="Height" keyboardType="numeric" placeholderTextColor="#978b7d" />
-          <TextInput style={[styles.input, styles.half]} value={weightKg} onChangeText={setWeightKg} placeholder="Weight" keyboardType="numeric" placeholderTextColor="#978b7d" />
+          <TextInput style={[styles.input, styles.half]} value={heightCm} onChangeText={setHeightCm} placeholder="Height" keyboardType="numeric" placeholderTextColor="#8f816f" />
+          <TextInput style={[styles.input, styles.half]} value={weightKg} onChangeText={setWeightKg} placeholder="Weight" keyboardType="numeric" placeholderTextColor="#8f816f" />
         </View>
         <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={chestCm} onChangeText={setChestCm} placeholder="Chest" keyboardType="numeric" placeholderTextColor="#978b7d" />
-          <TextInput style={[styles.input, styles.half]} value={waistCm} onChangeText={setWaistCm} placeholder="Waist" keyboardType="numeric" placeholderTextColor="#978b7d" />
+          <TextInput style={[styles.input, styles.half]} value={chestCm} onChangeText={setChestCm} placeholder="Chest" keyboardType="numeric" placeholderTextColor="#8f816f" />
+          <TextInput style={[styles.input, styles.half]} value={waistCm} onChangeText={setWaistCm} placeholder="Waist" keyboardType="numeric" placeholderTextColor="#8f816f" />
         </View>
         <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={hipsCm} onChangeText={setHipsCm} placeholder="Hips" keyboardType="numeric" placeholderTextColor="#978b7d" />
-          <TextInput style={[styles.input, styles.half]} value={inseamCm} onChangeText={setInseamCm} placeholder="Inseam" keyboardType="numeric" placeholderTextColor="#978b7d" />
+          <TextInput style={[styles.input, styles.half]} value={hipsCm} onChangeText={setHipsCm} placeholder="Hips" keyboardType="numeric" placeholderTextColor="#8f816f" />
+          <TextInput style={[styles.input, styles.half]} value={inseamCm} onChangeText={setInseamCm} placeholder="Inseam" keyboardType="numeric" placeholderTextColor="#8f816f" />
         </View>
         <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={shoulderCm} onChangeText={setShoulderCm} placeholder="Shoulder" keyboardType="numeric" placeholderTextColor="#978b7d" />
-          <TextInput style={[styles.input, styles.half]} value={footLengthCm} onChangeText={setFootLengthCm} placeholder="Foot length" keyboardType="numeric" placeholderTextColor="#978b7d" />
+          <TextInput style={[styles.input, styles.half]} value={shoulderCm} onChangeText={setShoulderCm} placeholder="Shoulder" keyboardType="numeric" placeholderTextColor="#8f816f" />
+          <TextInput style={[styles.input, styles.half]} value={footLengthCm} onChangeText={setFootLengthCm} placeholder="Foot length" keyboardType="numeric" placeholderTextColor="#8f816f" />
         </View>
+
         {message ? <Text style={styles.message}>{message}</Text> : null}
-        <PrimaryButton onPress={saveMeasurements} disabled={saving || !effectiveProfile}>
-          {saving ? "Saving fit profile..." : "Save fit profile"}
-        </PrimaryButton>
+
+        <View style={styles.ctaRow}>
+          <PrimaryButton onPress={saveMeasurements} disabled={saving || !effectiveProfile}>
+            {saving ? "Saving fit profile..." : "Save fit profile"}
+          </PrimaryButton>
+          <PrimaryButton onPress={() => router.push("/recommendations")} variant="secondary">
+            See recommendations
+          </PrimaryButton>
+        </View>
       </SectionCard>
 
       {!latest && !loading ? (
@@ -222,6 +247,47 @@ export function MeasurementsScreen() {
 }
 
 const styles = StyleSheet.create({
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  headingBlock: {
+    flex: 1,
+    gap: 4
+  },
+  headingLabel: {
+    color: "#846746",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  headingCopy: {
+    color: "#647183",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  backChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#efe3cf",
+    borderWidth: 1,
+    borderColor: "#dcc8ab"
+  },
+  backChipText: {
+    color: "#182033",
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  pressed: {
+    opacity: 0.92
+  },
   row: {
     flexDirection: "row",
     gap: 8,
@@ -240,21 +306,20 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#e4d7c5",
-    backgroundColor: "#fbf8f3",
+    borderColor: "#e2d3bd",
+    backgroundColor: "#fcf8f2",
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 15,
     fontSize: 16,
-    color: "#172033"
+    color: "#182033"
   },
   message: {
     color: "#5f697d",
-    fontSize: 14
-  },
-  supportText: {
-    color: "#667085",
     fontSize: 14,
-    lineHeight: 21
+    lineHeight: 20
+  },
+  ctaRow: {
+    gap: 10
   }
 });

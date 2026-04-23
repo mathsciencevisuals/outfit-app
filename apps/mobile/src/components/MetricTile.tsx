@@ -22,27 +22,27 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: "#f8f3eb",
-    borderRadius: 20,
+    backgroundColor: "#faf5ee",
+    borderRadius: 22,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#e8dac5",
+    borderColor: "#e5d6c0",
     gap: 4
   },
   label: {
-    color: "#846f55",
+    color: "#836b4d",
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8
   },
   value: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 22,
     fontWeight: "700"
   },
   caption: {
-    color: "#6b7280",
+    color: "#6a7280",
     fontSize: 12,
     lineHeight: 18
   }

@@ -14,34 +14,34 @@ export function Screen({ children }: PropsWithChildren) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f7f1e8"
+    backgroundColor: "#f8f2e8"
   },
   content: {
     paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 40
+    paddingTop: 20,
+    paddingBottom: 48
   },
   body: {
     gap: 16
   },
   glowTop: {
     position: "absolute",
-    top: -40,
-    right: -20,
-    width: 220,
-    height: 220,
+    top: -70,
+    right: -28,
+    width: 250,
+    height: 250,
     borderRadius: 999,
-    backgroundColor: "#f2dfc3",
-    opacity: 0.6
+    backgroundColor: "#ecd8b8",
+    opacity: 0.72
   },
   glowMiddle: {
     position: "absolute",
-    top: 180,
-    left: -90,
-    width: 210,
-    height: 210,
+    top: 210,
+    left: -96,
+    width: 220,
+    height: 220,
     borderRadius: 999,
-    backgroundColor: "#ead7c9",
-    opacity: 0.45
+    backgroundColor: "#e7d6cb",
+    opacity: 0.52
   }
 });

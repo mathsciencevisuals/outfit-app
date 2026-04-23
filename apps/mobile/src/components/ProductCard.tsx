@@ -98,6 +98,10 @@ export function ProductCard({
           {badge ? <Pill label={badge} tone="accent" /> : null}
           {priceLabel ? <Pill label={priceLabel} tone="warning" /> : null}
         </View>
+        <View style={styles.previewCaption}>
+          <Text style={styles.previewCaptionLabel}>Recommendation</Text>
+          <Text style={styles.previewCaptionText}>Fit, style, budget, and retail cues aligned in one card.</Text>
+        </View>
       </View>
       <View style={styles.copy}>
         <View style={styles.headerRow}>
@@ -107,7 +111,7 @@ export function ProductCard({
           </View>
           {scoreLabel ? (
             <View style={styles.metaBadge}>
-              <Feather name="star" size={14} color="#172033" />
+              <Feather name="star" size={14} color="#182033" />
               <Text style={styles.metaText}>{scoreLabel}</Text>
             </View>
           ) : null}
@@ -191,15 +195,15 @@ export function productSubtitle(product?: Product) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
+    borderRadius: 26,
     overflow: "hidden",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fffbf5",
     borderWidth: 1,
-    borderColor: "#eadcc7"
+    borderColor: "#e5d7c0"
   },
   preview: {
-    minHeight: 132,
-    backgroundColor: "#efe3d2",
+    minHeight: 146,
+    backgroundColor: "#efe3cf",
     padding: 16,
     justifyContent: "space-between"
   },
@@ -208,6 +212,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
     flexWrap: "wrap"
+  },
+  previewCaption: {
+    gap: 4
+  },
+  previewCaptionLabel: {
+    color: "#836a49",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  previewCaptionText: {
+    color: "#5e687a",
+    fontSize: 13,
+    lineHeight: 19,
+    maxWidth: "80%"
   },
   previewOrbLarge: {
     position: "absolute",
@@ -242,7 +262,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   title: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 20,
     lineHeight: 26,
     fontWeight: "700"
@@ -254,57 +274,41 @@ const styles = StyleSheet.create({
   fitSummary: {
     borderRadius: 20,
     padding: 14,
-    backgroundColor: "#fbf6ef",
+    backgroundColor: "#fbf5ec",
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: "#e5d7c0",
     gap: 10
   },
   fitSummaryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10
+    gap: 12,
+    alignItems: "center"
   },
   fitSummaryTitle: {
-    color: "#786145",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase"
-  },
-  fitSummarySize: {
-    color: "#172033",
-    fontSize: 18,
+    color: "#182033",
+    fontSize: 15,
     fontWeight: "700"
   },
-  highlight: {
-    color: "#4f5a6d",
-    fontSize: 14,
-    lineHeight: 20
+  fitSummarySize: {
+    color: "#7b6449",
+    fontSize: 13,
+    fontWeight: "700"
   },
   metaRow: {
     flexDirection: "row",
     gap: 8,
     flexWrap: "wrap"
   },
-  metaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: "#f4eee6"
-  },
-  metaText: {
-    color: "#172033",
-    fontSize: 13,
-    fontWeight: "600"
-  },
   warning: {
-    color: "#8a4f12",
+    color: "#8d4f2c",
     fontSize: 13,
-    lineHeight: 19
+    lineHeight: 20
+  },
+  highlight: {
+    color: "#5d6678",
+    fontSize: 14,
+    lineHeight: 21
   },
   issueRow: {
     flexDirection: "row",
@@ -312,6 +316,22 @@ const styles = StyleSheet.create({
     flexWrap: "wrap"
   },
   actions: {
-    gap: 10
+    gap: 8
+  },
+  metaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: "#f3eadf",
+    borderWidth: 1,
+    borderColor: "#e5d7c0",
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  metaText: {
+    color: "#182033",
+    fontSize: 12,
+    fontWeight: "700"
   }
 });

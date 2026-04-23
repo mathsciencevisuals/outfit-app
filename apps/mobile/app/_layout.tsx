@@ -87,11 +87,35 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: "#f6f1ea" },
-          headerTintColor: "#1e293b",
-          contentStyle: { backgroundColor: "#fffaf5" }
+          headerStyle: { backgroundColor: "#f6efe5" },
+          headerTintColor: "#182033",
+          headerShadowVisible: false,
+          headerTitleStyle: {
+            fontSize: 18,
+            fontWeight: "700",
+            color: "#182033"
+          },
+          headerBackTitleVisible: false,
+          contentStyle: { backgroundColor: "#f8f2e8" },
+          animation: "fade"
         }}
-      />
+      >
+        <Stack.Screen name="profile" options={{ title: "Profile" }} />
+        <Stack.Screen name="discover" options={{ title: "Discover" }} />
+        <Stack.Screen name="measurements" options={{ title: "Measurements" }} />
+        <Stack.Screen name="recommendations" options={{ title: "Recommendations" }} />
+        <Stack.Screen name="saved-looks" options={{ title: "Saved Looks" }} />
+        <Stack.Screen name="shops" options={{ title: "Shops" }} />
+        <Stack.Screen name="tryon-upload" options={{ title: "Try-On Upload" }} />
+        <Stack.Screen name="tryon-result" options={{ title: "Try-On History" }} />
+        <Stack.Screen name="rewards" options={{ title: "Rewards" }} />
+        <Stack.Screen name="referrals" options={{ title: "Referrals" }} />
+        <Stack.Screen name="coupons" options={{ title: "Coupons" }} />
+        <Stack.Screen name="challenges" options={{ title: "Challenges" }} />
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+      </Stack>
     </SafeAreaProvider>
   );
 }

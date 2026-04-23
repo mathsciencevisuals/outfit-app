@@ -1,6 +1,7 @@
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
@@ -33,10 +34,14 @@ export function RecommendationsScreen() {
       return recommendations.filter((item) => (item.fitResult?.fitScore ?? 0) >= 78);
     }
     if (activeFilter === "Budget") {
-      return recommendations.filter((item) => (item.budgetLabel ?? "").toLowerCase().includes("budget") || (item.rankingBadges ?? []).includes("Budget Pick"));
+      return recommendations.filter(
+        (item) => (item.budgetLabel ?? "").toLowerCase().includes("budget") || (item.rankingBadges ?? []).includes("Budget Pick")
+      );
     }
     if (activeFilter === "Color-led") {
-      return recommendations.filter((item) => (item.colorInsight?.matchingColors?.length ?? 0) > 0 || (item.colorInsight?.complementaryColors?.length ?? 0) > 0);
+      return recommendations.filter(
+        (item) => (item.colorInsight?.matchingColors?.length ?? 0) > 0 || (item.colorInsight?.complementaryColors?.length ?? 0) > 0
+      );
     }
     return recommendations;
   }, [activeFilter, recommendations]);
@@ -82,13 +87,25 @@ export function RecommendationsScreen() {
       <SectionCard
         eyebrow="Recommendations"
         title="What fits your profile best"
-        subtitle="Ranking now blends fit confidence, style preference, occasion, budget, saved looks, and commerce signals."
+        subtitle="Ranking blends fit confidence, style preference, occasion, budget, saved looks, and retail context."
       >
+        <View style={styles.headerRow}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.headerLabel}>Curated now</Text>
+            <Text style={styles.headerText}>Use these cards to move straight into shop comparison or try-on without losing context.</Text>
+          </View>
+          <Pressable onPress={() => router.push("/profile")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
+            <Feather name="user" size={14} color="#182033" />
+            <Text style={styles.profileChipText}>Profile</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.row}>
           <Pill label={recommendationBadge(best)} tone="success" />
           <Pill label={`${recommendations.length} ranked pieces`} tone="neutral" />
           {best.fitResult?.recommendedSize ? <Pill label={`Top size ${best.fitResult.recommendedSize}`} tone="accent" /> : null}
         </View>
+
         <View style={styles.metricRow}>
           <MetricTile label="Top score" value={`${Math.round(best.score)}`} caption="Best current product match" />
           <MetricTile
@@ -97,6 +114,7 @@ export function RecommendationsScreen() {
             caption={best.budgetLabel ?? "Needs more pricing"}
           />
         </View>
+
         <SegmentedControl options={occasions} selected={occasion} onSelect={(value) => setOccasion(value as Occasion | "all")} />
         <SegmentedControl options={filterOptions} selected={activeFilter} onSelect={setActiveFilter} />
       </SectionCard>
@@ -109,7 +127,7 @@ export function RecommendationsScreen() {
           onAction={() => setActiveFilter("All")}
         />
       ) : (
-        <SectionCard eyebrow="Curated Cards" title="Recommendation shortlist">
+        <SectionCard eyebrow="Shortlist" title="Recommendation cards" subtitle="Each card keeps the next action obvious so users can move forward without hunting for the right entry point.">
           {filtered.map((item: Recommendation) => (
             <View key={item.id ?? item.productId} style={styles.cardWrap}>
               <ProductCard
@@ -120,14 +138,14 @@ export function RecommendationsScreen() {
                 highlight={item.explanation ?? "Routed here through fit-aware ranking."}
                 bestSizeLabel={item.bestSizeLabel}
                 fitLabel={item.bestFitLabel}
-                confidenceLabel={
-                  item.fitResult ? `${Math.round(item.fitResult.confidenceScore * 100)}% confidence` : null
-                }
+                confidenceLabel={item.fitResult ? `${Math.round(item.fitResult.confidenceScore * 100)}% confidence` : null}
                 warning={item.fitWarning}
                 issueLabels={item.fitResult?.issues.map((issue) => issue.code)}
                 contextTags={[...(item.reasonTags ?? []), ...(item.occasionTags ?? [])]}
                 rankingBadges={item.rankingBadges}
-                priceLabel={item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : item.budgetLabel ?? null}
+                priceLabel={
+                  item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : item.budgetLabel ?? null
+                }
                 primaryLabel="Compare shops"
                 onPrimaryPress={() => router.push("/shops")}
                 secondaryLabel="Try on now"
@@ -135,10 +153,13 @@ export function RecommendationsScreen() {
               />
               <View style={styles.insightCard}>
                 <Text style={styles.insightTitle}>Color and budget read</Text>
-                <Text style={styles.insightText}>{item.colorInsight?.explanation ?? "Color alignment is still being evaluated."}</Text>
+                <Text style={styles.insightText}>
+                  {item.colorInsight?.explanation ?? "Color alignment is still being evaluated."}
+                </Text>
                 {item.cheaperAlternative ? (
                   <Text style={styles.insightText}>
-                    Cheaper option: {item.cheaperAlternative.name} from ${Math.round(item.cheaperAlternative.offerSummary?.lowestPrice ?? 0)}.
+                    Cheaper option: {item.cheaperAlternative.name} from $
+                    {Math.round(item.cheaperAlternative.offerSummary?.lowestPrice ?? 0)}.
                   </Text>
                 ) : null}
               </View>
@@ -164,6 +185,47 @@ export function RecommendationsScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 4
+  },
+  headerLabel: {
+    color: "#846746",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  headerText: {
+    color: "#647183",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  profileChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#efe3cf",
+    borderWidth: 1,
+    borderColor: "#dcc8ab"
+  },
+  profileChipText: {
+    color: "#182033",
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  pressed: {
+    opacity: 0.92
+  },
   row: {
     flexDirection: "row",
     gap: 8,
@@ -182,15 +244,15 @@ const styles = StyleSheet.create({
     flexWrap: "wrap"
   },
   insightCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#f6f1e8",
+    borderRadius: 20,
+    padding: 16,
+    backgroundColor: "#f8f2ea",
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: "#e5d7c0",
     gap: 6
   },
   insightTitle: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 13,
     fontWeight: "700",
     textTransform: "uppercase",

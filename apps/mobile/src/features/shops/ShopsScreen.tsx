@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
@@ -77,8 +77,19 @@ export function ShopsScreen() {
       <SectionCard
         eyebrow="Retail Comparison"
         title="Buy options across connected partners"
-        subtitle="Compare shop price, stock, and the size most likely to work before leaving the app."
+        subtitle="Compare price, stock, and the size most likely to work before you leave the app."
       >
+        <View style={styles.topRow}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.headerLabel}>Retail handoff</Text>
+            <Text style={styles.headerText}>Keep selection, fit context, and price clarity visible before sending users off-platform.</Text>
+          </View>
+          <Pressable onPress={() => router.push("/recommendations")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
+            <Feather name="star" size={14} color="#182033" />
+            <Text style={styles.profileChipText}>Recommendations</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.row}>
           <Pill label={`${items.length} recommended products`} tone="accent" />
           {comparison?.recommendedSize ? <Pill label={`Recommended ${comparison.recommendedSize}`} tone="success" /> : null}
@@ -104,32 +115,44 @@ export function ShopsScreen() {
         />
       ) : (
         <>
-          <SectionCard eyebrow="Offer Detail" title={comparison.productName ?? "Selected item"}>
+          <SectionCard eyebrow="Offer Detail" title={comparison.productName ?? "Selected item"} subtitle="The top metrics stay up front so users can compare retailers quickly.">
             <View style={styles.metricRow}>
               <MetricTile label="Lowest" value={comparison.lowestPrice != null ? `$${Math.round(comparison.lowestPrice)}` : "--"} caption="Best visible price" />
               <MetricTile label="Highest" value={comparison.highestPrice != null ? `$${Math.round(comparison.highestPrice)}` : "--"} caption="Top offer in range" />
             </View>
             <View style={styles.metricRow}>
               <MetricTile label="Offers" value={`${comparison.offers.length}`} caption="Available buy paths" />
-              <MetricTile label="Fit" value={comparison.fitLabel ?? "regular"} caption={comparison.recommendedSize ? `Size ${comparison.recommendedSize}` : "Size guidance unavailable"} />
+              <MetricTile
+                label="Fit"
+                value={comparison.fitLabel ?? "regular"}
+                caption={comparison.recommendedSize ? `Size ${comparison.recommendedSize}` : "Size guidance unavailable"}
+              />
             </View>
           </SectionCard>
 
           {comparison.bestOffer ? (
-            <SectionCard eyebrow="Best Offer" title={`${comparison.bestOffer.shop?.name ?? "Retailer"} leads`}>
+            <SectionCard eyebrow="Best Offer" title={`${comparison.bestOffer.shop?.name ?? "Retailer"} leads`} subtitle="This CTA is the clearest outbound path based on visible price and availability.">
               <View style={styles.row}>
                 <Pill label={`$${Math.round(comparison.bestOffer?.price ?? 0)}`} tone="warning" />
-                <Pill label={(comparison.bestOffer?.stock ?? 0) > 0 ? "In stock" : "Sold out"} tone={(comparison.bestOffer?.stock ?? 0) > 0 ? "success" : "danger"} />
+                <Pill
+                  label={(comparison.bestOffer?.stock ?? 0) > 0 ? "In stock" : "Sold out"}
+                  tone={(comparison.bestOffer?.stock ?? 0) > 0 ? "success" : "danger"}
+                />
                 <Pill label={comparison.bestOffer?.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"} tone="info" />
               </View>
               <Text style={styles.offerText}>This is the cleanest handoff right now based on visible price and availability.</Text>
-              <PrimaryButton onPress={() => comparison.bestOffer?.externalUrl && Linking.openURL(comparison.bestOffer.externalUrl)}>
-                Buy now
-              </PrimaryButton>
+              <View style={styles.ctaRow}>
+                <PrimaryButton onPress={() => comparison.bestOffer?.externalUrl && Linking.openURL(comparison.bestOffer.externalUrl)}>
+                  Buy now
+                </PrimaryButton>
+                <PrimaryButton onPress={() => router.push("/tryon-upload")} variant="secondary">
+                  Try on again
+                </PrimaryButton>
+              </View>
             </SectionCard>
           ) : null}
 
-          <SectionCard eyebrow="Partner Cards" title="Shop comparison">
+          <SectionCard eyebrow="Partner Cards" title="Shop comparison" subtitle="Keep retailer cards consistent so price, stock, and CTA hierarchy scan quickly.">
             {comparison.offers.map((offer) => (
               <View key={offer.id} style={styles.shopCard}>
                 <View style={styles.shopHeader}>
@@ -141,20 +164,20 @@ export function ShopsScreen() {
                 </View>
                 <View style={styles.offerStrip}>
                   <View style={styles.offerMetric}>
-                    <Feather name="tag" size={16} color="#172033" />
+                    <Feather name="tag" size={16} color="#182033" />
                     <Text style={styles.offerLabel}>${Math.round(offer.price)}</Text>
                   </View>
                   <View style={styles.offerMetric}>
-                    <Feather name="box" size={16} color="#172033" />
+                    <Feather name="box" size={16} color="#182033" />
                     <Text style={styles.offerLabel}>{offer.stock} units</Text>
                   </View>
                   <View style={styles.offerMetric}>
-                    <Feather name="shopping-bag" size={16} color="#172033" />
+                    <Feather name="shopping-bag" size={16} color="#182033" />
                     <Text style={styles.offerLabel}>{offer.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"}</Text>
                   </View>
                 </View>
                 <Text style={styles.offerText}>Outbound handoff is ready through the retailer link for this specific offer.</Text>
-                <PrimaryButton onPress={() => Linking.openURL(offer.externalUrl)}>Visit Shop</PrimaryButton>
+                <PrimaryButton onPress={() => Linking.openURL(offer.externalUrl)}>Visit shop</PrimaryButton>
               </View>
             ))}
             {comparison.cheaperAlternative ? (
@@ -176,6 +199,47 @@ export function ShopsScreen() {
 }
 
 const styles = StyleSheet.create({
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 4
+  },
+  headerLabel: {
+    color: "#846746",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  headerText: {
+    color: "#647183",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  profileChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#efe3cf",
+    borderWidth: 1,
+    borderColor: "#dcc8ab"
+  },
+  profileChipText: {
+    color: "#182033",
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  pressed: {
+    opacity: 0.92
+  },
   row: {
     flexDirection: "row",
     gap: 8,
@@ -185,11 +249,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10
   },
+  ctaRow: {
+    gap: 10
+  },
   shopCard: {
-    borderRadius: 22,
-    backgroundColor: "#fbf8f3",
+    borderRadius: 24,
+    backgroundColor: "#fcf8f2",
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: "#e5d7c0",
     padding: 14,
     gap: 12
   },
@@ -204,7 +271,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   shopTitle: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 18,
     fontWeight: "700"
   },
@@ -227,7 +294,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#efe5d7"
   },
   offerLabel: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 13,
     fontWeight: "600"
   },
@@ -237,15 +304,15 @@ const styles = StyleSheet.create({
     lineHeight: 21
   },
   altCard: {
-    borderRadius: 22,
-    backgroundColor: "#f4f7fb",
+    borderRadius: 24,
+    backgroundColor: "#f8f2ea",
     borderWidth: 1,
-    borderColor: "#d4dfec",
+    borderColor: "#e5d7c0",
     padding: 14,
     gap: 10
   },
   altTitle: {
-    color: "#172033",
+    color: "#182033",
     fontSize: 17,
     fontWeight: "700"
   },

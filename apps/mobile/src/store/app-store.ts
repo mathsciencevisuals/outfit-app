@@ -8,6 +8,7 @@ const STORAGE_KEY = "fitme-app-store";
 
 type AppState = {
   userId: string;
+  userEmail: string;
   userRole: UserRole | null;
   token: string | null;
   profile: UserProfile | null;
@@ -25,6 +26,7 @@ type AppState = {
 
 const initialState = {
   userId: "",
+  userEmail: "",
   userRole: null as UserRole | null,
   token: null as string | null,
   profile: null as UserProfile | null,
@@ -60,6 +62,7 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           token,
           userId: user.id,
+          userEmail: user.email,
           userRole: user.role,
           profile: mergeProfile(state.profile, user.profile ?? null),
           profileVersion: state.profileVersion + 1,
@@ -92,6 +95,7 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         userId: state.userId,
+        userEmail: state.userEmail,
         userRole: state.userRole,
         token: state.token,
         profile: state.profile,
