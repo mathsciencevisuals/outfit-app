@@ -1,0 +1,10 @@
+.git
+.codex
+.eas
+.turbo
+node_modules
+**/node_modules
+**/dist
+outfit-app-screens.zip
+outfit_app_mobile_redesign_prototype.txt
+AGENTS.md
