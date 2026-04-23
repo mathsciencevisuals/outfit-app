@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import { colors } from "../theme/design";
+
 export function InfoRow({
   label,
   value,
@@ -25,26 +27,26 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#efe6da"
+    borderBottomColor: "#eadfce"
   },
   rowEmphasized: {
-    borderBottomColor: "#dcc8ac"
+    borderBottomColor: colors.lineStrong
   },
   label: {
     flex: 1,
-    color: "#7a6d5c",
+    color: colors.brand,
     fontSize: 14,
     fontWeight: "500"
   },
   value: {
     flex: 1,
-    color: "#172033",
+    color: colors.ink,
     fontWeight: "600",
     fontSize: 14,
     textAlign: "right"
   },
   valueEmphasized: {
     fontSize: 16,
-    color: "#0f172a"
+    color: colors.ink
   }
 });

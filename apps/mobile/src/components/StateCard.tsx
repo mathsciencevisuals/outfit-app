@@ -1,5 +1,6 @@
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
+import { colors } from "../theme/design";
 import { PrimaryButton } from "./PrimaryButton";
 import { SectionCard } from "./SectionCard";
 
@@ -13,7 +14,7 @@ export function LoadingState({
   return (
     <SectionCard title={title} subtitle={subtitle} eyebrow="Loading">
       <View style={styles.centered}>
-        <ActivityIndicator color="#172033" />
+        <ActivityIndicator color={colors.ink} />
         <Text style={styles.message}>Fetching the latest FitMe data.</Text>
       </View>
     </SectionCard>
@@ -76,7 +77,7 @@ const styles = StyleSheet.create({
     gap: 10
   },
   message: {
-    color: "#6b7280",
+    color: colors.inkSoft,
     fontSize: 14,
     lineHeight: 21
   }

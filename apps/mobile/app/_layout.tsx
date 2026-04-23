@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { mobileApi } from "../src/services/api";
 import { useAppStore } from "../src/store/app-store";
+import { colors, fonts } from "../src/theme/design";
 
 const publicRoutes = new Set(["onboarding", "auth"]);
 
@@ -65,10 +66,10 @@ export default function RootLayout() {
             flex: 1,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "#f7f1e8"
+            backgroundColor: colors.page
           }}
         >
-          <ActivityIndicator color="#172033" />
+          <ActivityIndicator color={colors.ink} />
         </View>
       </SafeAreaProvider>
     );
@@ -79,7 +80,7 @@ export default function RootLayout() {
   }
 
   if (isAuthenticated && rootSegment != null && publicRoutes.has(rootSegment)) {
-    return <Redirect href="/profile" />;
+    return <Redirect href="/feed" />;
   }
 
   return (
@@ -88,26 +89,27 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: "#f6efe5" },
-          headerTintColor: "#182033",
+          headerTintColor: colors.ink,
           headerShadowVisible: false,
           headerTitleStyle: {
-            fontSize: 18,
-            fontWeight: "700",
-            color: "#182033"
+            fontSize: 24,
+            color: colors.ink,
+            fontFamily: fonts.display
           },
           headerBackTitleVisible: false,
-          contentStyle: { backgroundColor: "#f8f2e8" },
+          contentStyle: { backgroundColor: colors.page },
           animation: "fade"
         }}
       >
-        <Stack.Screen name="profile" options={{ title: "Profile" }} />
-        <Stack.Screen name="discover" options={{ title: "Discover" }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
+        <Stack.Screen name="discover" options={{ headerShown: false }} />
         <Stack.Screen name="measurements" options={{ title: "Measurements" }} />
         <Stack.Screen name="recommendations" options={{ title: "Recommendations" }} />
-        <Stack.Screen name="saved-looks" options={{ title: "Saved Looks" }} />
-        <Stack.Screen name="shops" options={{ title: "Shops" }} />
-        <Stack.Screen name="tryon-upload" options={{ title: "Try-On Upload" }} />
-        <Stack.Screen name="tryon-result" options={{ title: "Try-On History" }} />
+        <Stack.Screen name="saved-looks" options={{ headerShown: false }} />
+        <Stack.Screen name="shops" options={{ headerShown: false }} />
+        <Stack.Screen name="tryon-upload" options={{ headerShown: false }} />
+        <Stack.Screen name="tryon-result" options={{ title: "Try-On Result" }} />
         <Stack.Screen name="rewards" options={{ title: "Rewards" }} />
         <Stack.Screen name="referrals" options={{ title: "Referrals" }} />
         <Stack.Screen name="coupons" options={{ title: "Coupons" }} />

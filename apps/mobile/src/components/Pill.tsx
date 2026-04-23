@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import { colors, radius } from "../theme/design";
+
 type PillTone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 
 export function Pill({
@@ -44,35 +46,35 @@ export function Pill({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: 12,
     paddingVertical: 7,
     alignSelf: "flex-start",
     borderWidth: 1
   },
   neutral: {
-    backgroundColor: "#f2eadf",
-    borderColor: "#e4d6c0"
+    backgroundColor: "#efe5d7",
+    borderColor: colors.line
   },
   accent: {
-    backgroundColor: "#e7e1d7",
-    borderColor: "#d7c9b6"
+    backgroundColor: "#dde5ea",
+    borderColor: "#c8d4dc"
   },
   success: {
-    backgroundColor: "#dcefe2",
-    borderColor: "#b9dcc2"
+    backgroundColor: "#ddefe4",
+    borderColor: "#bfddcc"
   },
   warning: {
-    backgroundColor: "#f8ead6",
-    borderColor: "#efcf9f"
+    backgroundColor: "#f5e5d3",
+    borderColor: "#ebc89a"
   },
   danger: {
-    backgroundColor: "#f5dddb",
-    borderColor: "#e6b9b2"
+    backgroundColor: "#f2dfdb",
+    borderColor: "#dfb5ad"
   },
   info: {
     backgroundColor: "#e4edf7",
-    borderColor: "#c3d6ed"
+    borderColor: "#c7d9eb"
   },
   text: {
     fontSize: 12,
@@ -80,21 +82,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3
   },
   neutralText: {
-    color: "#695a47"
+    color: "#6a5742"
   },
   accentText: {
-    color: "#172033"
+    color: colors.accent
   },
   successText: {
-    color: "#1d5b36"
+    color: colors.success
   },
   warningText: {
-    color: "#8a4f12"
+    color: colors.warning
   },
   dangerText: {
-    color: "#8e2f2b"
+    color: colors.danger
   },
   infoText: {
-    color: "#294b74"
+    color: colors.info
   }
 });

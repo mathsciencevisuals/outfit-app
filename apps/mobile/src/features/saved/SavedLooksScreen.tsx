@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
@@ -12,25 +12,45 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import type { SavedLook } from "../../types/api";
+import { colors, fonts, radius } from "../../theme/design";
+import type { Product, SavedLook } from "../../types/api";
 
 export function SavedLooksScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
-  const [view, setView] = useState("Grid");
-  const [scope, setScope] = useState("Saved");
+  const [view, setView] = useState("Looks");
+  const [scope, setScope] = useState("Wardrobe");
   const { data, loading, error } = useAsyncResource(() => mobileApi.savedLooks(userId), [userId]);
   const looks = data ?? [];
 
   const filtered = useMemo(
-    () => looks.filter((look) => (scope === "Wishlist" ? Boolean(look.isWishlist) : !look.isWishlist)),
+    () => looks.filter((look) => (scope === "Liked" ? Boolean(look.isWishlist) : !look.isWishlist)),
     [looks, scope]
   );
+
+  const likedItems = useMemo(() => {
+    const collection = new Map<string, Product>();
+
+    looks
+      .filter((look) => Boolean(look.isWishlist))
+      .forEach((look) => {
+        (look.items ?? []).forEach((item) => {
+          if (item.product?.id) {
+            collection.set(item.product.id, item.product);
+          }
+        });
+        (look.recommendedProducts ?? []).forEach((product) => {
+          collection.set(product.id, product);
+        });
+      });
+
+    return Array.from(collection.values());
+  }, [looks]);
 
   if (loading) {
     return (
       <Screen>
-        <LoadingState title="Saved looks" subtitle="Loading your curated outfit memory." />
+        <LoadingState title="Saved" subtitle="Loading your wardrobe memory." />
       </Screen>
     );
   }
@@ -38,12 +58,7 @@ export function SavedLooksScreen() {
   if (error) {
     return (
       <Screen>
-        <ErrorState
-          title="Saved looks"
-          message="Saved looks could not be loaded."
-          actionLabel="Back to shops"
-          onRetry={() => router.push("/shops")}
-        />
+        <ErrorState title="Saved" message="Saved looks could not be loaded." actionLabel="Back to shops" onRetry={() => router.push("/retail")} />
       </Screen>
     );
   }
@@ -51,12 +66,7 @@ export function SavedLooksScreen() {
   if (looks.length === 0) {
     return (
       <Screen>
-        <EmptyState
-          title="No looks saved yet"
-          message="Save outfits after recommendations and try-on to build a reusable shortlist."
-          actionLabel="Go to discover"
-          onAction={() => router.push("/discover")}
-        />
+        <EmptyState title="No looks saved yet" message="Save outfits after recommendations and try-on to build a reusable shortlist." actionLabel="Go to feed" onAction={() => router.push("/feed")} />
       </Screen>
     );
   }
@@ -64,45 +74,40 @@ export function SavedLooksScreen() {
   return (
     <Screen>
       <SectionCard
-        eyebrow="Saved Looks"
-        title="Your reusable outfit shortlist"
-        subtitle="Saved outfits carry live offer context and related follow-up actions so you can move from memory to commerce."
+        eyebrow="Saved"
+        title="Wardrobe and liked pieces"
+        subtitle="This tab now acts as your wardrobe layer, combining saved looks, wishlist intent, and quick routes back into shopping."
       >
         <View style={styles.topRow}>
           <View style={styles.headerCopy}>
             <Text style={styles.headerLabel}>Collection state</Text>
-            <Text style={styles.headerText}>Use this as a memory layer between recommendations, try-on, and shop comparison.</Text>
+            <Text style={styles.headerText}>Use this as the memory layer between recommendations, try-on, and shop comparison.</Text>
           </View>
-          <Pressable onPress={() => router.push("/profile")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
-            <Feather name="user" size={14} color="#182033" />
+          <Pressable onPress={() => router.push("/account")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
+            <Feather name="user" size={14} color={colors.ink} />
             <Text style={styles.profileChipText}>Profile</Text>
           </Pressable>
         </View>
 
         <View style={styles.heroRow}>
           <Pill label={`${looks.length} looks total`} tone="success" />
-          <Pill label={`${looks.filter((look) => look.isWishlist).length} wishlist`} tone="neutral" />
+          <Pill label={`${likedItems.length} liked items`} tone="neutral" />
         </View>
-        <SegmentedControl options={["Saved", "Wishlist"]} selected={scope} onSelect={setScope} />
-        <SegmentedControl options={["Grid", "List"]} selected={view} onSelect={setView} />
+        <SegmentedControl options={["Wardrobe", "Liked"]} selected={scope} onSelect={setScope} />
+        <SegmentedControl options={["Looks", "List"]} selected={view} onSelect={setView} />
       </SectionCard>
 
-      <SectionCard eyebrow="Collection" title={view === "Grid" ? "Grid view" : "List view"} subtitle="Each card keeps comparison and discovery CTAs visible so the next step is obvious.">
+      <SectionCard eyebrow="Wardrobe" title={view === "Looks" ? "Saved looks" : "Saved list"} subtitle="Each saved look keeps commerce and discovery CTAs visible so the next step stays obvious.">
         {filtered.length === 0 ? (
-          <EmptyState
-            title={scope === "Wishlist" ? "No wishlist items yet" : "No saved outfits yet"}
-            message="Save a try-on look or recommendation to populate this section."
-            actionLabel="Go to recommendations"
-            onAction={() => router.push("/recommendations")}
-          />
+          <EmptyState title={scope === "Liked" ? "No liked items yet" : "No saved outfits yet"} message="Save a try-on look or recommendation to populate this section." actionLabel="Go to recommendations" onAction={() => router.push("/recommendations")} />
         ) : (
-          <View style={view === "Grid" ? styles.grid : styles.list}>
+          <View style={view === "Looks" ? styles.grid : styles.list}>
             {filtered.map((look: SavedLook) => (
-              <View key={look.id} style={view === "Grid" ? styles.gridCard : styles.listCard}>
+              <View key={look.id} style={view === "Looks" ? styles.gridCard : styles.listCard}>
                 <View style={styles.artBoard}>
                   <View style={styles.artOrbLarge} />
                   <View style={styles.artOrbSmall} />
-                  <Pill label={look.isWishlist ? "Wishlist" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
+                  <Pill label={look.isWishlist ? "Liked look" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
                 </View>
                 <View style={styles.lookMeta}>
                   <Text style={styles.lookTitle}>{look.name}</Text>
@@ -126,11 +131,46 @@ export function SavedLooksScreen() {
                   <Text style={styles.lookNote}>This look is ready to compare across shops from the current saved items.</Text>
                 )}
                 <View style={styles.lookActions}>
-                  <PrimaryButton size="sm" onPress={() => router.push("/shops")}>
+                  <PrimaryButton size="sm" onPress={() => router.push("/retail")}>
                     Compare offers
                   </PrimaryButton>
                   <PrimaryButton size="sm" variant="secondary" onPress={() => router.push("/recommendations")}>
                     Find similar
+                  </PrimaryButton>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        eyebrow="Liked Items"
+        title="Pieces you keep returning to"
+        subtitle="Wishlist-backed products surface here so the wardrobe tab covers both whole looks and individual intent signals."
+      >
+        {likedItems.length === 0 ? (
+          <EmptyState title="No liked products yet" message="Wishlist looks and saved intent will surface individual products here." actionLabel="Browse feed" onAction={() => router.push("/feed")} />
+        ) : (
+          <View style={styles.list}>
+            {likedItems.slice(0, 6).map((product) => (
+              <View key={product.id} style={styles.likedCard}>
+                <View style={styles.lookMeta}>
+                  <Text style={styles.lookTitle}>{product.name}</Text>
+                  <Text style={styles.lookNote}>
+                    {[product.brand?.name, product.category, product.baseColor].filter(Boolean).join(" • ") || "Liked product"}
+                  </Text>
+                </View>
+                <View style={styles.pillRow}>
+                  {product.offerSummary?.lowestPrice != null ? <Pill label={`From $${Math.round(product.offerSummary.lowestPrice)}`} tone="warning" /> : null}
+                  <Pill label={product.offerSummary?.availabilityLabel ?? "Ready for review"} tone="success" />
+                </View>
+                <View style={styles.lookActions}>
+                  <PrimaryButton size="sm" onPress={() => router.push("/try-on")}>
+                    Try on
+                  </PrimaryButton>
+                  <PrimaryButton size="sm" variant="secondary" onPress={() => router.push("/retail")}>
+                    Shop
                   </PrimaryButton>
                 </View>
               </View>
@@ -154,14 +194,14 @@ const styles = StyleSheet.create({
     gap: 4
   },
   headerLabel: {
-    color: "#846746",
+    color: colors.brand,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.8,
     textTransform: "uppercase"
   },
   headerText: {
-    color: "#647183",
+    color: colors.inkSoft,
     fontSize: 14,
     lineHeight: 21
   },
@@ -171,13 +211,13 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: "#efe3cf",
+    borderRadius: radius.pill,
+    backgroundColor: colors.pageStrong,
     borderWidth: 1,
-    borderColor: "#dcc8ab"
+    borderColor: colors.lineStrong
   },
   profileChipText: {
-    color: "#182033",
+    color: colors.ink,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -199,25 +239,33 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     width: "48%",
-    borderRadius: 24,
+    borderRadius: radius.lg,
     backgroundColor: "#fcf8f2",
     borderWidth: 1,
-    borderColor: "#e5d7c0",
+    borderColor: colors.line,
     padding: 12,
     gap: 12
   },
   listCard: {
-    borderRadius: 24,
+    borderRadius: radius.lg,
     backgroundColor: "#fcf8f2",
     borderWidth: 1,
-    borderColor: "#e5d7c0",
+    borderColor: colors.line,
+    padding: 14,
+    gap: 12
+  },
+  likedCard: {
+    borderRadius: radius.lg,
+    backgroundColor: "#fcf8f2",
+    borderWidth: 1,
+    borderColor: colors.line,
     padding: 14,
     gap: 12
   },
   artBoard: {
     height: 118,
     borderRadius: 20,
-    backgroundColor: "#efe3cf",
+    backgroundColor: colors.pageStrong,
     overflow: "hidden",
     padding: 12,
     justifyContent: "space-between"
@@ -228,7 +276,7 @@ const styles = StyleSheet.create({
     right: -10,
     width: 92,
     height: 92,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     backgroundColor: "#d7c1a4"
   },
   artOrbSmall: {
@@ -237,17 +285,17 @@ const styles = StyleSheet.create({
     bottom: -18,
     width: 62,
     height: 62,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     backgroundColor: "#d8e1dd"
   },
   lookMeta: {
     gap: 8
   },
   lookTitle: {
-    color: "#182033",
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 22
+    color: colors.ink,
+    fontSize: 24,
+    lineHeight: 28,
+    fontFamily: fonts.display
   },
   pillRow: {
     flexDirection: "row",
@@ -255,7 +303,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap"
   },
   lookNote: {
-    color: "#667085",
+    color: colors.inkSoft,
     fontSize: 13,
     lineHeight: 20
   },

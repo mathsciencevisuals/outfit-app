@@ -1,6 +1,6 @@
-import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
@@ -12,6 +12,7 @@ import { SegmentedControl } from "../../components/SegmentedControl";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
+import { colors } from "../../theme/design";
 import type { Occasion, Product } from "../../types/api";
 
 const occasions: Occasion[] = ["casual", "streetwear", "formal", "college", "interview", "date", "fest"];
@@ -41,7 +42,7 @@ export function DiscoverScreen() {
   if (loading) {
     return (
       <Screen>
-        <LoadingState title="Discover" subtitle="Blending catalog, fit context, and style direction." />
+        <LoadingState title="Feed" subtitle="Blending catalog, fit context, and style direction." />
       </Screen>
     );
   }
@@ -49,12 +50,7 @@ export function DiscoverScreen() {
   if (error) {
     return (
       <Screen>
-        <ErrorState
-          title="Discover"
-          message="The product feed is unavailable right now."
-          actionLabel="View profile"
-          onRetry={() => router.push("/profile")}
-        />
+        <ErrorState title="Feed" message="The product feed is unavailable right now." actionLabel="View profile" onRetry={() => router.push("/account")} />
       </Screen>
     );
   }
@@ -62,12 +58,7 @@ export function DiscoverScreen() {
   if (products.length === 0) {
     return (
       <Screen>
-        <EmptyState
-          title="No products available"
-          message="The catalog endpoint returned no product cards to surface."
-          actionLabel="See recommendations"
-          onAction={() => router.push("/recommendations")}
-        />
+        <EmptyState title="No products available" message="The catalog endpoint returned no product cards to surface." actionLabel="See recommendations" onAction={() => router.push("/recommendations")} />
       </Screen>
     );
   }
@@ -77,28 +68,38 @@ export function DiscoverScreen() {
   return (
     <Screen>
       <SectionCard
-        eyebrow="Discover"
-        title="Fit-aware picks for your next look"
-        subtitle="Browse products with fit, occasion, and commerce context before you commit to try-on or retailer handoff."
+        eyebrow="Feed"
+        title="For you"
+        subtitle="Swipe through mood-led looks and jump into try-on instantly."
       >
-        <View style={styles.heroRow}>
-          <Pill label="Live catalog" tone="accent" />
-          <Pill label={`${filtered.length} matching pieces`} tone="neutral" />
-          {featured?.offerSummary?.lowestPrice != null ? <Pill label={`From $${Math.round(featured.offerSummary.lowestPrice)}`} tone="warning" /> : null}
-        </View>
-        <View style={styles.metricRow}>
-          <MetricTile label="Featured brand" value={featured?.brand?.name ?? "FitMe"} />
-          <MetricTile label="Category" value={featured?.category ?? "Catalog"} />
+        <View style={styles.feedScreen}>
+          <View style={styles.feedOverlay} />
+          <View style={styles.feedCopy}>
+            <View style={styles.heroRow}>
+              <Pill label={featured?.styleTags?.[0] ?? "Cyber core"} tone="neutral" />
+              {featured?.offerSummary?.lowestPrice != null ? <Pill label={`$${Math.round(featured.offerSummary.lowestPrice)}`} tone="accent" /> : null}
+            </View>
+            <Text style={styles.feedTitle}>{featured?.name ?? "Mesh-layer street look"}</Text>
+            <Text style={styles.feedText}>
+              {featured?.description ?? "Low-rise denim, cropped bomber, chrome accessories. Swipe up for the next fit or tap Try On."}
+            </Text>
+          </View>
+          <View style={styles.feedActions}>
+            <View style={styles.feedFab}><Text style={styles.feedFabText}>♡</Text></View>
+            <View style={styles.feedFab}><Text style={styles.feedFabText}>↗</Text></View>
+            <PrimaryButton onPress={() => router.push("/try-on")} size="sm" fullWidth={false}>
+              Try On
+            </PrimaryButton>
+          </View>
         </View>
         <SegmentedControl options={occasions} selected={occasion} onSelect={(value) => setOccasion(value as Occasion)} />
-        <PrimaryButton onPress={() => router.push("/tryon-upload")}>Start try-on</PrimaryButton>
       </SectionCard>
 
       {featured ? (
         <SectionCard
-          eyebrow="Product Detail"
+          eyebrow="Spotlight"
           title={featured.name}
-          subtitle={detailLoading ? "Refreshing detail context..." : "Product detail now includes fit preview, cheaper alternatives, and complete-the-look hooks."}
+          subtitle={detailLoading ? "Refreshing feed spotlight..." : "The hero keeps fit preview, price range, and shopping next steps visible."}
         >
           <View style={styles.heroRow}>
             {(featured.occasionTags ?? []).slice(0, 3).map((tag) => (
@@ -110,7 +111,11 @@ export function DiscoverScreen() {
           </View>
           <Text style={styles.supportText}>{featured.description ?? "Catalog detail with fit and commerce signals."}</Text>
           <View style={styles.metricRow}>
-            <MetricTile label="Best price" value={featured.offerSummary?.lowestPrice != null ? `$${Math.round(featured.offerSummary.lowestPrice)}` : "--"} caption={featured.offerSummary?.availabilityLabel ?? "No live offers"} />
+            <MetricTile
+              label="Best price"
+              value={featured.offerSummary?.lowestPrice != null ? `$${Math.round(featured.offerSummary.lowestPrice)}` : "--"}
+              caption={featured.offerSummary?.availabilityLabel ?? "No live offers"}
+            />
             <MetricTile label="Offers" value={`${featured.offerSummary?.offerCount ?? 0}`} caption="Retail comparison ready" />
           </View>
           {featured.fitPreview ? (
@@ -120,13 +125,13 @@ export function DiscoverScreen() {
               <Pill label={`${Math.round(featured.fitPreview.confidenceScore * 100)}% confidence`} tone="info" />
             </View>
           ) : null}
-          <PrimaryButton onPress={() => router.push("/shops")} variant="secondary">
+          <PrimaryButton onPress={() => router.push("/retail")} variant="secondary">
             Compare offers
           </PrimaryButton>
         </SectionCard>
       ) : null}
 
-      <SectionCard eyebrow="Featured Feed" title="Curated right now">
+      <SectionCard eyebrow="Feed Stack" title="Curated for your profile">
         {filtered.map((product: Product, index) => (
           <ProductCard
             key={product.id}
@@ -140,7 +145,7 @@ export function DiscoverScreen() {
             primaryLabel="View detail"
             onPrimaryPress={() => setSelectedProductId(product.id)}
             secondaryLabel="Try this look"
-            onSecondaryPress={() => router.push("/tryon-upload")}
+            onSecondaryPress={() => router.push("/try-on")}
           />
         ))}
       </SectionCard>
@@ -154,12 +159,66 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap"
   },
+  feedScreen: {
+    position: "relative",
+    minHeight: 420,
+    borderRadius: 24,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#101522",
+    justifyContent: "flex-end",
+    padding: 14
+  },
+  feedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#251738",
+    opacity: 0.94
+  },
+  feedCopy: {
+    zIndex: 1,
+    marginRight: 64,
+    gap: 8
+  },
+  feedTitle: {
+    color: "#ffffff",
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "700",
+    letterSpacing: -0.4
+  },
+  feedText: {
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 13,
+    lineHeight: 19
+  },
+  feedActions: {
+    position: "absolute",
+    right: 12,
+    bottom: 18,
+    zIndex: 1,
+    gap: 10,
+    alignItems: "center"
+  },
+  feedFab: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)"
+  },
+  feedFabText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700"
+  },
   metricRow: {
     flexDirection: "row",
     gap: 10
   },
   supportText: {
-    color: "#667085",
+    color: colors.inkSoft,
     fontSize: 14,
     lineHeight: 21
   }

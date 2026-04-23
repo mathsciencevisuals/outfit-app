@@ -1,1 +1,5 @@
-export { SavedLooksScreen as default } from "../src/features/saved/SavedLooksScreen";
+import { Redirect } from "expo-router";
+
+export default function LegacySavedLooksRoute() {
+  return <Redirect href="/saved" />;
+}

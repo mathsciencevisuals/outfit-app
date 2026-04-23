@@ -1,18 +1,27 @@
-import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { InfoRow } from "../../components/InfoRow";
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
-import { ProductCard, productSubtitle } from "../../components/ProductCard";
+import { ProductCard } from "../../components/ProductCard";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
+import { colors, fonts, radius } from "../../theme/design";
 import type { FitIssue, FitResult, Recommendation, TryOnRequest } from "../../types/api";
+
+const loadingQuotes = [
+  "Consulting the fashion gods...",
+  "Manifesting the drip...",
+  "Serving pixels, not crumbs...",
+  "Aligning your aura with the outfit...",
+  "Rendering main-character energy..."
+];
 
 function confidenceTone(confidence?: number) {
   if (!confidence) {
@@ -64,6 +73,19 @@ export function TryOnResultScreen() {
   const [loading, setLoading] = useState(Boolean(requestId));
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+
+  useEffect(() => {
+    if (!loading) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setQuoteIndex((current) => (current + 1) % loadingQuotes.length);
+    }, 1800);
+
+    return () => clearInterval(timer);
+  }, [loading]);
 
   useEffect(() => {
     if (!requestId) {
@@ -122,7 +144,7 @@ export function TryOnResultScreen() {
         clearTimeout(timeoutId);
       }
     };
-  }, [requestId]);
+  }, [requestId, userId]);
 
   const visualConfidence = data?.result?.confidence ?? 0;
   const fitConfidence = fitResult?.confidenceScore ?? 0;
@@ -152,18 +174,19 @@ export function TryOnResultScreen() {
     setActionMessage(`Saved ${saved.name}`);
   };
 
-  const shareLook = async () => {
-    if (!data) {
+  const downloadLook = async () => {
+    if (!data?.result?.outputImageUrl) {
       return;
     }
-    await mobileApi.shareLook({ tryOnRequestId: data.id, channel: "share_sheet" });
-    setActionMessage("Share event captured");
+
+    await Linking.openURL(data.result.outputImageUrl);
+    setActionMessage("Opened the generated image for download.");
   };
 
   if (loading) {
     return (
       <Screen>
-        <LoadingState title="Try-on result" subtitle="Polling the latest try-on state from the queue." />
+        <LoadingState title="Try-on result" subtitle={loadingQuotes[quoteIndex]} />
       </Screen>
     );
   }
@@ -171,12 +194,7 @@ export function TryOnResultScreen() {
   if (error) {
     return (
       <Screen>
-        <ErrorState
-          title="Try-on result"
-          message="The latest try-on result could not be loaded."
-          actionLabel="Upload another photo"
-          onRetry={() => router.push("/tryon-upload")}
-        />
+        <ErrorState title="Try-on result" message="The latest try-on result could not be loaded." actionLabel="Upload another photo" onRetry={() => router.push("/try-on")} />
       </Screen>
     );
   }
@@ -184,12 +202,7 @@ export function TryOnResultScreen() {
   if (!data) {
     return (
       <Screen>
-        <EmptyState
-          title="No try-on request yet"
-          message="Start from the upload screen to create a queued try-on request."
-          actionLabel="Go to upload"
-          onAction={() => router.push("/tryon-upload")}
-        />
+        <EmptyState title="No try-on request yet" message="Start from the try-on tab to create a queued request." actionLabel="Go to upload" onAction={() => router.push("/try-on")} />
       </Screen>
     );
   }
@@ -197,15 +210,12 @@ export function TryOnResultScreen() {
   return (
     <Screen>
       <SectionCard
-        eyebrow="Look"
+        eyebrow="Result"
         title={data.variant?.product?.name ?? "Latest try-on preview"}
-        subtitle="Review the generated look and the structured fit guidance together before you buy."
+        subtitle="Review the generated look, fit read, and wardrobe actions together before you buy."
       >
         <View style={styles.row}>
-          <Pill
-            label={data.status}
-            tone={data.status === "COMPLETED" ? "success" : data.status === "FAILED" ? "danger" : "info"}
-          />
+          <Pill label={data.status} tone={data.status === "COMPLETED" ? "success" : data.status === "FAILED" ? "danger" : "info"} />
           <Pill label={data.fitStyle ?? "balanced"} tone="neutral" />
           <Pill label={`${Math.round(visualConfidence * 100)}% visual confidence`} tone={confidenceTone(visualConfidence)} />
         </View>
@@ -219,7 +229,21 @@ export function TryOnResultScreen() {
             <Text style={styles.compareLabel}>AI try-on</Text>
           </View>
         </View>
+        {data.status !== "COMPLETED" ? (
+          <View style={styles.quoteCard}>
+            <Text style={styles.quoteLabel}>Loading note</Text>
+            <Text style={styles.quoteText}>{loadingQuotes[quoteIndex]}</Text>
+          </View>
+        ) : null}
         {actionMessage ? <Text style={styles.message}>{actionMessage}</Text> : null}
+        <View style={styles.actionRow}>
+          <PrimaryButton onPress={saveLook} disabled={data.status !== "COMPLETED"}>
+            Save to wardrobe
+          </PrimaryButton>
+          <PrimaryButton onPress={downloadLook} variant="secondary" disabled={!data.result?.outputImageUrl}>
+            Download image
+          </PrimaryButton>
+        </View>
       </SectionCard>
 
       <SectionCard eyebrow="Fit" title="Recommended size and fit read">
@@ -263,14 +287,10 @@ export function TryOnResultScreen() {
         <View style={styles.row}>
           <Pill label={`${Math.round(visualConfidence * 100)}% visual`} tone={confidenceTone(visualConfidence)} />
           <Pill label={`${Math.round(fitConfidence * 100)}% fit`} tone={confidenceTone(fitConfidence)} />
-          <Pill
-            label={`${Math.round((fitResult?.measurementProfile?.completenessScore ?? 0) * 100)}% profile complete`}
-            tone={(fitResult?.measurementProfile?.completenessScore ?? 0) >= 0.75 ? "success" : "warning"}
-          />
+          <Pill label={`${Math.round((fitResult?.measurementProfile?.completenessScore ?? 0) * 100)}% profile complete`} tone={(fitResult?.measurementProfile?.completenessScore ?? 0) >= 0.75 ? "success" : "warning"} />
         </View>
         <Text style={styles.summaryText}>
-          {fitResult?.measurementProfile?.guidance ??
-            "This guidance combines your saved body measurements with the selected product size chart."}
+          {fitResult?.measurementProfile?.guidance ?? "This guidance combines your saved body measurements with the selected product size chart."}
         </Text>
       </SectionCard>
 
@@ -296,61 +316,30 @@ export function TryOnResultScreen() {
         )}
       </SectionCard>
 
-      <SectionCard eyebrow="Alternatives" title="Other sizes worth trying">
-        {fitResult?.alternatives?.length ? (
-          <View style={styles.altList}>
-            {fitResult.alternatives.map((alternative) => (
-              <View key={alternative.sizeLabel} style={styles.altCard}>
-                <View style={styles.altHeader}>
-                  <Text style={styles.altSize}>{alternative.sizeLabel}</Text>
-                  <Pill label={`${Math.round(alternative.fitScore)} fit score`} tone="info" />
-                </View>
-                <Text style={styles.summaryText}>{alternative.reason}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.summaryText}>No strong alternative sizes surfaced beyond the current recommendation.</Text>
-        )}
-      </SectionCard>
-
       <SectionCard eyebrow="Complete The Look" title="Style and commerce next steps">
         {recommendations.length > 0 ? (
           recommendations.map((item) => (
             <ProductCard
-              key={item.productId}
+              key={item.id ?? item.productId}
               title={item.product?.name ?? item.productId}
-              subtitle={productSubtitle(item.product)}
-              badge={(item.rankingBadges ?? [])[0] ?? "Recommended"}
-              highlight={item.explanation}
+              subtitle={`${item.product?.brand?.name ?? "Brand"} · ${item.product?.category ?? "category"} · ${item.product?.baseColor ?? "color"}`}
+              badge="Suggested next"
+              highlight={item.explanation ?? "Recommended from the current try-on result."}
               bestSizeLabel={item.bestSizeLabel}
               fitLabel={item.bestFitLabel}
               confidenceLabel={item.fitResult ? `${Math.round(item.fitResult.confidenceScore * 100)}% confidence` : null}
-              contextTags={[...(item.reasonTags ?? []), ...(item.occasionTags ?? [])]}
+              contextTags={item.occasionTags}
               rankingBadges={item.rankingBadges}
-              priceLabel={item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : item.budgetLabel ?? null}
+              priceLabel={item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : null}
               primaryLabel="Compare shops"
-              onPrimaryPress={() => router.push("/shops")}
-              secondaryLabel="Recommendations"
-              onSecondaryPress={() => router.push("/recommendations")}
+              onPrimaryPress={() => router.push("/retail")}
+              secondaryLabel="Try on again"
+              onSecondaryPress={() => router.push("/try-on")}
             />
           ))
         ) : (
-          <Text style={styles.summaryText}>Complementary styling recommendations will appear once product and profile signals are available together.</Text>
+          <Text style={styles.summaryText}>No related recommendation cards are available for this result yet.</Text>
         )}
-      </SectionCard>
-
-      <SectionCard eyebrow="Actions" title="Save, share, and compare">
-        <PrimaryButton onPress={saveLook}>Save look</PrimaryButton>
-        <PrimaryButton onPress={shareLook} variant="secondary">
-          Share look
-        </PrimaryButton>
-        <PrimaryButton onPress={() => router.push("/recommendations")} variant="secondary">
-          See alternatives
-        </PrimaryButton>
-        <PrimaryButton onPress={() => router.push("/shops")} variant="ghost">
-          Compare buy options
-        </PrimaryButton>
       </SectionCard>
     </Screen>
   );
@@ -362,152 +351,144 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap"
   },
+  actionRow: {
+    gap: 10
+  },
   compareRow: {
     flexDirection: "row",
     gap: 12
   },
   compareCard: {
     flex: 1,
-    borderRadius: 22,
-    overflow: "hidden",
-    backgroundColor: "#f6efe5",
-    borderWidth: 1,
-    borderColor: "#e6d7c0",
+    borderRadius: radius.lg,
+    backgroundColor: "#fcf8f2",
     padding: 12,
-    gap: 8
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.line
   },
   compareImage: {
     width: "100%",
     height: 220,
     borderRadius: 18,
-    backgroundColor: "#eadcc7"
+    backgroundColor: colors.pageStrong
   },
   compareLabel: {
-    color: "#172033",
+    color: colors.ink,
     fontSize: 14,
     fontWeight: "700"
   },
-  fitHero: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: "#f9f3eb",
+  quoteCard: {
+    borderRadius: radius.lg,
+    backgroundColor: "#f7efe4",
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: colors.line,
+    padding: 14,
+    gap: 6
+  },
+  quoteLabel: {
+    color: colors.brand,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  quoteText: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: fonts.display
+  },
+  message: {
+    color: colors.warning,
+    fontSize: 14,
+    lineHeight: 21
+  },
+  fitHero: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: 12
   },
   fitHeroCopy: {
+    flex: 1,
     gap: 6
   },
   fitHeroEyebrow: {
-    color: "#836d53",
+    color: colors.brand,
     fontSize: 12,
     fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase"
+    textTransform: "uppercase",
+    letterSpacing: 0.8
   },
   fitHeroSize: {
-    color: "#172033",
+    color: colors.ink,
     fontSize: 34,
     lineHeight: 38,
-    fontWeight: "800"
+    fontFamily: fonts.display
   },
   fitHeroText: {
-    color: "#536075",
-    fontSize: 15,
-    lineHeight: 22
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 21
   },
   fitHeroBadges: {
-    flexDirection: "row",
     gap: 8,
-    flexWrap: "wrap"
+    alignItems: "flex-end"
   },
   metricRow: {
     flexDirection: "row",
     gap: 10
   },
-  summaryText: {
-    color: "#5c6679",
-    fontSize: 14,
-    lineHeight: 21
-  },
   alertCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#fff6eb",
+    borderRadius: radius.lg,
+    backgroundColor: "#f8ead6",
     borderWidth: 1,
     borderColor: "#efcf9f",
-    gap: 4
+    padding: 14,
+    gap: 6
   },
   alertTitle: {
-    color: "#8a4f12",
-    fontSize: 13,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.7
+    color: colors.warning,
+    fontSize: 15,
+    fontWeight: "700"
   },
   warningText: {
-    color: "#8a4f12",
-    fontSize: 14,
+    color: colors.warning,
+    fontSize: 13,
     lineHeight: 20
+  },
+  summaryText: {
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 21
   },
   issueList: {
     gap: 10
   },
   issueCard: {
-    borderRadius: 18,
-    backgroundColor: "#fbf8f3",
-    borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderRadius: 20,
     padding: 14,
-    gap: 8
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 8,
+    backgroundColor: "#fcf8f2"
   },
   issueHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
     gap: 10
   },
   issueTitle: {
-    color: "#172033",
+    color: colors.ink,
     fontSize: 15,
     fontWeight: "700"
   },
-  issueRow: {
-    borderRadius: 18,
-    backgroundColor: "#fbf8f3",
-    borderWidth: 1,
-    borderColor: "#eadcc7",
-    padding: 14
-  },
   issueText: {
-    color: "#5f697d",
+    color: colors.inkSoft,
     fontSize: 14,
-    lineHeight: 21
+    lineHeight: 20
   },
-  altList: {
-    gap: 10
-  },
-  altCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#f4f7fb",
-    borderWidth: 1,
-    borderColor: "#d4dfec",
-    gap: 8
-  },
-  altHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10
-  },
-  altSize: {
-    color: "#172033",
-    fontSize: 17,
-    fontWeight: "700"
-  },
-  message: {
-    color: "#5f697d",
-    fontSize: 14
+  issueRow: {
+    paddingVertical: 6
   }
 });

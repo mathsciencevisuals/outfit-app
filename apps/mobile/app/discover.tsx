@@ -1,1 +1,5 @@
-export { DiscoverScreen as default } from "../src/features/catalog/DiscoverScreen";
+import { Redirect } from "expo-router";
+
+export default function LegacyDiscoverRoute() {
+  return <Redirect href="/feed" />;
+}

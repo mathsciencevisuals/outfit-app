@@ -1,6 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { colors, radius } from "../theme/design";
+
 type NavigationCardProps = {
   icon: keyof typeof Feather.glyphMap;
   title: string;
@@ -13,7 +15,7 @@ export function NavigationCard({ icon, title, subtitle, badge, onPress }: Naviga
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.iconWrap}>
-        <Feather name={icon} size={18} color="#182033" />
+        <Feather name={icon} size={18} color={colors.ink} />
       </View>
       <View style={styles.copy}>
         <View style={styles.titleRow}>
@@ -22,7 +24,7 @@ export function NavigationCard({ icon, title, subtitle, badge, onPress }: Naviga
         </View>
         <Text style={styles.subtitle}>{subtitle}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color="#715d47" />
+      <Feather name="chevron-right" size={18} color={colors.brand} />
     </Pressable>
   );
 }
@@ -34,10 +36,10 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 16,
     paddingVertical: 15,
-    borderRadius: 22,
+    borderRadius: radius.lg,
     backgroundColor: "#fcf8f2",
     borderWidth: 1,
-    borderColor: "#e6d8c2"
+    borderColor: colors.line
   },
   pressed: {
     opacity: 0.92,
@@ -49,7 +51,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eee3d2"
+    backgroundColor: colors.pageStrong
   },
   copy: {
     flex: 1,
@@ -62,21 +64,21 @@ const styles = StyleSheet.create({
     flexWrap: "wrap"
   },
   title: {
-    color: "#182033",
+    color: colors.ink,
     fontSize: 16,
     fontWeight: "700"
   },
   subtitle: {
-    color: "#5d6678",
+    color: colors.inkSoft,
     fontSize: 13,
     lineHeight: 19
   },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "#efe3cf",
-    color: "#7b6449",
+    borderRadius: radius.pill,
+    backgroundColor: colors.pageStrong,
+    color: colors.brand,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",

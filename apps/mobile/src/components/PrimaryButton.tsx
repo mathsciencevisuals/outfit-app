@@ -1,6 +1,8 @@
 import { PropsWithChildren } from "react";
 import { Pressable, StyleSheet, Text, ViewStyle } from "react-native";
 
+import { colors, radius } from "../theme/design";
+
 type ButtonVariant = "primary" | "secondary" | "ghost";
 type ButtonSize = "md" | "sm";
 
@@ -44,7 +46,7 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 999,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5
@@ -60,16 +62,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10
   },
   primary: {
-    backgroundColor: "#182033",
-    borderColor: "#182033"
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
   },
   secondary: {
-    backgroundColor: "#efe2cf",
-    borderColor: "#dcc8ab"
+    backgroundColor: colors.panelMuted,
+    borderColor: colors.lineStrong
   },
   ghost: {
-    backgroundColor: "rgba(255,250,243,0.72)",
-    borderColor: "#d9c4a4"
+    backgroundColor: "rgba(255, 249, 241, 0.72)",
+    borderColor: colors.lineStrong
   },
   text: {
     fontSize: 15,
@@ -77,13 +79,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2
   },
   primaryText: {
-    color: "#fffaf4"
+    color: colors.panelStrong
   },
   secondaryText: {
-    color: "#182033"
+    color: colors.ink
   },
   ghostText: {
-    color: "#6a553b"
+    color: colors.brand
   },
   inline: {
     alignSelf: "flex-start"

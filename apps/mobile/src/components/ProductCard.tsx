@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { Product, Recommendation } from "../types/api";
+import { colors, fonts, radius } from "../theme/design";
 import { Pill } from "./Pill";
 import { PrimaryButton } from "./PrimaryButton";
 
@@ -111,7 +112,7 @@ export function ProductCard({
           </View>
           {scoreLabel ? (
             <View style={styles.metaBadge}>
-              <Feather name="star" size={14} color="#182033" />
+              <Feather name="star" size={14} color={colors.ink} />
               <Text style={styles.metaText}>{scoreLabel}</Text>
             </View>
           ) : null}
@@ -197,13 +198,13 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 26,
     overflow: "hidden",
-    backgroundColor: "#fffbf5",
+    backgroundColor: colors.panelStrong,
     borderWidth: 1,
-    borderColor: "#e5d7c0"
+    borderColor: colors.line
   },
   preview: {
     minHeight: 146,
-    backgroundColor: "#efe3cf",
+    backgroundColor: colors.pageStrong,
     padding: 16,
     justifyContent: "space-between"
   },
@@ -217,14 +218,14 @@ const styles = StyleSheet.create({
     gap: 4
   },
   previewCaptionLabel: {
-    color: "#836a49",
+    color: colors.brand,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.8,
     textTransform: "uppercase"
   },
   previewCaptionText: {
-    color: "#5e687a",
+    color: colors.inkSoft,
     fontSize: 13,
     lineHeight: 19,
     maxWidth: "80%"
@@ -235,8 +236,8 @@ const styles = StyleSheet.create({
     top: -10,
     width: 120,
     height: 120,
-    borderRadius: 999,
-    backgroundColor: "#dbc3a3"
+    borderRadius: radius.pill,
+    backgroundColor: "#dbc6aa"
   },
   previewOrbSmall: {
     position: "absolute",
@@ -244,8 +245,8 @@ const styles = StyleSheet.create({
     bottom: -24,
     width: 74,
     height: 74,
-    borderRadius: 999,
-    backgroundColor: "#c8d3d0"
+    borderRadius: radius.pill,
+    backgroundColor: "#d9e1de"
   },
   copy: {
     padding: 16,
@@ -259,79 +260,77 @@ const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: 4
+    gap: 3
   },
   title: {
-    color: "#182033",
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: "700"
+    color: colors.ink,
+    fontSize: 26,
+    lineHeight: 30,
+    fontFamily: fonts.display
   },
   subtitle: {
-    color: "#6a7284",
-    fontSize: 14
-  },
-  fitSummary: {
-    borderRadius: 20,
-    padding: 14,
-    backgroundColor: "#fbf5ec",
-    borderWidth: 1,
-    borderColor: "#e5d7c0",
-    gap: 10
-  },
-  fitSummaryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "center"
-  },
-  fitSummaryTitle: {
-    color: "#182033",
-    fontSize: 15,
-    fontWeight: "700"
-  },
-  fitSummarySize: {
-    color: "#7b6449",
+    color: colors.inkSoft,
     fontSize: 13,
-    fontWeight: "700"
-  },
-  metaRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  warning: {
-    color: "#8d4f2c",
-    fontSize: 13,
-    lineHeight: 20
-  },
-  highlight: {
-    color: "#5d6678",
-    fontSize: 14,
-    lineHeight: 21
-  },
-  issueRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  actions: {
-    gap: 8
+    lineHeight: 19
   },
   metaBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    borderRadius: 999,
-    backgroundColor: "#f3eadf",
-    borderWidth: 1,
-    borderColor: "#e5d7c0",
+    backgroundColor: colors.pageStrong,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 8
   },
   metaText: {
-    color: "#182033",
+    color: colors.ink,
     fontSize: 12,
     fontWeight: "700"
+  },
+  fitSummary: {
+    backgroundColor: "#faf4eb",
+    borderRadius: radius.lg,
+    padding: 14,
+    gap: 10
+  },
+  fitSummaryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  fitSummaryTitle: {
+    color: colors.brand,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8
+  },
+  fitSummarySize: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  warning: {
+    color: colors.warning,
+    fontSize: 13,
+    lineHeight: 20
+  },
+  highlight: {
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 21
+  },
+  issueRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  actions: {
+    gap: 8
   }
 });

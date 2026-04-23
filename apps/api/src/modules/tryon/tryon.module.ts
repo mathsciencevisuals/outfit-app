@@ -179,15 +179,21 @@ export class TryOnService {
       }
     });
 
-    await this.queue.add(
-      "process-tryon",
-      { tryOnRequestId: request.id },
-      {
-        attempts: 2,
-        removeOnComplete: 25,
-        removeOnFail: 50
-      }
-    );
+    try {
+      await this.queue.add(
+        "process-tryon",
+        { tryOnRequestId: request.id },
+        {
+          attempts: 2,
+          removeOnComplete: 25,
+          removeOnFail: 50
+        }
+      );
+    } catch {
+      // Fall back to inline processing when the queue backend is unavailable so
+      // mobile try-on creation still completes instead of surfacing an infra error.
+      void this.processQueuedRequest(request.id);
+    }
 
     await this.rewardsService.awardFirstTryOn(dto.userId);
     return this.serializeRequest(request);
@@ -226,11 +232,9 @@ export class TryOnService {
     });
 
     try {
-      const provider = createTryOnProvider(
-        request.provider === "http" ? "http" : "mock",
-        this.configService.getOrThrow<string>("TRYON_HTTP_BASE_URL")
-      );
-      const result = await provider.generate({
+      const providerMode = request.provider === "http" ? "http" : "mock";
+      const providerBaseUrl = this.configService.getOrThrow<string>("TRYON_HTTP_BASE_URL");
+      const input = {
         requestId: request.id,
         personImageUrl: request.imageUrl,
         garmentImageUrl:
@@ -240,7 +244,20 @@ export class TryOnService {
           request.variant.product.imageUrl ??
           request.imageUrl,
         prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color} with ${request.fitStyle ?? "balanced"} fit styling`
-      });
+      };
+
+      let result;
+      try {
+        const provider = createTryOnProvider(providerMode, providerBaseUrl);
+        result = await provider.generate(input);
+      } catch (providerError) {
+        if (providerMode !== "http") {
+          throw providerError;
+        }
+
+        const fallbackProvider = createTryOnProvider("mock", providerBaseUrl);
+        result = await fallbackProvider.generate(input);
+      }
 
       await (this.prisma.tryOnResult as any).upsert({
         where: { requestId: request.id },

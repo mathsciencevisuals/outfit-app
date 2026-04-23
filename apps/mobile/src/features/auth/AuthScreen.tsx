@@ -32,7 +32,7 @@ export function AuthScreen() {
           : await mobileApi.register(email, password, firstName, lastName);
 
       setSession({ token: result.accessToken, user: result.user });
-      router.replace("/profile");
+      router.replace("/feed");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {

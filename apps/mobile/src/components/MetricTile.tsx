@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import { colors, fonts, radius } from "../theme/design";
+
 export function MetricTile({
   label,
   value,
@@ -22,27 +24,28 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: "#faf5ee",
-    borderRadius: 22,
+    backgroundColor: "#fcf8f2",
+    borderRadius: radius.lg,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#e5d6c0",
+    borderColor: colors.line,
     gap: 4
   },
   label: {
-    color: "#836b4d",
+    color: colors.brand,
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8
   },
   value: {
-    color: "#182033",
-    fontSize: 22,
-    fontWeight: "700"
+    color: colors.ink,
+    fontSize: 24,
+    lineHeight: 28,
+    fontFamily: fonts.display
   },
   caption: {
-    color: "#6a7280",
+    color: colors.inkSoft,
     fontSize: 12,
     lineHeight: 18
   }

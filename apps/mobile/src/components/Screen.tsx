@@ -1,10 +1,13 @@
 import { PropsWithChildren } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { colors } from "../theme/design";
+
 export function Screen({ children }: PropsWithChildren) {
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.glowTop} />
+      <View style={styles.glowRight} />
       <View style={styles.glowMiddle} />
       <View style={styles.body}>{children}</View>
     </ScrollView>
@@ -14,24 +17,34 @@ export function Screen({ children }: PropsWithChildren) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f2e8"
+    backgroundColor: colors.page
   },
   content: {
     paddingHorizontal: 18,
     paddingTop: 20,
-    paddingBottom: 48
+    paddingBottom: 144
   },
   body: {
     gap: 16
   },
   glowTop: {
     position: "absolute",
-    top: -70,
-    right: -28,
-    width: 250,
-    height: 250,
+    top: -56,
+    right: -18,
+    width: 240,
+    height: 240,
     borderRadius: 999,
-    backgroundColor: "#ecd8b8",
+    backgroundColor: "#f1ddc0",
+    opacity: 0.68
+  },
+  glowRight: {
+    position: "absolute",
+    top: 112,
+    right: -60,
+    width: 150,
+    height: 150,
+    borderRadius: 999,
+    backgroundColor: "#efe1cd",
     opacity: 0.72
   },
   glowMiddle: {
@@ -41,7 +54,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 999,
-    backgroundColor: "#e7d6cb",
+    backgroundColor: "#ead8c9",
     opacity: 0.52
   }
 });

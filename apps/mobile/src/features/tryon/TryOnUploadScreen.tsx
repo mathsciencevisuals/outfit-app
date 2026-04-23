@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
@@ -13,9 +13,15 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
+import { colors, fonts, radius } from "../../theme/design";
 import type { FitIssue } from "../../types/api";
 
 const fitStyles = ["balanced", "relaxed", "tailored"];
+const vibes = [
+  { id: "cyberpunk-city", title: "Cyberpunk City", subtitle: "Neon edge and sharper contrast." },
+  { id: "cozy-coffee-shop", title: "Cozy Coffee Shop", subtitle: "Soft tones and warmer styling." },
+  { id: "y2k-studio", title: "Y2K Studio", subtitle: "Studio flash and bolder silhouette." }
+] as const;
 
 function confidenceTone(confidence?: number) {
   if (!confidence) {
@@ -60,6 +66,7 @@ export function TryOnUploadScreen() {
   const [selectedGarment, setSelectedGarment] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [fitStyle, setFitStyle] = useState("balanced");
+  const [vibe, setVibe] = useState<(typeof vibes)[number]["id"]>(vibes[0].id);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -89,12 +96,28 @@ export function TryOnUploadScreen() {
     });
   }, [firstProduct?.id, profile?.fitPreference, selectedVariant?.id, selectedVariant?.sizeLabel]);
 
-  const pickImage = async (kind: "self" | "garment") => {
+  const pickImage = async (kind: "self" | "garment", source: "camera" | "library") => {
     setSubmitError(null);
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8
-    });
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setSubmitError(source === "camera" ? "Camera permission is required for capture." : "Photo library permission is required for upload.");
+      return;
+    }
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.8
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.8
+          });
 
     if (result.canceled) {
       return;
@@ -115,6 +138,7 @@ export function TryOnUploadScreen() {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const comparisonLabel = `${firstProduct?.name ?? "Look"} / ${selectedVariant.sizeLabel ?? "size"} / ${vibe}`;
       const created = selectedImage
         ? await mobileApi.createTryOnFromAssets(
             userId,
@@ -133,19 +157,19 @@ export function TryOnUploadScreen() {
                   }
                 : null,
               fitStyle,
-              comparisonLabel: `${firstProduct?.name ?? "Look"} / ${selectedVariant.sizeLabel ?? "size"}`
+              comparisonLabel
             }
           )
         : profile?.avatarUploadId
           ? await mobileApi.createTryOn(userId, selectedVariant.id, {
               uploadId: profile.avatarUploadId,
               fitStyle,
-              comparisonLabel: `${firstProduct?.name ?? "Look"} / ${selectedVariant.sizeLabel ?? "size"}`
+              comparisonLabel
             })
           : null;
 
       if (!created) {
-        throw new Error("Select a self image or upload one from your profile first");
+        throw new Error("Select a self image or use your uploaded profile image first.");
       }
 
       setLastTryOnRequestId(created.id);
@@ -160,7 +184,7 @@ export function TryOnUploadScreen() {
   if (loading) {
     return (
       <Screen>
-        <LoadingState title="Try-on upload" subtitle="Preparing upload, garment, and product context." />
+        <LoadingState title="Try-On" subtitle="Preparing upload, garment, and product context." />
       </Screen>
     );
   }
@@ -168,12 +192,7 @@ export function TryOnUploadScreen() {
   if (error) {
     return (
       <Screen>
-        <ErrorState
-          title="Try-on upload"
-          message="The upload flow could not load its product context."
-          actionLabel="Go to discover"
-          onRetry={() => router.push("/discover")}
-        />
+        <ErrorState title="Try-On" message="The upload flow could not load its product context." actionLabel="Go to feed" onRetry={() => router.push("/feed")} />
       </Screen>
     );
   }
@@ -181,12 +200,7 @@ export function TryOnUploadScreen() {
   if (!selectedVariant?.id) {
     return (
       <Screen>
-        <EmptyState
-          title="No try-on item available"
-          message="The catalog currently has no variant ready for the try-on flow."
-          actionLabel="View recommendations"
-          onAction={() => router.push("/recommendations")}
-        />
+        <EmptyState title="No try-on item available" message="The catalog currently has no variant ready for the try-on flow." actionLabel="View recommendations" onAction={() => router.push("/recommendations")} />
       </Screen>
     );
   }
@@ -195,54 +209,77 @@ export function TryOnUploadScreen() {
     <Screen>
       <SectionCard
         eyebrow="Try-On"
-        title="Upload your self picture and garment reference"
-        subtitle="Use your saved profile image or upload a new one, then generate a visual try-on backed by fit guidance."
+        title="Create a new try-on from camera or upload"
+        subtitle="This entry flow keeps capture, upload, profile reuse, fit guidance, and vibe selection in one hierarchy."
       >
         <View style={styles.badgeRow}>
           <Pill label={firstProduct?.name ?? "Selected item"} tone="accent" />
           <Pill label={activeSelfUri ? "Self image ready" : "Self image needed"} tone={activeSelfUri ? "success" : "warning"} />
           <Pill label={selectedGarment ? "Garment override attached" : "Using catalog garment"} tone="neutral" />
         </View>
+
         <View style={styles.previewGrid}>
+          <View style={styles.cameraBox}>
+            <View style={styles.cameraFrame} />
+            <Text style={styles.cameraText}>Live camera preview</Text>
+          </View>
           <View style={styles.previewCard}>
             {activeSelfUri ? <Image source={{ uri: activeSelfUri }} style={styles.previewImage} /> : null}
             <Text style={styles.previewTitle}>Self picture</Text>
             <Text style={styles.previewText}>
               {selectedImage?.fileName ??
-                (profile?.avatarUrl
-                  ? "Using your uploaded profile image until you replace it."
-                  : "Choose a clear front-facing source image.")}
+                (profile?.avatarUrl ? "Using your uploaded profile image until you replace it." : "Choose a clear front-facing source image.")}
             </Text>
-            <PrimaryButton onPress={() => pickImage("self")} variant="secondary" size="sm">
-              {profile?.avatarUrl && !selectedImage ? "Replace self image" : "Select self image"}
-            </PrimaryButton>
+            <View style={styles.actionRow}>
+              <PrimaryButton onPress={() => pickImage("self", "camera")} variant="secondary" size="sm">
+                Camera
+              </PrimaryButton>
+              <PrimaryButton onPress={() => pickImage("self", "library")} variant="secondary" size="sm">
+                Upload
+              </PrimaryButton>
+            </View>
+            {profile?.avatarUrl && !selectedImage ? (
+              <PrimaryButton onPress={() => setSelectedImage(null)} variant="ghost" size="sm">
+                Use profile photo
+              </PrimaryButton>
+            ) : null}
           </View>
 
           <View style={styles.previewCard}>
             {selectedGarment?.uri || selectedVariant.imageUrl || firstProduct?.imageUrl ? (
-              <Image
-                source={{ uri: selectedGarment?.uri ?? selectedVariant.imageUrl ?? firstProduct?.imageUrl ?? "" }}
-                style={styles.previewImage}
-              />
+              <Image source={{ uri: selectedGarment?.uri ?? selectedVariant.imageUrl ?? firstProduct?.imageUrl ?? "" }} style={styles.previewImage} />
             ) : null}
             <Text style={styles.previewTitle}>Garment / product</Text>
             <Text style={styles.previewText}>
               {selectedGarment?.fileName ?? "Optional garment upload can override the catalog image for custom try-on tests."}
             </Text>
-            <PrimaryButton onPress={() => pickImage("garment")} variant="secondary" size="sm">
-              Upload garment
-            </PrimaryButton>
+            <View style={styles.actionRow}>
+              <PrimaryButton onPress={() => pickImage("garment", "camera")} variant="secondary" size="sm">
+                Camera
+              </PrimaryButton>
+              <PrimaryButton onPress={() => pickImage("garment", "library")} variant="secondary" size="sm">
+                Upload
+              </PrimaryButton>
+            </View>
           </View>
         </View>
 
         <Text style={styles.label}>Size variation</Text>
-        <SegmentedControl
-          options={sizeOptions.length > 0 ? sizeOptions : ["Default"]}
-          selected={selectedVariant.sizeLabel ?? sizeOptions[0]}
-          onSelect={(value) => setSelectedVariantIndex(Math.max(0, sizeOptions.indexOf(value)))}
-        />
+        <SegmentedControl options={sizeOptions.length > 0 ? sizeOptions : ["Default"]} selected={selectedVariant.sizeLabel ?? sizeOptions[0]} onSelect={(value) => setSelectedVariantIndex(Math.max(0, sizeOptions.indexOf(value)))} />
         <Text style={styles.label}>Fit style</Text>
         <SegmentedControl options={fitStyles} selected={fitStyle} onSelect={setFitStyle} />
+        <Text style={styles.label}>Vibe</Text>
+        <View style={styles.vibeList}>
+          {vibes.map((entry) => {
+            const active = entry.id === vibe;
+            return (
+              <Pressable key={entry.id} onPress={() => setVibe(entry.id)} style={({ pressed }) => [styles.vibeCard, active && styles.vibeCardActive, pressed && styles.pressed]}>
+                <Text style={[styles.vibeTitle, active && styles.vibeTitleActive]}>{entry.title}</Text>
+                <Text style={[styles.vibeSubtitle, active && styles.vibeSubtitleActive]}>{entry.subtitle}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <View style={styles.colorRow}>
           {colorOptions.map((color) => (
@@ -268,24 +305,13 @@ export function TryOnUploadScreen() {
               </View>
               <View style={styles.fitHeroBadges}>
                 <Pill label={`${fitPreview.fitLabel} fit`} tone={fitTone(fitPreview.fitLabel)} />
-                <Pill
-                  label={`${Math.round(fitPreview.confidenceScore * 100)}% confidence`}
-                  tone={confidenceTone(fitPreview.confidenceScore)}
-                />
+                <Pill label={`${Math.round(fitPreview.confidenceScore * 100)}% confidence`} tone={confidenceTone(fitPreview.confidenceScore)} />
               </View>
             </View>
 
             <View style={styles.metricRow}>
-              <MetricTile
-                label="Selected size"
-                value={selectedVariant.sizeLabel ?? "--"}
-                caption="Current variant choice"
-              />
-              <MetricTile
-                label="Fit score"
-                value={`${Math.round(fitPreview.fitScore)}`}
-                caption="Relative suitability"
-              />
+              <MetricTile label="Selected size" value={selectedVariant.sizeLabel ?? "--"} caption="Current variant choice" />
+              <MetricTile label="Fit score" value={`${Math.round(fitPreview.fitScore)}`} caption="Relative suitability" />
             </View>
 
             {fitPreview.recommendedSize && fitPreview.recommendedSize !== selectedVariant.sizeLabel ? (
@@ -306,40 +332,21 @@ export function TryOnUploadScreen() {
                 <Pill label="No major issue flags" tone="success" />
               )}
             </View>
-
-            {fitPreview.alternatives.length > 0 ? (
-              <View style={styles.altList}>
-                {fitPreview.alternatives.map((alternative) => (
-                  <View key={alternative.sizeLabel} style={styles.altCard}>
-                    <View style={styles.altHeader}>
-                      <Text style={styles.altSize}>{alternative.sizeLabel}</Text>
-                      <Pill label={`${Math.round(alternative.fitScore)}`} tone="info" />
-                    </View>
-                    <Text style={styles.previewText}>{alternative.reason}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
           </>
-        ) : (
-          <Text style={styles.previewText}>
-            Fit guidance will appear once the product and your measurements have enough structured data.
-          </Text>
-        )}
+        ) : null}
       </SectionCard>
 
-      <SectionCard eyebrow="Product Scan" title="Generate try-on">
-        <Text style={styles.previewText}>
-          The visual render will use the selected variant and your saved fit profile, with fit guidance shown again on the result screen.
-        </Text>
-        <PrimaryButton variant="ghost" disabled size="sm">
-          Scan product coming soon
-        </PrimaryButton>
-        {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
-        <PrimaryButton onPress={submit} disabled={!activeSelfUri || submitting}>
-          {submitting ? "Uploading and queueing..." : "Generate try-on"}
-        </PrimaryButton>
-      </SectionCard>
+      {submitError ? (
+        <SectionCard eyebrow="Needs Attention" title="Try-on request could not start" subtitle={submitError}>
+          <PrimaryButton onPress={() => setSubmitError(null)} variant="secondary" fullWidth={false}>
+            Dismiss
+          </PrimaryButton>
+        </SectionCard>
+      ) : null}
+
+      <PrimaryButton onPress={submit} disabled={submitting}>
+        {submitting ? "Creating try-on..." : "Generate try-on"}
+      </PrimaryButton>
     </Screen>
   );
 }
@@ -353,128 +360,159 @@ const styles = StyleSheet.create({
   previewGrid: {
     gap: 12
   },
-  previewCard: {
-    borderRadius: 22,
-    backgroundColor: "#f6efe5",
+  cameraBox: {
+    minHeight: 240,
+    borderRadius: 24,
+    backgroundColor: "#101322",
     borderWidth: 1,
-    borderColor: "#e6d7c0",
-    padding: 16,
-    gap: 8
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12
+  },
+  cameraFrame: {
+    width: 170,
+    height: 200,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "rgba(255,255,255,0.6)"
+  },
+  cameraText: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12
+  },
+  previewCard: {
+    borderRadius: radius.lg,
+    backgroundColor: "#fcf8f2",
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 14,
+    gap: 10
   },
   previewImage: {
     width: "100%",
     height: 180,
     borderRadius: 18,
-    backgroundColor: "#eadcc7"
+    backgroundColor: colors.pageStrong
   },
   previewTitle: {
-    color: "#172033",
-    fontSize: 18,
-    fontWeight: "700"
+    color: colors.ink,
+    fontSize: 24,
+    lineHeight: 28,
+    fontFamily: fonts.display
   },
   previewText: {
-    color: "#667085",
+    color: colors.inkSoft,
     fontSize: 14,
     lineHeight: 21
   },
-  warningText: {
-    color: "#8a4f12",
-    fontSize: 14,
-    lineHeight: 20
+  actionRow: {
+    flexDirection: "row",
+    gap: 8
   },
   label: {
-    color: "#172033",
-    fontSize: 14,
-    fontWeight: "700"
+    color: colors.brand,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8
   },
   colorRow: {
     flexDirection: "row",
     gap: 8,
     flexWrap: "wrap"
   },
-  fitHero: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: "#f9f3eb",
+  vibeList: {
+    gap: 10
+  },
+  vibeCard: {
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: "#eadcc7",
+    borderColor: colors.line,
+    backgroundColor: "#fcf8f2",
+    padding: 14,
+    gap: 4
+  },
+  vibeCardActive: {
+    backgroundColor: "#e4edf2",
+    borderColor: "#bfcfda"
+  },
+  vibeTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  vibeTitleActive: {
+    color: colors.accent
+  },
+  vibeSubtitle: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  vibeSubtitleActive: {
+    color: colors.accent
+  },
+  fitHero: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: 12
   },
   fitHeroCopy: {
+    flex: 1,
     gap: 6
   },
   fitHeroEyebrow: {
-    color: "#836d53",
+    color: colors.brand,
     fontSize: 12,
     fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase"
+    textTransform: "uppercase",
+    letterSpacing: 0.8
   },
   fitHeroSize: {
-    color: "#172033",
+    color: colors.ink,
     fontSize: 34,
     lineHeight: 38,
-    fontWeight: "800"
+    fontFamily: fonts.display
   },
   fitHeroText: {
-    color: "#536075",
-    fontSize: 15,
-    lineHeight: 22
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 21
   },
   fitHeroBadges: {
-    flexDirection: "row",
     gap: 8,
-    flexWrap: "wrap"
+    alignItems: "flex-end"
   },
   metricRow: {
     flexDirection: "row",
     gap: 10
   },
   alertCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#fff6eb",
+    borderRadius: radius.lg,
+    backgroundColor: "#f8ead6",
     borderWidth: 1,
     borderColor: "#efcf9f",
-    gap: 4
+    padding: 14,
+    gap: 6
   },
   alertTitle: {
-    color: "#8a4f12",
+    color: colors.warning,
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  warningText: {
+    color: colors.warning,
     fontSize: 13,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.7
+    lineHeight: 20
   },
   issueWrap: {
     flexDirection: "row",
     gap: 8,
     flexWrap: "wrap"
   },
-  altList: {
-    gap: 10
-  },
-  altCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#f4f7fb",
-    borderWidth: 1,
-    borderColor: "#d4dfec",
-    gap: 8
-  },
-  altHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10
-  },
-  altSize: {
-    color: "#172033",
-    fontSize: 17,
-    fontWeight: "700"
-  },
-  error: {
-    color: "#a0392b",
-    fontSize: 14,
-    lineHeight: 20
+  pressed: {
+    opacity: 0.92
   }
 });
