@@ -10,6 +10,7 @@ import type {
   FitResult,
   LookRating,
   Measurement,
+  Occasion,
   Product,
   Recommendation,
   ReferralCode,
@@ -20,6 +21,7 @@ import type {
   SessionResponse,
   ShareEvent,
   Shop,
+  ShopComparison,
   TryOnRequest,
   UploadAsset,
   UploadSession,
@@ -199,6 +201,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return normalizeImageFields(payload.data);
 }
 
+async function refreshProfileIntoStore(userId: string) {
+  const profile = await apiFetch<UserProfile>(`/profile/${userId}`);
+  useAppStore.getState().setProfile(profile);
+  return profile;
+}
+
 export const mobileApi = {
   login: (email: string, password: string): Promise<AuthResponse> =>
     apiFetch("/auth/login", {
@@ -216,13 +224,17 @@ export const mobileApi = {
       title: "Find your best fit faster",
       subtitle: "Profile, measurements, try-on, and recommendations in one flow."
     }) as const,
-  profile: (userId: string): Promise<UserProfile> => apiFetch(`/profile/${userId}`),
+  profile: (userId: string): Promise<UserProfile> => refreshProfileIntoStore(userId),
+  refreshProfile: (userId: string): Promise<UserProfile> => refreshProfileIntoStore(userId),
   fitProfile: (): Promise<FitProfileResponse> => apiFetch("/users/me/fit-profile"),
-  updateProfile: (userId: string, input: ProfileInput): Promise<UserProfile> =>
-    apiFetch(`/profile/${userId}`, {
+  updateProfile: async (userId: string, input: ProfileInput): Promise<UserProfile> => {
+    const updated = await apiFetch<UserProfile>(`/profile/${userId}`, {
       method: "PUT",
       body: JSON.stringify(input)
-    }),
+    });
+    useAppStore.getState().setProfile(updated);
+    return updated;
+  },
   fitAssess: (input: {
     userId: string;
     productId: string;
@@ -253,6 +265,7 @@ export const mobileApi = {
     const query = params.toString();
     return apiFetch(`/products/${productId}/fit-preview${query ? `?${query}` : ""}`);
   },
+  productDetail: (productId: string): Promise<Product> => apiFetch(`/products/${productId}`),
   updateStylePreferences: (
     userId: string,
     input: {
@@ -283,14 +296,41 @@ export const mobileApi = {
           body: JSON.stringify({ userId, ...input })
         }),
   products: (): Promise<Product[]> => apiFetch("/products"),
-  recommendations: (userId: string): Promise<Recommendation[]> =>
-    apiFetch(`/recommendations?userId=${userId}`),
-  generateRecommendations: (userId: string): Promise<Recommendation[]> =>
+  recommendations: (
+    userId: string,
+    input?: { occasion?: Occasion; productId?: string; savedLookId?: string }
+  ): Promise<Recommendation[]> => {
+    const params = new URLSearchParams({ userId });
+    if (input?.occasion) {
+      params.set("occasion", input.occasion);
+    }
+    if (input?.productId) {
+      params.set("productId", input.productId);
+    }
+    if (input?.savedLookId) {
+      params.set("savedLookId", input.savedLookId);
+    }
+    return apiFetch(`/recommendations?${params.toString()}`);
+  },
+  generateRecommendations: (
+    userId: string,
+    input?: { occasion?: Occasion; productId?: string; savedLookId?: string }
+  ): Promise<Recommendation[]> =>
     apiFetch("/recommendations/generate", {
       method: "POST",
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ userId, ...input })
     }),
   shops: (): Promise<Shop[]> => apiFetch("/shops"),
+  shopComparison: (input: { productId?: string; variantId?: string }): Promise<ShopComparison> => {
+    const params = new URLSearchParams();
+    if (input.productId) {
+      params.set("productId", input.productId);
+    }
+    if (input.variantId) {
+      params.set("variantId", input.variantId);
+    }
+    return apiFetch(`/shops/compare?${params.toString()}`);
+  },
   savedLooks: (userId: string): Promise<SavedLook[]> => apiFetch(`/saved-looks?userId=${userId}`),
   saveLook: (
     userId: string,
@@ -358,38 +398,41 @@ export const mobileApi = {
   createTryOnFromAssets: async (
     userId: string,
     variantId: string,
-    selfAsset: LocalUploadAsset,
-    options?: {
+    asset: LocalUploadAsset,
+    input?: {
       garmentAsset?: LocalUploadAsset | null;
       fitStyle?: string;
       comparisonLabel?: string;
     }
-  ): Promise<TryOnRequest> => {
-    const selfSession = await mobileApi.createUploadSession(userId, selfAsset, "self-image");
-    const selfUpload = await mobileApi.uploadAsset(userId, selfSession, selfAsset);
+  ) => {
+    const sourceSession = await mobileApi.createUploadSession(userId, asset, "try-on-source");
+    const sourceUpload = await mobileApi.uploadAsset(userId, sourceSession, asset);
 
     let garmentUploadId: string | undefined;
-    if (options?.garmentAsset) {
-      const garmentSession = await mobileApi.createUploadSession(userId, options.garmentAsset, "garment");
-      const garmentUpload = await mobileApi.uploadAsset(userId, garmentSession, options.garmentAsset);
+    if (input?.garmentAsset) {
+      const garmentSession = await mobileApi.createUploadSession(userId, input.garmentAsset, "try-on-garment");
+      const garmentUpload = await mobileApi.uploadAsset(userId, garmentSession, input.garmentAsset);
       garmentUploadId = garmentUpload.id;
     }
 
     return mobileApi.createTryOn(userId, variantId, {
-      uploadId: selfUpload.id,
+      uploadId: sourceUpload.id,
       garmentUploadId,
-      fitStyle: options?.fitStyle,
-      comparisonLabel: options?.comparisonLabel
+      fitStyle: input?.fitStyle,
+      comparisonLabel: input?.comparisonLabel
     });
   },
   tryOnResult: (requestId: string): Promise<TryOnRequest> => apiFetch(`/try-on/requests/${requestId}`),
-  rewardsWallet: (userId?: string): Promise<RewardWallet> =>
-    apiFetch(`/rewards/wallet${userId ? `?userId=${userId}` : ""}`),
-  rewardTransactions: (userId?: string): Promise<RewardTransaction[]> =>
-    apiFetch(`/rewards/transactions${userId ? `?userId=${userId}` : ""}`),
+  shareLook: (input: { tryOnRequestId?: string; savedLookId?: string; channel: string }): Promise<ShareEvent> =>
+    apiFetch("/engagement/share-events", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  rewardWallet: (): Promise<RewardWallet> => apiFetch("/rewards/wallet"),
+  rewardsWallet: (): Promise<RewardWallet> => mobileApi.rewardWallet(),
+  rewardTransactions: (): Promise<RewardTransaction[]> => apiFetch("/rewards/transactions"),
   referralCode: (): Promise<ReferralCode> => apiFetch("/referrals/code"),
-  referralEvents: (userId?: string): Promise<ReferralEvent[]> =>
-    apiFetch(`/referrals/events${userId ? `?userId=${userId}` : ""}`),
+  referralEvents: (): Promise<ReferralEvent[]> => apiFetch("/referrals/events"),
   createReferralEvent: (input: {
     eventType: string;
     code?: string;
@@ -402,33 +445,16 @@ export const mobileApi = {
     }),
   campaigns: (): Promise<Campaign[]> => apiFetch("/campaigns"),
   coupons: (): Promise<Coupon[]> => apiFetch("/coupons"),
-  couponRedemptions: (userId?: string): Promise<CouponRedemption[]> =>
-    apiFetch(`/coupons/redemptions${userId ? `?userId=${userId}` : ""}`),
+  couponRedemptions: (): Promise<CouponRedemption[]> => apiFetch("/coupons/redemptions"),
   unlockCoupon: (couponId: string): Promise<CouponRedemption> =>
     apiFetch(`/coupons/${couponId}/unlock`, { method: "POST" }),
   redeemCoupon: (couponId: string): Promise<CouponRedemption> =>
     apiFetch(`/coupons/${couponId}/redeem`, { method: "POST" }),
+  lookRatings: (): Promise<LookRating[]> => apiFetch("/engagement/look-ratings"),
   challenges: (): Promise<Campaign[]> => apiFetch("/engagement/challenges"),
-  challengeParticipation: (userId?: string): Promise<ChallengeParticipation[]> =>
-    apiFetch(`/engagement/challenges/participation${userId ? `?userId=${userId}` : ""}`),
+  challengeParticipation: (): Promise<ChallengeParticipation[]> => apiFetch("/engagement/challenges/participation"),
   joinChallenge: (campaignId: string): Promise<ChallengeParticipation> =>
     apiFetch(`/engagement/challenges/${campaignId}/join`, { method: "POST" }),
-  completeChallenge: (campaignId: string) =>
-    apiFetch(`/engagement/challenges/${campaignId}/complete`, { method: "POST" }),
-  shareLook: (input: { savedLookId?: string; tryOnRequestId?: string; channel: string }): Promise<ShareEvent> =>
-    apiFetch("/engagement/share-events", {
-      method: "POST",
-      body: JSON.stringify(input)
-    }),
-  rateLook: (input: {
-    savedLookId?: string;
-    tryOnRequestId?: string;
-    productId?: string;
-    rating: number;
-    comment?: string;
-  }): Promise<LookRating> =>
-    apiFetch("/engagement/look-ratings", {
-      method: "POST",
-      body: JSON.stringify(input)
-    })
+  completeChallenge: (campaignId: string): Promise<ChallengeParticipation> =>
+    apiFetch(`/engagement/challenges/${campaignId}/complete`, { method: "POST" })
 };

@@ -8,6 +8,7 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
+import { inferOccasionTags, representativePriceForProduct, serializeProductCard } from "../catalog/catalog.utils";
 import { FitModule, FitService } from "../fit/fit.module";
 
 class VariantDto {
@@ -154,13 +155,55 @@ class ProductsController {
   ) {}
 
   @Get()
-  list(@Query("category") category?: string) {
-    return this.service.list(category);
+  async list(@Query("category") category?: string) {
+    const products = await this.service.list(category);
+    return products.map((product) => serializeProductCard(product));
   }
 
   @Get(":id")
-  get(@Param("id") id: string) {
-    return this.service.get(id);
+  async get(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    const [product, allProducts] = await Promise.all([this.service.get(id), this.service.list()]);
+    if (!product) {
+      return null;
+    }
+
+    const serialized = serializeProductCard(product);
+    const fitPreview = await this.fitService.previewForProduct(user, id, {});
+    const similarProducts = allProducts
+      .filter((candidate) => candidate.id !== product.id && candidate.category === product.category)
+      .map((candidate) => serializeProductCard(candidate))
+      .sort((left, right) => {
+        const leftOverlap = (left.styleTags ?? []).filter((tag: string) => (serialized.styleTags ?? []).includes(tag)).length;
+        const rightOverlap = (right.styleTags ?? []).filter((tag: string) => (serialized.styleTags ?? []).includes(tag)).length;
+        return rightOverlap - leftOverlap;
+      })
+      .slice(0, 3);
+    const cheaperAlternatives = allProducts
+      .filter((candidate) => candidate.id !== product.id && candidate.category === product.category)
+      .map((candidate) => serializeProductCard(candidate))
+      .filter((candidate) => (candidate.offerSummary?.lowestPrice ?? Number.MAX_SAFE_INTEGER) < (serialized.offerSummary?.lowestPrice ?? Number.MAX_SAFE_INTEGER))
+      .sort((left, right) => (left.offerSummary?.lowestPrice ?? 0) - (right.offerSummary?.lowestPrice ?? 0))
+      .slice(0, 3);
+    const completeTheLook = allProducts
+      .filter((candidate) => candidate.id !== product.id && candidate.category !== product.category)
+      .map((candidate) => serializeProductCard(candidate))
+      .sort((left, right) => {
+        const leftOccasion = inferOccasionTags(left).filter((tag) => serialized.occasionTags?.includes(tag)).length;
+        const rightOccasion = inferOccasionTags(right).filter((tag) => serialized.occasionTags?.includes(tag)).length;
+        const leftStyle = (left.styleTags ?? []).filter((tag: string) => (serialized.styleTags ?? []).includes(tag)).length;
+        const rightStyle = (right.styleTags ?? []).filter((tag: string) => (serialized.styleTags ?? []).includes(tag)).length;
+        return rightOccasion + rightStyle - (leftOccasion + leftStyle);
+      })
+      .slice(0, 4);
+
+    return {
+      ...serialized,
+      fitPreview,
+      similarProducts,
+      cheaperAlternatives,
+      completeTheLook,
+      priceAnchor: representativePriceForProduct(product)
+    };
   }
 
   @Get(":id/fit-preview")

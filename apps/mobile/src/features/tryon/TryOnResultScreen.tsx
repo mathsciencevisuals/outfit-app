@@ -5,13 +5,14 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { InfoRow } from "../../components/InfoRow";
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
+import { ProductCard, productSubtitle } from "../../components/ProductCard";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import type { FitIssue, FitResult, TryOnRequest } from "../../types/api";
+import type { FitIssue, FitResult, Recommendation, TryOnRequest } from "../../types/api";
 
 function confidenceTone(confidence?: number) {
   if (!confidence) {
@@ -59,6 +60,7 @@ export function TryOnResultScreen() {
   const userId = useAppStore((state) => state.userId);
   const [data, setData] = useState<TryOnRequest | null>(null);
   const [fitResult, setFitResult] = useState<FitResult | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(Boolean(requestId));
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -85,12 +87,16 @@ export function TryOnResultScreen() {
         setLoading(false);
 
         if (nextRequest.variant?.product?.id) {
-          const preview = await mobileApi.productFitPreview(nextRequest.variant.product.id, {
-            variantId: nextRequest.variant.id,
-            chosenSizeLabel: nextRequest.variant.sizeLabel
-          });
+          const [preview, nextRecommendations] = await Promise.all([
+            mobileApi.productFitPreview(nextRequest.variant.product.id, {
+              variantId: nextRequest.variant.id,
+              chosenSizeLabel: nextRequest.variant.sizeLabel
+            }),
+            mobileApi.recommendations(userId, { productId: nextRequest.variant.product.id })
+          ]);
           if (mounted) {
             setFitResult(preview);
+            setRecommendations(nextRecommendations.slice(0, 3));
           }
         }
 
@@ -305,6 +311,32 @@ export function TryOnResultScreen() {
           </View>
         ) : (
           <Text style={styles.summaryText}>No strong alternative sizes surfaced beyond the current recommendation.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard eyebrow="Complete The Look" title="Style and commerce next steps">
+        {recommendations.length > 0 ? (
+          recommendations.map((item) => (
+            <ProductCard
+              key={item.productId}
+              title={item.product?.name ?? item.productId}
+              subtitle={productSubtitle(item.product)}
+              badge={(item.rankingBadges ?? [])[0] ?? "Recommended"}
+              highlight={item.explanation}
+              bestSizeLabel={item.bestSizeLabel}
+              fitLabel={item.bestFitLabel}
+              confidenceLabel={item.fitResult ? `${Math.round(item.fitResult.confidenceScore * 100)}% confidence` : null}
+              contextTags={[...(item.reasonTags ?? []), ...(item.occasionTags ?? [])]}
+              rankingBadges={item.rankingBadges}
+              priceLabel={item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : item.budgetLabel ?? null}
+              primaryLabel="Compare shops"
+              onPrimaryPress={() => router.push("/shops")}
+              secondaryLabel="Recommendations"
+              onSecondaryPress={() => router.push("/recommendations")}
+            />
+          ))
+        ) : (
+          <Text style={styles.summaryText}>Complementary styling recommendations will appear once product and profile signals are available together.</Text>
         )}
       </SectionCard>
 

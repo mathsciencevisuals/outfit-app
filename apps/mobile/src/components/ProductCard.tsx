@@ -33,6 +33,16 @@ function issueTone(issue: string) {
   return "warning" as const;
 }
 
+function badgeTone(entry: string) {
+  if (entry.includes("Budget") || entry.includes("Price")) {
+    return "warning" as const;
+  }
+  if (entry.includes("Fit")) {
+    return "success" as const;
+  }
+  return "info" as const;
+}
+
 function humanizeIssue(issue: string) {
   return issue
     .split("-")
@@ -51,6 +61,9 @@ export function ProductCard({
   bestSizeLabel,
   warning,
   issueLabels,
+  contextTags,
+  rankingBadges,
+  priceLabel,
   onPrimaryPress,
   primaryLabel,
   onSecondaryPress,
@@ -66,6 +79,9 @@ export function ProductCard({
   bestSizeLabel?: string | null;
   warning?: string | null;
   issueLabels?: string[];
+  contextTags?: string[];
+  rankingBadges?: string[];
+  priceLabel?: string | null;
   onPrimaryPress?: () => void;
   primaryLabel?: string;
   onSecondaryPress?: () => void;
@@ -78,7 +94,10 @@ export function ProductCard({
       <View style={styles.preview}>
         <View style={styles.previewOrbLarge} />
         <View style={styles.previewOrbSmall} />
-        {badge ? <Pill label={badge} tone="accent" /> : null}
+        <View style={styles.previewTopRow}>
+          {badge ? <Pill label={badge} tone="accent" /> : null}
+          {priceLabel ? <Pill label={priceLabel} tone="warning" /> : null}
+        </View>
       </View>
       <View style={styles.copy}>
         <View style={styles.headerRow}>
@@ -109,7 +128,23 @@ export function ProductCard({
           </View>
         ) : null}
 
+        {(rankingBadges?.length ?? 0) > 0 ? (
+          <View style={styles.metaRow}>
+            {rankingBadges?.slice(0, 3).map((entry) => (
+              <Pill key={entry} label={entry} tone={badgeTone(entry)} />
+            ))}
+          </View>
+        ) : null}
+
         {highlight ? <Text style={styles.highlight}>{highlight}</Text> : null}
+
+        {(contextTags?.length ?? 0) > 0 ? (
+          <View style={styles.issueRow}>
+            {contextTags?.slice(0, 4).map((tag) => (
+              <Pill key={tag} label={tag} tone="info" />
+            ))}
+          </View>
+        ) : null}
 
         {(issueLabels?.length ?? 0) > 0 ? (
           <View style={styles.issueRow}>
@@ -137,11 +172,14 @@ export function recommendationBadge(recommendation: Recommendation) {
   const confidence = recommendation.fitResult?.confidenceScore ?? 0;
   const issueCount = recommendation.fitResult?.issues?.length ?? 0;
 
-  if (fitScore >= 90 && confidence >= 0.78 && issueCount === 0) {
+  if ((recommendation.rankingBadges ?? []).includes("Best Fit") || (fitScore >= 90 && confidence >= 0.78 && issueCount === 0)) {
     return "Best Fit";
   }
-  if (fitScore >= 80 && confidence >= 0.65) {
-    return "Strong Match";
+  if ((recommendation.rankingBadges ?? []).includes("Budget Pick")) {
+    return "Budget Pick";
+  }
+  if ((recommendation.rankingBadges ?? []).includes("Trending")) {
+    return "Trending";
   }
   return "Worth Trying";
 }
@@ -164,6 +202,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#efe3d2",
     padding: 16,
     justifyContent: "space-between"
+  },
+  previewTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap"
   },
   previewOrbLarge: {
     position: "absolute",

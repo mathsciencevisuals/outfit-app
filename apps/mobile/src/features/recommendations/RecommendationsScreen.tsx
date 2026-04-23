@@ -12,29 +12,31 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import type { Recommendation } from "../../types/api";
+import type { Occasion, Recommendation } from "../../types/api";
 
-const filterOptions = ["All", "Best fit", "Color-led", "Avoid clashes"];
+const occasions: Array<Occasion | "all"> = ["all", "casual", "streetwear", "formal", "college", "interview", "date", "fest"];
+const filterOptions = ["All", "Best fit", "Budget", "Color-led"];
 
 export function RecommendationsScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [occasion, setOccasion] = useState<Occasion | "all">("all");
   const { data, loading, error } = useAsyncResource(async () => {
-    const results = await mobileApi.recommendations(userId);
-    return results.length > 0 ? results : mobileApi.generateRecommendations(userId);
-  }, [userId]);
+    const results = await mobileApi.recommendations(userId, { occasion: occasion === "all" ? undefined : occasion });
+    return results.length > 0 ? results : mobileApi.generateRecommendations(userId, { occasion: occasion === "all" ? undefined : occasion });
+  }, [userId, occasion]);
 
   const recommendations = data ?? [];
   const filtered = useMemo(() => {
     if (activeFilter === "Best fit") {
       return recommendations.filter((item) => (item.fitResult?.fitScore ?? 0) >= 78);
     }
-    if (activeFilter === "Color-led") {
-      return recommendations.filter((item) => (item.matchingColors?.length ?? 0) > 0);
+    if (activeFilter === "Budget") {
+      return recommendations.filter((item) => (item.budgetLabel ?? "").toLowerCase().includes("budget") || (item.rankingBadges ?? []).includes("Budget Pick"));
     }
-    if (activeFilter === "Avoid clashes") {
-      return recommendations.filter((item) => (item.incompatibleColors?.length ?? 0) === 0);
+    if (activeFilter === "Color-led") {
+      return recommendations.filter((item) => (item.colorInsight?.matchingColors?.length ?? 0) > 0 || (item.colorInsight?.complementaryColors?.length ?? 0) > 0);
     }
     return recommendations;
   }, [activeFilter, recommendations]);
@@ -42,7 +44,7 @@ export function RecommendationsScreen() {
   if (loading) {
     return (
       <Screen>
-        <LoadingState title="Recommendations" subtitle="Ranking products by fit, color, and style signals." />
+        <LoadingState title="Recommendations" subtitle="Ranking products by fit, occasion, color, budget, and saved-style signals." />
       </Screen>
     );
   }
@@ -65,9 +67,9 @@ export function RecommendationsScreen() {
       <Screen>
         <EmptyState
           title="No recommendations yet"
-          message="Generate or unlock recommendations after your profile and fit data are ready."
-          actionLabel="Go to try-on"
-          onAction={() => router.push("/tryon-upload")}
+          message="Complete your profile and measurements to unlock clearer fit, style, and budget recommendations."
+          actionLabel="Go to profile"
+          onAction={() => router.push("/profile")}
         />
       </Screen>
     );
@@ -80,7 +82,7 @@ export function RecommendationsScreen() {
       <SectionCard
         eyebrow="Recommendations"
         title="What fits your profile best"
-        subtitle="Ranking now blends fit score, fit confidence, color affinity, and style direction."
+        subtitle="Ranking now blends fit confidence, style preference, occasion, budget, saved looks, and commerce signals."
       >
         <View style={styles.row}>
           <Pill label={recommendationBadge(best)} tone="success" />
@@ -90,18 +92,19 @@ export function RecommendationsScreen() {
         <View style={styles.metricRow}>
           <MetricTile label="Top score" value={`${Math.round(best.score)}`} caption="Best current product match" />
           <MetricTile
-            label="Fit confidence"
-            value={`${Math.round((best.fitResult?.confidenceScore ?? 0) * 100)}%`}
-            caption={best.fitResult?.fitLabel ? `${best.fitResult.fitLabel} fit` : "Needs more data"}
+            label="Best price"
+            value={best.offerSummary?.lowestPrice != null ? `$${Math.round(best.offerSummary.lowestPrice)}` : "--"}
+            caption={best.budgetLabel ?? "Needs more pricing"}
           />
         </View>
+        <SegmentedControl options={occasions} selected={occasion} onSelect={(value) => setOccasion(value as Occasion | "all")} />
         <SegmentedControl options={filterOptions} selected={activeFilter} onSelect={setActiveFilter} />
       </SectionCard>
 
       {filtered.length === 0 ? (
         <EmptyState
           title="No matches for this filter"
-          message="Switch filters to expand the recommendation shortlist."
+          message="This filter narrowed the list too far. Switch filters to widen the shortlist."
           actionLabel="Show all"
           onAction={() => setActiveFilter("All")}
         />
@@ -122,22 +125,35 @@ export function RecommendationsScreen() {
                 }
                 warning={item.fitWarning}
                 issueLabels={item.fitResult?.issues.map((issue) => issue.code)}
+                contextTags={[...(item.reasonTags ?? []), ...(item.occasionTags ?? [])]}
+                rankingBadges={item.rankingBadges}
+                priceLabel={item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : item.budgetLabel ?? null}
                 primaryLabel="Compare shops"
                 onPrimaryPress={() => router.push("/shops")}
                 secondaryLabel="Try on now"
                 onSecondaryPress={() => router.push("/tryon-upload")}
               />
+              <View style={styles.insightCard}>
+                <Text style={styles.insightTitle}>Color and budget read</Text>
+                <Text style={styles.insightText}>{item.colorInsight?.explanation ?? "Color alignment is still being evaluated."}</Text>
+                {item.cheaperAlternative ? (
+                  <Text style={styles.insightText}>
+                    Cheaper option: {item.cheaperAlternative.name} from ${Math.round(item.cheaperAlternative.offerSummary?.lowestPrice ?? 0)}.
+                  </Text>
+                ) : null}
+              </View>
               <View style={styles.colorRow}>
-                {(item.matchingColors?.length ?? 0) > 0 ? (
-                  <Pill label={`Matches: ${item.matchingColors?.join(", ")}`} tone="success" />
+                {(item.colorInsight?.matchingColors?.length ?? 0) > 0 ? (
+                  <Pill label={`Matches: ${item.colorInsight?.matchingColors.join(", ")}`} tone="success" />
                 ) : (
-                  <Pill label="No strong color match yet" tone="warning" />
+                  <Pill label="No direct color match" tone="warning" />
                 )}
+                {(item.colorInsight?.complementaryColors?.length ?? 0) > 0 ? (
+                  <Pill label={`Complements: ${item.colorInsight?.complementaryColors.join(", ")}`} tone="info" />
+                ) : null}
                 {(item.incompatibleColors?.length ?? 0) > 0 ? (
-                  <Pill label={`Avoid: ${item.incompatibleColors?.join(", ")}`} tone="warning" />
-                ) : (
-                  <Pill label="No major color clash" tone="accent" />
-                )}
+                  <Pill label={`Avoid: ${item.incompatibleColors?.join(", ")}`} tone="danger" />
+                ) : null}
               </View>
             </View>
           ))}
@@ -164,5 +180,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     flexWrap: "wrap"
+  },
+  insightCard: {
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "#f6f1e8",
+    borderWidth: 1,
+    borderColor: "#eadcc7",
+    gap: 6
+  },
+  insightTitle: {
+    color: "#172033",
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7
+  },
+  insightText: {
+    color: "#5c6679",
+    fontSize: 14,
+    lineHeight: 21
   }
 });

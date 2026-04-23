@@ -11,6 +11,7 @@ type AppState = {
   userRole: UserRole | null;
   token: string | null;
   profile: UserProfile | null;
+  profileVersion: number;
   isAuthenticated: boolean;
   authChecked: boolean;
   lastTryOnRequestId?: string;
@@ -27,10 +28,29 @@ const initialState = {
   userRole: null as UserRole | null,
   token: null as string | null,
   profile: null as UserProfile | null,
+  profileVersion: 0,
   isAuthenticated: false,
   authChecked: false,
   lastTryOnRequestId: undefined as string | undefined
 };
+
+function mergeProfile(current: UserProfile | null, next: UserProfile | null) {
+  if (!next) {
+    return null;
+  }
+  if (!current) {
+    return next;
+  }
+
+  return {
+    ...current,
+    ...next,
+    measurements: next.measurements ?? current.measurements ?? [],
+    savedLooks: next.savedLooks ?? current.savedLooks ?? [],
+    preferredColors: next.preferredColors ?? current.preferredColors ?? [],
+    avoidedColors: next.avoidedColors ?? current.avoidedColors ?? []
+  };
+}
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -41,13 +61,15 @@ export const useAppStore = create<AppState>()(
           token,
           userId: user.id,
           userRole: user.role,
-          profile: user.profile ?? state.profile ?? null,
+          profile: mergeProfile(state.profile, user.profile ?? null),
+          profileVersion: state.profileVersion + 1,
           isAuthenticated: true,
           authChecked: true
         })),
       setProfile: (profile) =>
         set((state) => ({
-          profile,
+          profile: mergeProfile(state.profile, profile),
+          profileVersion: state.profileVersion + 1,
           isAuthenticated: state.token != null ? true : state.isAuthenticated
         })),
       finishAuthCheck: () => set({ authChecked: true }),
@@ -73,6 +95,7 @@ export const useAppStore = create<AppState>()(
         userRole: state.userRole,
         token: state.token,
         profile: state.profile,
+        profileVersion: state.profileVersion,
         isAuthenticated: state.isAuthenticated,
         lastTryOnRequestId: state.lastTryOnRequestId
       })

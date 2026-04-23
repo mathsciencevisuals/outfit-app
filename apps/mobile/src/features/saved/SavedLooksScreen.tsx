@@ -65,7 +65,7 @@ export function SavedLooksScreen() {
       <SectionCard
         eyebrow="Saved Looks"
         title="Your reusable outfit shortlist"
-        subtitle="Saved outfits and wishlist items stay visible here instead of hiding behind broken placeholders."
+        subtitle="Saved outfits now carry live offer context and complementary products so you can move from memory to commerce."
       >
         <View style={styles.heroRow}>
           <Pill label={`${looks.length} looks total`} tone="success" />
@@ -90,14 +90,31 @@ export function SavedLooksScreen() {
                 <View style={styles.artBoard} />
                 <View style={styles.lookMeta}>
                   <Text style={styles.lookTitle}>{look.name}</Text>
-                  <Pill label={look.isWishlist ? "Wishlist" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
+                  <View style={styles.pillRow}>
+                    <Pill label={look.isWishlist ? "Wishlist" : "Saved look"} tone={look.isWishlist ? "warning" : "accent"} />
+                    {(look.occasionTags ?? []).slice(0, 2).map((tag) => (
+                      <Pill key={tag} label={tag} tone="info" />
+                    ))}
+                  </View>
                 </View>
                 <Text style={styles.lookNote}>{look.note ?? "No note yet. Revisit after your next try-on."}</Text>
+                <View style={styles.pillRow}>
+                  <Pill label={`${look.items?.length ?? 0} items`} tone="neutral" />
+                  {look.offerSummary?.lowestPrice != null ? <Pill label={`From $${Math.round(look.offerSummary.lowestPrice)}`} tone="warning" /> : null}
+                  <Pill label={look.offerSummary?.availabilityLabel ?? "No live offers"} tone="success" />
+                </View>
+                {(look.recommendedProducts?.length ?? 0) > 0 ? (
+                  <Text style={styles.lookNote}>
+                    Complete the look with {look.recommendedProducts?.slice(0, 2).map((product) => product.name).join(" or ")}.
+                  </Text>
+                ) : (
+                  <Text style={styles.lookNote}>This look is ready to compare across shops from the current saved items.</Text>
+                )}
                 <View style={styles.lookActions}>
                   <PrimaryButton size="sm" onPress={() => router.push("/shops")}>
                     Compare offers
                   </PrimaryButton>
-                  <PrimaryButton size="sm" variant="secondary" onPress={() => router.push("/discover")}>
+                  <PrimaryButton size="sm" variant="secondary" onPress={() => router.push("/recommendations")}>
                     Find similar
                   </PrimaryButton>
                 </View>
@@ -153,6 +170,11 @@ const styles = StyleSheet.create({
     color: "#172033",
     fontSize: 17,
     fontWeight: "700"
+  },
+  pillRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
   },
   lookNote: {
     color: "#667085",

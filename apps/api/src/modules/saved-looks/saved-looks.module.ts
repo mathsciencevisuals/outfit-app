@@ -19,6 +19,7 @@ import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { PrismaService } from "../../common/prisma.service";
+import { inferOccasionTags, representativePriceForProduct, serializeProductCard } from "../catalog/catalog.utils";
 
 class SavedLookDto {
   @IsString()
@@ -131,22 +132,88 @@ class SavedLooksService {
     return rows[0] ?? null;
   }
 
+  private async enrichLook(look: { id: string; userId: string; name: string; note: string | null; createdAt: Date; updatedAt: Date }) {
+    const items = await this.prisma.savedLookItem.findMany({
+      where: { savedLookId: look.id },
+      include: {
+        product: {
+          include: {
+            brand: true,
+            variants: {
+              include: {
+                sizeChartEntries: true,
+                inventoryOffers: { include: { shop: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const serializedItems = items.map((item) => ({
+      ...item,
+      product: item.product ? serializeProductCard(item.product) : item.product
+    }));
+    const lookCategories = new Set(serializedItems.map((item) => item.product?.category).filter(Boolean));
+    const allProducts = await this.prisma.product.findMany({
+      include: {
+        brand: true,
+        variants: {
+          include: {
+            inventoryOffers: { include: { shop: true } },
+            sizeChartEntries: true
+          }
+        }
+      },
+      take: 20
+    });
+    const complementary = allProducts
+      .filter((product) => !serializedItems.some((item) => item.productId === product.id) && !lookCategories.has(product.category))
+      .map((product) => serializeProductCard(product))
+      .sort((left, right) => {
+        const leftOccasions = inferOccasionTags(left).filter((tag) =>
+          serializedItems.some((item) => item.product?.occasionTags?.includes(tag))
+        ).length;
+        const rightOccasions = inferOccasionTags(right).filter((tag) =>
+          serializedItems.some((item) => item.product?.occasionTags?.includes(tag))
+        ).length;
+        return rightOccasions - leftOccasions;
+      })
+      .slice(0, 3);
+
+    const allOffers = serializedItems.flatMap((item) => item.product?.variants?.flatMap((variant: any) => variant.inventoryOffers ?? []) ?? []);
+    const lowestTotal = serializedItems.reduce(
+      (sum, item) => sum + (item.product ? representativePriceForProduct(item.product) : 0),
+      0
+    );
+
+    return {
+      ...look,
+      isWishlist: false,
+      items: serializedItems,
+      offerSummary: {
+        offerCount: allOffers.length,
+        shopCount: new Set(allOffers.map((offer: any) => offer.shop?.id).filter(Boolean)).size,
+        lowestPrice: lowestTotal,
+        highestPrice: lowestTotal,
+        bestOffer: allOffers[0] ?? null,
+        availabilityLabel: allOffers.length > 0 ? "Shop-ready look" : "No live offers",
+        badges: [allOffers.length > 0 ? "Buy Now" : "Needs Offers"].filter(Boolean)
+      },
+      recommendedProducts: complementary,
+      occasionTags: Array.from(
+        new Set(serializedItems.flatMap((item) => item.product?.occasionTags ?? []))
+      )
+    };
+  }
+
   private async readLook(id: string) {
     const look = await this.readLookRecord(id);
     if (!look) {
       return null;
     }
 
-    const items = await this.prisma.savedLookItem.findMany({
-      where: { savedLookId: id },
-      include: { product: true }
-    });
-
-    return {
-      ...look,
-      isWishlist: false,
-      items
-    };
+    return this.enrichLook(look);
   }
 
   private async readLooks(userId: string) {
@@ -159,20 +226,7 @@ class SavedLooksService {
       ORDER BY "updatedAt" DESC
     `);
 
-    if (looks.length === 0) {
-      return [];
-    }
-
-    const items = await this.prisma.savedLookItem.findMany({
-      where: { savedLookId: { in: looks.map((look) => look.id) } },
-      include: { product: true }
-    });
-
-    return looks.map((look) => ({
-      ...look,
-      isWishlist: false,
-      items: items.filter((item) => item.savedLookId === look.id)
-    }));
+    return Promise.all(looks.map((look) => this.enrichLook(look)));
   }
 }
 

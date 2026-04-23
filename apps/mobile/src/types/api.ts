@@ -1,6 +1,7 @@
 export type UserRole = "USER" | "ADMIN" | "OPERATOR";
 export type FitPreference = "slim" | "regular" | "relaxed";
 export type FitLabel = "slim" | "regular" | "relaxed";
+export type Occasion = "casual" | "streetwear" | "formal" | "college" | "interview" | "date" | "fest";
 export type FitIssueCode =
   | "chest-tight"
   | "chest-loose"
@@ -142,6 +143,91 @@ export interface FitAssessmentRecord {
   createdAt: string;
 }
 
+export interface OfferSummary {
+  offerCount: number;
+  shopCount: number;
+  lowestPrice: number | null;
+  highestPrice: number | null;
+  bestOffer?: InventoryOffer | null;
+  availabilityLabel: string;
+  badges: string[];
+}
+
+export interface ColorInsight {
+  score: number;
+  matchingColors: string[];
+  complementaryColors: string[];
+  poorMatches: string[];
+  explanation: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  sizeLabel?: string;
+  color?: string;
+  imageUrl?: string | null;
+  price?: number;
+  currency?: string;
+  sizeChartEntries?: SizeChartEntry[];
+  inventoryOffers?: InventoryOffer[];
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  slug?: string;
+  description?: string;
+  category: string;
+  baseColor: string;
+  secondaryColors?: string[];
+  materials?: string[];
+  styleTags?: string[];
+  imageUrl?: string | null;
+  brand?: { name: string };
+  variants?: ProductVariant[];
+  occasionTags?: Occasion[];
+  offerSummary?: OfferSummary | null;
+  fitPreview?: FitResult | null;
+  similarProducts?: Product[];
+  cheaperAlternatives?: Product[];
+  completeTheLook?: Product[];
+  priceAnchor?: number | null;
+}
+
+export interface InventoryOffer {
+  id: string;
+  externalUrl: string;
+  stock: number;
+  price: number;
+  currency: string;
+  shop?: Shop;
+  variant?: ProductVariant & {
+    product?: Product;
+  };
+}
+
+export interface Recommendation {
+  id?: string;
+  productId: string;
+  product?: Product;
+  score: number;
+  explanation?: string;
+  matchingColors?: string[];
+  complementaryColors?: string[];
+  incompatibleColors?: string[];
+  fitResult?: FitResult | null;
+  bestSizeLabel?: string | null;
+  bestFitLabel?: FitLabel | null;
+  fitWarning?: string | null;
+  reasonTags?: string[];
+  rankingBadges?: string[];
+  occasionTags?: Occasion[];
+  budgetLabel?: string | null;
+  colorInsight?: ColorInsight | null;
+  offerSummary?: OfferSummary | null;
+  cheaperAlternative?: Product | null;
+}
+
 export interface SavedLookItem {
   id: string;
   productId: string;
@@ -154,6 +240,9 @@ export interface SavedLook {
   note?: string | null;
   isWishlist?: boolean;
   items?: SavedLookItem[];
+  offerSummary?: OfferSummary | null;
+  recommendedProducts?: Product[];
+  occasionTags?: Occasion[];
 }
 
 export interface UserProfile {
@@ -207,64 +296,27 @@ export interface SessionResponse {
   user: SessionUser;
 }
 
-export interface InventoryOffer {
-  id: string;
-  externalUrl: string;
-  stock: number;
-  price: number;
-  currency: string;
-  shop?: Shop;
-  variant?: ProductVariant & {
-    product?: Product;
-  };
-}
-
-export interface ProductVariant {
-  id: string;
-  sizeLabel?: string;
-  color?: string;
-  imageUrl?: string | null;
-  price?: number;
-  currency?: string;
-  sizeChartEntries?: SizeChartEntry[];
-  inventoryOffers?: InventoryOffer[];
-}
-
-export interface Product {
-  id: string;
-  name: string;
-  slug?: string;
-  description?: string;
-  category: string;
-  baseColor: string;
-  secondaryColors?: string[];
-  materials?: string[];
-  styleTags?: string[];
-  imageUrl?: string | null;
-  brand?: { name: string };
-  variants?: ProductVariant[];
-}
-
-export interface Recommendation {
-  id?: string;
-  productId: string;
-  product?: Product;
-  score: number;
-  explanation?: string;
-  matchingColors?: string[];
-  incompatibleColors?: string[];
-  fitResult?: FitResult | null;
-  bestSizeLabel?: string | null;
-  bestFitLabel?: FitLabel | null;
-  fitWarning?: string | null;
-}
-
 export interface Shop {
   id: string;
   name: string;
   region: string;
   url?: string;
   inventoryOffers?: InventoryOffer[];
+}
+
+export interface ShopComparison {
+  productId: string | null;
+  productName: string | null;
+  variantId?: string | null;
+  recommendedSize?: string | null;
+  fitLabel?: FitLabel | null;
+  offers: InventoryOffer[];
+  bestOffer?: InventoryOffer | null;
+  lowestPrice?: number | null;
+  highestPrice?: number | null;
+  badges: string[];
+  cheaperAlternative?: Product | null;
+  bestFitAlternative?: { product: Product; fit: string | null } | null;
 }
 
 export interface UploadSession {
@@ -318,12 +370,15 @@ export interface RewardWallet {
 export interface RewardTransaction {
   id: string;
   walletId: string;
-  userId: string;
-  type: RewardTransactionType;
+  userId?: string;
   reason: RewardReason;
-  amountPoints: number;
-  balanceAfter: number;
-  description: string;
+  type: RewardTransactionType;
+  points?: number;
+  amountPoints?: number;
+  balanceAfter?: number;
+  description?: string;
+  meta?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -331,109 +386,79 @@ export interface ReferralCode {
   id: string;
   userId: string;
   code: string;
-  isActive: boolean;
   createdAt: string;
 }
 
 export interface ReferralEvent {
   id: string;
-  referralCodeId: string;
   referrerUserId: string;
   referredUserId?: string | null;
-  eventType: "CODE_CREATED" | "INVITE_SENT" | "SIGNUP" | "CONVERTED";
-  rewardPoints: number;
-  createdAt: string;
+  eventType: string;
+  meta?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
-}
-
-export interface CampaignBanner {
-  id: string;
-  campaignId: string;
-  title: string;
-  subtitle: string;
-  ctaLabel: string;
-  ctaRoute: string;
-  imageUrl?: string | null;
-  themeTone?: string | null;
-  isActive: boolean;
-  position: number;
+  rewardPoints?: number;
+  createdAt: string;
 }
 
 export interface Campaign {
   id: string;
-  slug: string;
   title: string;
-  description: string;
   theme: CampaignTheme;
   status: CampaignStatus;
-  targetAudience: string;
+  description?: string | null;
   budgetLabel?: string | null;
-  startsAt?: string | null;
-  endsAt?: string | null;
-  banners?: CampaignBanner[];
-  coupons?: Coupon[];
+  banners?: Array<{ title?: string | null; subtitle?: string | null }>;
   participation?: ChallengeParticipation | null;
+  createdAt: string;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  title: string;
+  type: CouponType;
+  value?: number;
+  description?: string | null;
+  discountValue?: number;
+  rewardCostPoints?: number | null;
+  unlockThreshold?: number | null;
+  campaign?: Campaign | null;
+  redemptions?: CouponRedemption[];
 }
 
 export interface CouponRedemption {
   id: string;
   couponId: string;
   userId: string;
-  walletId?: string | null;
   status: CouponRedemptionStatus;
-  pointsSpent: number;
   createdAt: string;
-  redeemedAt?: string | null;
-  coupon?: Coupon;
-}
-
-export interface Coupon {
-  id: string;
-  campaignId?: string | null;
-  code: string;
-  title: string;
-  description?: string | null;
-  type: CouponType;
-  discountValue: number;
-  rewardCostPoints?: number | null;
-  unlockThreshold?: number | null;
-  minSpend?: number | null;
-  isActive: boolean;
-  startsAt?: string | null;
-  endsAt?: string | null;
-  campaign?: Campaign | null;
-  redemptions?: CouponRedemption[];
 }
 
 export interface LookRating {
   id: string;
   userId: string;
-  savedLookId?: string | null;
-  tryOnRequestId?: string | null;
   productId?: string | null;
+  savedLookId?: string | null;
   rating: number;
-  comment?: string | null;
   createdAt: string;
 }
 
 export interface ShareEvent {
   id: string;
   userId: string;
-  savedLookId?: string | null;
   tryOnRequestId?: string | null;
+  savedLookId?: string | null;
   channel: string;
-  rewardGranted: number;
   createdAt: string;
 }
 
 export interface ChallengeParticipation {
   id: string;
+  challengeId: string;
   userId: string;
-  campaignId?: string | null;
-  challengeName: string;
   status: ChallengeStatus;
-  rewardPoints: number;
-  createdAt: string;
-  completedAt?: string | null;
+  rewardPoints?: number;
+  challengeName?: string;
   campaign?: Campaign | null;
+  createdAt: string;
 }

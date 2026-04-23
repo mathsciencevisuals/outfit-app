@@ -91,7 +91,7 @@ export function ReferralsScreen() {
             <View key={event.id} style={styles.itemCard}>
               <View style={styles.itemTop}>
                 <Text style={styles.itemTitle}>{event.eventType.split("_").join(" ")}</Text>
-                <Pill label={`${event.rewardPoints} pts`} tone={event.rewardPoints > 0 ? "success" : "neutral"} />
+                <Pill label={`${event.rewardPoints ?? 0} pts`} tone={(event.rewardPoints ?? 0) > 0 ? "success" : "neutral"} />
               </View>
               <Text style={styles.copy}>
                 {event.metadata ? JSON.stringify(event.metadata) : "Tracked through the referral event pipeline."}

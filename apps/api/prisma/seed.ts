@@ -12,30 +12,32 @@ const brands = [
 const shops = [
   { name: "City Threads", slug: "city-threads", url: "https://citythreads.example.com", region: "US" },
   { name: "Mode Collective", slug: "mode-collective", url: "https://modecollective.example.com", region: "EU" },
-  { name: "Sprint Supply", slug: "sprint-supply", url: "https://sprintsupply.example.com", region: "APAC" }
+  { name: "Sprint Supply", slug: "sprint-supply", url: "https://sprintsupply.example.com", region: "APAC" },
+  { name: "Campus Edit", slug: "campus-edit", url: "https://campusedit.example.com", region: "US" },
+  { name: "Night Market", slug: "night-market", url: "https://nightmarket.example.com", region: "IN" }
 ];
 
 const productDefinitions: Array<[string, string, string, string, string[], string[]]> = [
-  ["Northline", "Commuter Jacket", "outerwear", "black", ["gray"], ["urban", "minimal"]],
-  ["Northline", "Trail Overshirt", "tops", "olive", ["tan"], ["outdoor", "casual"]],
-  ["Northline", "Utility Chino", "bottoms", "camel", ["brown"], ["casual", "smart"]],
-  ["Northline", "Weatherproof Parka", "outerwear", "navy", ["black"], ["outdoor", "technical"]],
-  ["Northline", "City Knit Polo", "tops", "cream", ["brown"], ["smart", "minimal"]],
-  ["Northline", "Structured Tee", "tops", "white", ["black"], ["minimal", "casual"]],
-  ["Atelier Mono", "Tapered Trouser", "bottoms", "black", ["gray"], ["tailored", "minimal"]],
-  ["Atelier Mono", "Wool Blend Blazer", "outerwear", "charcoal", ["black"], ["tailored", "formal"]],
-  ["Atelier Mono", "Silk Camp Shirt", "tops", "blue", ["white"], ["elevated", "smart"]],
-  ["Atelier Mono", "Pleated Pant", "bottoms", "stone", ["white"], ["tailored", "smart"]],
-  ["Atelier Mono", "Studio Denim", "bottoms", "indigo", ["navy"], ["casual", "minimal"]],
-  ["Atelier Mono", "Relaxed Coat", "outerwear", "camel", ["cream"], ["tailored", "elevated"]],
-  ["Kinetic Run", "Pace Tee", "tops", "white", ["blue"], ["sport", "technical"]],
-  ["Kinetic Run", "Velocity Shorts", "bottoms", "black", ["red"], ["sport", "technical"]],
-  ["Kinetic Run", "Sprint Jacket", "outerwear", "blue", ["white"], ["sport", "technical"]],
-  ["Kinetic Run", "Recovery Hoodie", "tops", "gray", ["black"], ["sport", "casual"]],
-  ["Kinetic Run", "Flex Jogger", "bottoms", "olive", ["black"], ["sport", "casual"]],
-  ["Kinetic Run", "Cloud Runner", "footwear", "white", ["gray"], ["sport", "street"]],
-  ["Atelier Mono", "Merino Crew", "tops", "forest", ["black"], ["elevated", "minimal"]],
-  ["Northline", "Canvas Sneaker", "footwear", "white", ["tan"], ["casual", "street"]]
+  ["Northline", "Commuter Jacket", "outerwear", "black", ["gray"], ["urban", "minimal", "smart"]],
+  ["Northline", "Trail Overshirt", "tops", "olive", ["tan"], ["outdoor", "casual", "college"]],
+  ["Northline", "Utility Chino", "bottoms", "camel", ["brown"], ["casual", "smart", "interview"]],
+  ["Northline", "Weatherproof Parka", "outerwear", "navy", ["black"], ["outdoor", "technical", "streetwear"]],
+  ["Northline", "City Knit Polo", "tops", "cream", ["brown"], ["smart", "minimal", "date"]],
+  ["Northline", "Structured Tee", "tops", "white", ["black"], ["minimal", "casual", "college"]],
+  ["Atelier Mono", "Tapered Trouser", "bottoms", "black", ["gray"], ["tailored", "minimal", "formal"]],
+  ["Atelier Mono", "Wool Blend Blazer", "outerwear", "charcoal", ["black"], ["tailored", "formal", "interview"]],
+  ["Atelier Mono", "Silk Camp Shirt", "tops", "blue", ["white"], ["elevated", "smart", "date"]],
+  ["Atelier Mono", "Pleated Pant", "bottoms", "stone", ["white"], ["tailored", "smart", "interview"]],
+  ["Atelier Mono", "Studio Denim", "bottoms", "indigo", ["navy"], ["casual", "minimal", "streetwear"]],
+  ["Atelier Mono", "Relaxed Coat", "outerwear", "camel", ["cream"], ["tailored", "elevated", "date"]],
+  ["Kinetic Run", "Pace Tee", "tops", "white", ["blue"], ["sport", "technical", "college"]],
+  ["Kinetic Run", "Velocity Shorts", "bottoms", "black", ["red"], ["sport", "technical", "fest"]],
+  ["Kinetic Run", "Sprint Jacket", "outerwear", "blue", ["white"], ["sport", "technical", "streetwear"]],
+  ["Kinetic Run", "Recovery Hoodie", "tops", "gray", ["black"], ["sport", "casual", "streetwear"]],
+  ["Kinetic Run", "Flex Jogger", "bottoms", "olive", ["black"], ["sport", "casual", "college"]],
+  ["Kinetic Run", "Cloud Runner", "footwear", "white", ["gray"], ["sport", "street", "fest"]],
+  ["Atelier Mono", "Merino Crew", "tops", "forest", ["black"], ["elevated", "minimal", "date"]],
+  ["Northline", "Canvas Sneaker", "footwear", "white", ["tan"], ["casual", "street", "college"]]
 ];
 
 function brandAdjustment(brandName: string) {
@@ -130,11 +132,13 @@ async function main() {
     }
 
     const slug = `${brandName}-${name}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const basePrice =
+      brandName === "Atelier Mono" ? 129 : brandName === "Kinetic Run" ? 89 : 99;
     const variants = ["S", "M", "L"].map((size, index) => ({
       sku: `${slug}-${size.toLowerCase()}`,
       sizeLabel: size,
       color: baseColor,
-      price: new Prisma.Decimal(79 + index * 12),
+      price: new Prisma.Decimal(basePrice + index * 18 + (category === "footwear" ? 24 : category === "outerwear" ? 36 : 0)),
       imageUrl: `https://images.example.com/${slug}-${size.toLowerCase()}.jpg`
     }));
 
@@ -173,17 +177,22 @@ async function main() {
     });
 
     for (const [index, variant] of product.variants.entries()) {
-      const shop = shopRecords[index % shopRecords.length];
-      await prisma.inventoryOffer.create({
-        data: {
-          shopId: shop.id,
-          variantId: variant.id,
-          externalUrl: `${shop.url}/products/${product.slug}?sku=${variant.sku}`,
-          stock: 8 + index * 3,
-          price: new Prisma.Decimal(variant.price.toNumber() + 5),
-          currency: "USD"
+      const partnerShops = shopRecords.slice(index % shopRecords.length, (index % shopRecords.length) + 2);
+      for (const [offerIndex, shop] of partnerShops.entries()) {
+        if (!shop) {
+          continue;
         }
-      });
+        await prisma.inventoryOffer.create({
+          data: {
+            shopId: shop.id,
+            variantId: variant.id,
+            externalUrl: `${shop.url}/products/${product.slug}?sku=${variant.sku}`,
+            stock: 5 + index * 4 + offerIndex * 2,
+            price: new Prisma.Decimal(variant.price.toNumber() + 3 + offerIndex * 7),
+            currency: "USD"
+          }
+        });
+      }
     }
 
     products.push(product);
@@ -206,7 +215,10 @@ async function main() {
           weightKg: 61,
           bodyShape: "athletic",
           fitPreference: "regular",
-          stylePreference: { preferredStyles: ["minimal", "smart", "sport"] },
+          budgetMin: 90,
+          budgetMax: 180,
+          budgetLabel: "Smart spend",
+          stylePreference: { preferredStyles: ["minimal", "smart", "sport", "streetwear"] },
           preferredColors: ["black", "white", "olive", "blue"],
           avoidedColors: ["orange"]
         } as any
@@ -226,6 +238,8 @@ async function main() {
           firstName: "Admin",
           lastName: "User",
           fitPreference: "regular",
+          budgetMin: 120,
+          budgetMax: 220,
           preferredColors: ["black"],
           avoidedColors: []
         } as any
@@ -244,6 +258,8 @@ async function main() {
           firstName: "Operator",
           lastName: "User",
           fitPreference: "relaxed",
+          budgetMin: 80,
+          budgetMax: 150,
           preferredColors: ["olive"],
           avoidedColors: []
         } as any

@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { MetricTile } from "../../components/MetricTile";
@@ -9,7 +9,6 @@ import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
-import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
 
@@ -23,22 +22,15 @@ function parseStyleList(value: unknown) {
 export function ProfileScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
-  const cachedProfile = useAppStore((state) => state.profile);
-  const setProfile = useAppStore((state) => state.setProfile);
+  const profile = useAppStore((state) => state.profile);
+  const profileVersion = useAppStore((state) => state.profileVersion);
   const logout = useAppStore((state) => state.logout);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  const { data, loading, error } = useAsyncResource(async () => {
-    const profile = await mobileApi.profile(userId);
-    setProfile(profile);
-    return profile;
-  }, [userId, refreshKey]);
-
-  const profile = data ?? cachedProfile;
-  const latestMeasurement = profile?.measurements?.[0] ?? null;
+  const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -50,6 +42,32 @@ export function ProfileScreen() {
   const [preferredStyles, setPreferredStyles] = useState<string[]>([]);
   const [preferredColors, setPreferredColors] = useState<string[]>([]);
   const [avoidedColors, setAvoidedColors] = useState<string[]>([]);
+
+  const refreshProfile = useCallback(async () => {
+    if (!userId) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await mobileApi.refreshProfile(userId);
+      setError(null);
+    } catch (nextError: unknown) {
+      setError(nextError instanceof Error ? nextError.message : "Could not load profile");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void refreshProfile();
+  }, [refreshProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProfile();
+    }, [refreshProfile])
+  );
 
   useEffect(() => {
     if (!profile) {
@@ -66,19 +84,25 @@ export function ProfileScreen() {
     setPreferredColors(profile.preferredColors ?? []);
     setAvoidedColors(profile.avoidedColors ?? []);
     setPreferredStyles(parseStyleList(profile.stylePreference?.preferredStyles));
-  }, [profile]);
+    if (profile.avatarUrl) {
+      setLocalAvatarUri(null);
+    }
+  }, [profile, profileVersion]);
+
+  const latestMeasurement = profile?.measurements?.[0] ?? null;
+  const avatarSource = localAvatarUri ?? profile?.avatarUrl ?? null;
 
   const completionScore = useMemo(
     () =>
       [
-        profile?.avatarUrl,
+        avatarSource,
         profile?.heightCm,
         profile?.bodyShape,
         (profile?.preferredColors?.length ?? 0) > 0,
         preferredStyles.length > 0,
         profile?.budgetLabel ?? (profile?.budgetMin != null ? "budget" : null)
       ].filter(Boolean).length,
-    [preferredStyles.length, profile]
+    [avatarSource, preferredStyles.length, profile]
   );
 
   const toggleValue = (value: string, list: string[], setter: (next: string[]) => void) => {
@@ -93,7 +117,7 @@ export function ProfileScreen() {
     setSaving(true);
     setMessage(null);
     try {
-      const nextProfile = await mobileApi.updateProfile(userId, {
+      await mobileApi.updateProfile(userId, {
         firstName: firstName.trim() || profile.firstName,
         lastName: lastName.trim() || profile.lastName,
         avatarUploadId: profile.avatarUploadId ?? null,
@@ -103,6 +127,7 @@ export function ProfileScreen() {
         heightCm: profile.heightCm ?? null,
         weightKg: profile.weightKg ?? null,
         bodyShape: bodyShape.trim() || null,
+        fitPreference: profile.fitPreference ?? "regular",
         budgetMin: budgetMin ? Number(budgetMin) : null,
         budgetMax: budgetMax ? Number(budgetMax) : null,
         budgetLabel: budgetLabel.trim() || null,
@@ -114,9 +139,8 @@ export function ProfileScreen() {
         preferredColors,
         avoidedColors
       });
-      setProfile(nextProfile);
+      await refreshProfile();
       setMessage("Profile updated");
-      setRefreshKey((value) => value + 1);
     } catch (nextError: unknown) {
       setMessage(nextError instanceof Error ? nextError.message : "Could not update profile");
     } finally {
@@ -139,22 +163,25 @@ export function ProfileScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.6
+      quality: 0.7
     });
 
     if (result.canceled) {
       return;
     }
 
+    const asset = result.assets[0];
     setUploadingAvatar(true);
     setMessage(null);
+    setLocalAvatarUri(asset.uri);
     try {
       const upload = await mobileApi.uploadProfileImage(userId, {
-        uri: result.assets[0].uri,
-        fileName: result.assets[0].fileName,
-        mimeType: result.assets[0].mimeType
+        uri: asset.uri,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType
       });
-      const nextProfile = await mobileApi.updateProfile(userId, {
+
+      await mobileApi.updateProfile(userId, {
         firstName: firstName.trim() || profile.firstName,
         lastName: lastName.trim() || profile.lastName,
         avatarUploadId: upload.id,
@@ -164,6 +191,7 @@ export function ProfileScreen() {
         heightCm: profile.heightCm ?? null,
         weightKg: profile.weightKg ?? null,
         bodyShape: bodyShape.trim() || null,
+        fitPreference: profile.fitPreference ?? "regular",
         budgetMin: budgetMin ? Number(budgetMin) : null,
         budgetMax: budgetMax ? Number(budgetMax) : null,
         budgetLabel: budgetLabel.trim() || null,
@@ -175,10 +203,12 @@ export function ProfileScreen() {
         preferredColors,
         avoidedColors
       });
-      setProfile(nextProfile);
+
+      await refreshProfile();
+      setLocalAvatarUri(null);
       setMessage("Profile photo updated");
-      setRefreshKey((value) => value + 1);
     } catch (nextError: unknown) {
+      setLocalAvatarUri(null);
       setMessage(nextError instanceof Error ? nextError.message : "Could not upload profile image");
     } finally {
       setUploadingAvatar(false);
@@ -234,12 +264,13 @@ export function ProfileScreen() {
       >
         <View style={styles.heroTop}>
           <View style={styles.avatarWrap}>
-            {profile.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} /> : <Text style={styles.avatarFallback}>Add photo</Text>}
+            {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatar} /> : <Text style={styles.avatarFallback}>Add photo</Text>}
           </View>
           <View style={styles.heroMeta}>
             <View style={styles.pillRow}>
               <Pill label={`${completionScore}/6 core profile signals`} tone={completionScore >= 5 ? "success" : "warning"} />
               <Pill label={profile.bodyShape ?? "Body shape pending"} tone="neutral" />
+              {uploadingAvatar ? <Pill label="Syncing photo" tone="info" /> : null}
             </View>
             <Text style={styles.helperText}>Your uploaded self image is reused across profile and try-on flows.</Text>
           </View>
@@ -324,7 +355,7 @@ export function ProfileScreen() {
             <PrimaryButton
               key={`avoid-${color}`}
               onPress={() => toggleValue(color, avoidedColors, setAvoidedColors)}
-              variant={avoidedColors.includes(color) ? "ghost" : "secondary"}
+              variant={avoidedColors.includes(color) ? "primary" : "secondary"}
               size="sm"
               fullWidth={false}
             >
@@ -332,36 +363,8 @@ export function ProfileScreen() {
             </PrimaryButton>
           ))}
         </View>
-      </SectionCard>
-
-      <SectionCard eyebrow="Budget Preference" title="Set your comfort range">
-        <TextInput style={styles.input} value={budgetLabel} onChangeText={setBudgetLabel} placeholder="Budget label e.g. Campus under 999" placeholderTextColor="#978b7d" />
-        <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={budgetMin} onChangeText={setBudgetMin} placeholder="Min" keyboardType="numeric" placeholderTextColor="#978b7d" />
-          <TextInput style={[styles.input, styles.half]} value={budgetMax} onChangeText={setBudgetMax} placeholder="Max" keyboardType="numeric" placeholderTextColor="#978b7d" />
-        </View>
         <PrimaryButton onPress={saveProfile} disabled={saving}>
-          {saving ? "Saving profile..." : "Save profile preferences"}
-        </PrimaryButton>
-      </SectionCard>
-
-      <SectionCard eyebrow="Saved Outfits" title="Wishlist and outfit memory">
-        <Text style={styles.sectionText}>
-          {profile.savedLooks?.length
-            ? `You currently have ${profile.savedLooks.length} saved outfit collections visible across recommendations and results.`
-            : "No outfits saved yet. Save looks from the try-on result or recommendation screens."}
-        </Text>
-        <PrimaryButton onPress={() => router.push("/saved-looks")} variant="secondary">
-          Open saved outfits / wishlist
-        </PrimaryButton>
-      </SectionCard>
-
-      <SectionCard eyebrow="Closet Upload" title="Coming soon">
-        <Text style={styles.sectionText}>
-          Closet upload is intentionally disabled for now. This future-scoped feature will let you ingest existing wardrobe items without breaking the current flow.
-        </Text>
-        <PrimaryButton variant="ghost" disabled>
-          Closet upload coming soon
+          {saving ? "Saving..." : "Save profile"}
         </PrimaryButton>
       </SectionCard>
     </Screen>
@@ -377,48 +380,44 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: 92,
     height: 92,
-    borderRadius: 999,
+    borderRadius: 24,
+    overflow: "hidden",
     backgroundColor: "#eadcc7",
-    borderWidth: 1,
-    borderColor: "#d5c3a8",
     alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden"
+    justifyContent: "center"
   },
   avatar: {
     width: "100%",
     height: "100%"
   },
   avatarFallback: {
-    color: "#6b5b48",
-    fontSize: 13,
+    color: "#715a3f",
     fontWeight: "700"
   },
   heroMeta: {
     flex: 1,
     gap: 8
   },
-  pillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
   helperText: {
     color: "#667085",
     fontSize: 14,
-    lineHeight: 21
+    lineHeight: 20
+  },
+  pillRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
   },
   metricRow: {
     flexDirection: "row",
     gap: 10
   },
-  message: {
-    color: "#5f697d",
-    fontSize: 14,
-    lineHeight: 21
-  },
   actionButtons: {
     gap: 10
+  },
+  message: {
+    color: "#5f697d",
+    fontSize: 14
   },
   input: {
     borderWidth: 1,
@@ -430,26 +429,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#172033"
   },
-  inlineRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  half: {
-    flex: 1
-  },
   sectionText: {
-    color: "#5c6679",
+    color: "#667085",
     fontSize: 14,
     lineHeight: 21
+  },
+  choiceRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
   },
   subheading: {
     color: "#172033",
     fontSize: 14,
     fontWeight: "700"
-  },
-  choiceRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
   }
 });
