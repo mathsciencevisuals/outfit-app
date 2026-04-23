@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "prisma generate && nest build -p tsconfig.build.json",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
     "postinstall": "prisma generate || true",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/apps/api/src/main.js",
