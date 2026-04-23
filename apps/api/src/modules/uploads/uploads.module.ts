@@ -182,7 +182,8 @@ class UploadsService {
     const signature = createHash("sha1").update(signatureBase).digest("hex");
 
     const formData = new FormData();
-    formData.append("file", new Blob([file.buffer as Buffer], { type: file.mimetype ?? upload.mimeType }), upload.key.split("/").pop() ?? "upload.jpg");
+    const fileBytes = new Uint8Array(file.buffer as Buffer);
+    formData.append("file", new Blob([fileBytes], { type: file.mimetype ?? upload.mimeType }), upload.key.split("/").pop() ?? "upload.jpg");
     formData.append("api_key", apiKey);
     formData.append("timestamp", String(timestamp));
     formData.append("signature", signature);
