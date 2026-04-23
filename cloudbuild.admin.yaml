@@ -1,0 +1,42 @@
+substitutions:
+  _REGION: europe-west4
+  _AR_REPOSITORY: outfit-app
+  _SERVICE_NAME: fitme-admin-web
+  _IMAGE_NAME: admin-web
+  _PLATFORM: managed
+  _SERVICE_ACCOUNT: fitme-admin-runner@${PROJECT_ID}.iam.gserviceaccount.com
+  _API_URL: https://fitme-api-REPLACE.a.run.app
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - apps/admin-web/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --platform=${_PLATFORM}
+      - --region=${_REGION}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}
+      - --service-account=${_SERVICE_ACCOUNT}
+      - --allow-unauthenticated
+      - --port=8080
+      - --cpu=1
+      - --memory=512Mi
+      - --min-instances=0
+      - --max-instances=5
+      - --set-env-vars=NODE_ENV=production,NEXT_PUBLIC_API_URL=${_API_URL}
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}
