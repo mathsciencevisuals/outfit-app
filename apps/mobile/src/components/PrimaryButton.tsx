@@ -52,30 +52,35 @@ const styles = StyleSheet.create({
     borderWidth: 1.5
   },
   buttonMedium: {
-    minHeight: 54,
+    minHeight: 50,
     paddingHorizontal: 20,
-    paddingVertical: 14
+    paddingVertical: 13
   },
   buttonSmall: {
-    minHeight: 42,
-    paddingHorizontal: 16,
+    minHeight: 40,
+    paddingHorizontal: 15,
     paddingVertical: 10
   },
   primary: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink
+    backgroundColor: colors.accent,
+    borderColor: colors.accentStrong,
+    shadowColor: colors.accentStrong,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 6
   },
   secondary: {
-    backgroundColor: colors.panelMuted,
+    backgroundColor: colors.panelStrong,
     borderColor: colors.lineStrong
   },
   ghost: {
-    backgroundColor: "rgba(255, 249, 241, 0.72)",
-    borderColor: colors.lineStrong
+    backgroundColor: "rgba(255,255,255,0.62)",
+    borderColor: colors.line
   },
   text: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
     letterSpacing: 0.2
   },
   primaryText: {

@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
+import { colors } from "../../theme/design";
 import type { Occasion, Recommendation } from "../../types/api";
 
 const occasions: Array<Occasion | "all"> = ["all", "casual", "streetwear", "formal", "college", "interview", "date", "fest"];
@@ -61,7 +62,7 @@ export function RecommendationsScreen() {
           title="Recommendations"
           message="Recommendations could not be loaded."
           actionLabel="Back to discover"
-          onRetry={() => router.push("/discover")}
+          onRetry={() => router.push("/feed")}
         />
       </Screen>
     );
@@ -74,7 +75,7 @@ export function RecommendationsScreen() {
           title="No recommendations yet"
           message="Complete your profile and measurements to unlock clearer fit, style, and budget recommendations."
           actionLabel="Go to profile"
-          onAction={() => router.push("/profile")}
+          onAction={() => router.push("/account")}
         />
       </Screen>
     );
@@ -87,15 +88,16 @@ export function RecommendationsScreen() {
       <SectionCard
         eyebrow="Recommendations"
         title="What fits your profile best"
-        subtitle="Ranking blends fit confidence, style preference, occasion, budget, saved looks, and retail context."
+        subtitle="The layout stays lighter and cleaner, but the hero is sharper and the next actions are more obvious."
       >
-        <View style={styles.headerRow}>
+        <View style={styles.headerCard}>
           <View style={styles.headerCopy}>
             <Text style={styles.headerLabel}>Curated now</Text>
-            <Text style={styles.headerText}>Use these cards to move straight into shop comparison or try-on without losing context.</Text>
+            <Text style={styles.headerTitle}>{best.product?.name ?? "Top recommendation"}</Text>
+            <Text style={styles.headerText}>Use these ranked cards to move straight into shop comparison or try-on without losing fit and budget context.</Text>
           </View>
-          <Pressable onPress={() => router.push("/profile")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
-            <Feather name="user" size={14} color="#182033" />
+          <Pressable onPress={() => router.push("/account")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
+            <Feather name="user" size={14} color={colors.ink} />
             <Text style={styles.profileChipText}>Profile</Text>
           </Pressable>
         </View>
@@ -127,10 +129,11 @@ export function RecommendationsScreen() {
           onAction={() => setActiveFilter("All")}
         />
       ) : (
-        <SectionCard eyebrow="Shortlist" title="Recommendation cards" subtitle="Each card keeps the next action obvious so users can move forward without hunting for the right entry point.">
-          {filtered.map((item: Recommendation) => (
+        <SectionCard eyebrow="Shortlist" title="Recommendation cards" subtitle="Fit, budget, color, and shop comparison stay readable without flattening the visual hierarchy.">
+          {filtered.map((item: Recommendation, index) => (
             <View key={item.id ?? item.productId} style={styles.cardWrap}>
               <ProductCard
+                tone={index === 0 ? "dark" : "light"}
                 title={item.product?.name ?? item.productId}
                 subtitle={productSubtitle(item.product)}
                 badge={recommendationBadge(item)}
@@ -147,9 +150,9 @@ export function RecommendationsScreen() {
                   item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : item.budgetLabel ?? null
                 }
                 primaryLabel="Compare shops"
-                onPrimaryPress={() => router.push("/shops")}
+                onPrimaryPress={() => router.push("/retail")}
                 secondaryLabel="Try on now"
-                onSecondaryPress={() => router.push("/tryon-upload")}
+                onSecondaryPress={() => router.push("/try-on")}
               />
               <View style={styles.insightCard}>
                 <Text style={styles.insightTitle}>Color and budget read</Text>
@@ -185,43 +188,51 @@ export function RecommendationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+  headerCard: {
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
     gap: 12
   },
   headerCopy: {
-    flex: 1,
     gap: 4
   },
   headerLabel: {
-    color: "#846746",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    color: colors.brand,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
     textTransform: "uppercase"
   },
+  headerTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "700"
+  },
   headerText: {
-    color: "#647183",
-    fontSize: 14,
-    lineHeight: 21
+    color: colors.inkSoft,
+    fontSize: 12,
+    lineHeight: 18
   },
   profileChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
     borderRadius: 999,
-    backgroundColor: "#efe3cf",
+    backgroundColor: colors.panelStrong,
     borderWidth: 1,
-    borderColor: "#dcc8ab"
+    borderColor: colors.line
   },
   profileChipText: {
-    color: "#182033",
-    fontSize: 13,
-    fontWeight: "700"
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800"
   },
   pressed: {
     opacity: 0.92
@@ -245,22 +256,22 @@ const styles = StyleSheet.create({
   },
   insightCard: {
     borderRadius: 20,
-    padding: 16,
-    backgroundColor: "#f8f2ea",
+    padding: 14,
+    backgroundColor: colors.panelMuted,
     borderWidth: 1,
-    borderColor: "#e5d7c0",
+    borderColor: colors.line,
     gap: 6
   },
   insightTitle: {
-    color: "#182033",
-    fontSize: 13,
-    fontWeight: "700",
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.7
+    letterSpacing: 1
   },
   insightText: {
-    color: "#5c6679",
-    fontSize: 14,
-    lineHeight: 21
+    color: colors.inkSoft,
+    fontSize: 12,
+    lineHeight: 18
   }
 });

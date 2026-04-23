@@ -1,5 +1,6 @@
+import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { MetricTile } from "../../components/MetricTile";
@@ -12,10 +13,16 @@ import { SegmentedControl } from "../../components/SegmentedControl";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
-import { colors } from "../../theme/design";
+import { colors, radius } from "../../theme/design";
 import type { Occasion, Product } from "../../types/api";
 
 const occasions: Occasion[] = ["casual", "streetwear", "formal", "college", "interview", "date", "fest"];
+
+const quickActions = [
+  { id: "try-on", title: "Try a fit", subtitle: "Camera or upload", icon: "camera", route: "/try-on" },
+  { id: "saved", title: "Wardrobe", subtitle: "Saved looks", icon: "heart", route: "/saved" },
+  { id: "shops", title: "Shop now", subtitle: "Best offers", icon: "shopping-bag", route: "/retail" }
+] as const;
 
 export function DiscoverScreen() {
   const router = useRouter();
@@ -41,7 +48,7 @@ export function DiscoverScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen tone="dark">
         <LoadingState title="Feed" subtitle="Blending catalog, fit context, and style direction." />
       </Screen>
     );
@@ -49,7 +56,7 @@ export function DiscoverScreen() {
 
   if (error) {
     return (
-      <Screen>
+      <Screen tone="dark">
         <ErrorState title="Feed" message="The product feed is unavailable right now." actionLabel="View profile" onRetry={() => router.push("/account")} />
       </Screen>
     );
@@ -57,7 +64,7 @@ export function DiscoverScreen() {
 
   if (products.length === 0) {
     return (
-      <Screen>
+      <Screen tone="dark">
         <EmptyState title="No products available" message="The catalog endpoint returned no product cards to surface." actionLabel="See recommendations" onAction={() => router.push("/recommendations")} />
       </Screen>
     );
@@ -66,42 +73,75 @@ export function DiscoverScreen() {
   const featured = detail ?? filtered[0] ?? products[0];
 
   return (
-    <Screen>
+    <Screen tone="dark">
       <SectionCard
+        tone="dark"
         eyebrow="Feed"
-        title="For you"
-        subtitle="Swipe through mood-led looks and jump into try-on instantly."
+        title="Immersive fashion discovery"
+        subtitle="Keep the premium tab shell and cleaner typography, but push the home screen into a darker, more editorial feed."
       >
-        <View style={styles.feedScreen}>
-          <View style={styles.feedOverlay} />
-          <View style={styles.feedCopy}>
-            <View style={styles.heroRow}>
-              <Pill label={featured?.styleTags?.[0] ?? "Cyber core"} tone="neutral" />
-              {featured?.offerSummary?.lowestPrice != null ? <Pill label={`$${Math.round(featured.offerSummary.lowestPrice)}`} tone="accent" /> : null}
-            </View>
-            <Text style={styles.feedTitle}>{featured?.name ?? "Mesh-layer street look"}</Text>
-            <Text style={styles.feedText}>
-              {featured?.description ?? "Low-rise denim, cropped bomber, chrome accessories. Swipe up for the next fit or tap Try On."}
+        <View style={styles.hero}>
+          <View style={styles.heroGlow} />
+          <View style={styles.heroGlowSecondary} />
+          <View style={styles.heroHeader}>
+            <Pill label={featured?.styleTags?.[0] ?? "Style DNA"} tone="accent" />
+            {featured?.offerSummary?.lowestPrice != null ? <Pill label={`From $${Math.round(featured.offerSummary.lowestPrice)}`} tone="warning" /> : null}
+          </View>
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroLabel}>Tonight's top frame</Text>
+            <Text style={styles.heroTitle}>{featured?.name ?? "Future sport layering"}</Text>
+            <Text style={styles.heroText}>
+              {featured?.description ?? "A darker, richer feed hero with clearer action order: discover, try on, save, then compare offers."}
             </Text>
           </View>
-          <View style={styles.feedActions}>
-            <View style={styles.feedFab}><Text style={styles.feedFabText}>♡</Text></View>
-            <View style={styles.feedFab}><Text style={styles.feedFabText}>↗</Text></View>
-            <PrimaryButton onPress={() => router.push("/try-on")} size="sm" fullWidth={false}>
-              Try On
+          <View style={styles.heroMetrics}>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroMetricValue}>{featured?.fitPreview?.recommendedSize ?? "--"}</Text>
+              <Text style={styles.heroMetricLabel}>Best size</Text>
+            </View>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroMetricValue}>{featured?.offerSummary?.offerCount ?? 0}</Text>
+              <Text style={styles.heroMetricLabel}>Offer paths</Text>
+            </View>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroMetricValue}>
+                {featured?.fitPreview?.confidenceScore != null ? `${Math.round(featured.fitPreview.confidenceScore * 100)}%` : "--"}
+              </Text>
+              <Text style={styles.heroMetricLabel}>Fit confidence</Text>
+            </View>
+          </View>
+          <View style={styles.heroActions}>
+            <PrimaryButton onPress={() => router.push("/try-on")} fullWidth={false}>
+              Try this look
+            </PrimaryButton>
+            <PrimaryButton onPress={() => router.push("/retail")} variant="secondary" fullWidth={false}>
+              Compare offers
             </PrimaryButton>
           </View>
         </View>
+
         <SegmentedControl options={occasions} selected={occasion} onSelect={(value) => setOccasion(value as Occasion)} />
       </SectionCard>
+
+      <View style={styles.quickGrid}>
+        {quickActions.map((action) => (
+          <Pressable key={action.id} onPress={() => router.push(action.route)} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+            <View style={styles.quickIcon}>
+              <Feather name={action.icon} size={18} color={colors.inkOnDark} />
+            </View>
+            <Text style={styles.quickTitle}>{action.title}</Text>
+            <Text style={styles.quickSubtitle}>{action.subtitle}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       {featured ? (
         <SectionCard
           eyebrow="Spotlight"
           title={featured.name}
-          subtitle={detailLoading ? "Refreshing feed spotlight..." : "The hero keeps fit preview, price range, and shopping next steps visible."}
+          subtitle={detailLoading ? "Refreshing spotlight detail..." : "Fit, price, and commerce context stay visible without crowding the layout."}
         >
-          <View style={styles.heroRow}>
+          <View style={styles.row}>
             {(featured.occasionTags ?? []).slice(0, 3).map((tag) => (
               <Pill key={tag} label={tag} tone="info" />
             ))}
@@ -119,22 +159,20 @@ export function DiscoverScreen() {
             <MetricTile label="Offers" value={`${featured.offerSummary?.offerCount ?? 0}`} caption="Retail comparison ready" />
           </View>
           {featured.fitPreview ? (
-            <View style={styles.heroRow}>
+            <View style={styles.row}>
               <Pill label={`Size ${featured.fitPreview.recommendedSize ?? "--"}`} tone="success" />
               <Pill label={`${featured.fitPreview.fitLabel} fit`} tone="neutral" />
               <Pill label={`${Math.round(featured.fitPreview.confidenceScore * 100)}% confidence`} tone="info" />
             </View>
           ) : null}
-          <PrimaryButton onPress={() => router.push("/retail")} variant="secondary">
-            Compare offers
-          </PrimaryButton>
         </SectionCard>
       ) : null}
 
-      <SectionCard eyebrow="Feed Stack" title="Curated for your profile">
+      <SectionCard eyebrow="Discovery Cards" title="Curated for your profile" subtitle="Bolder cards keep the CTA hierarchy obvious while preserving fit and commerce integration.">
         {filtered.map((product: Product, index) => (
           <ProductCard
             key={product.id}
+            tone={index === 0 ? "dark" : "light"}
             title={product.name}
             subtitle={productSubtitle(product)}
             badge={index === 0 ? "Hero piece" : `Look ${index + 1}`}
@@ -154,64 +192,129 @@ export function DiscoverScreen() {
 }
 
 const styles = StyleSheet.create({
-  heroRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  feedScreen: {
+  hero: {
     position: "relative",
-    minHeight: 420,
-    borderRadius: 24,
+    minHeight: 340,
+    borderRadius: 28,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "#101522",
-    justifyContent: "flex-end",
-    padding: 14
+    backgroundColor: colors.heroStart,
+    padding: 18,
+    justifyContent: "space-between"
   },
-  feedOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#251738",
-    opacity: 0.94
-  },
-  feedCopy: {
-    zIndex: 1,
-    marginRight: 64,
-    gap: 8
-  },
-  feedTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: "700",
-    letterSpacing: -0.4
-  },
-  feedText: {
-    color: "rgba(255,255,255,0.86)",
-    fontSize: 13,
-    lineHeight: 19
-  },
-  feedActions: {
+  heroGlow: {
     position: "absolute",
-    right: 12,
-    bottom: 18,
-    zIndex: 1,
-    gap: 10,
-    alignItems: "center"
+    top: -36,
+    right: -22,
+    width: 190,
+    height: 190,
+    borderRadius: radius.pill,
+    backgroundColor: colors.heroGlow
   },
-  feedFab: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
+  heroGlowSecondary: {
+    position: "absolute",
+    bottom: -56,
+    left: -30,
+    width: 180,
+    height: 180,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(47,109,246,0.2)"
+  },
+  heroHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap"
+  },
+  heroCopy: {
+    gap: 8,
+    marginTop: 56
+  },
+  heroLabel: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  heroTitle: {
+    color: colors.inkOnDark,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "700"
+  },
+  heroText: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 13,
+    lineHeight: 20,
+    maxWidth: "88%"
+  },
+  heroMetrics: {
+    flexDirection: "row",
+    gap: 10
+  },
+  heroMetric: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.lineDark
+  },
+  heroMetricValue: {
+    color: colors.inkOnDark,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: "800"
+  },
+  heroMetricLabel: {
+    marginTop: 4,
+    color: colors.inkOnDarkSoft,
+    fontSize: 11
+  },
+  heroActions: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap"
+  },
+  quickGrid: {
+    flexDirection: "row",
+    gap: 10
+  },
+  quickCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.lineDark
+  },
+  quickIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.16)"
+    backgroundColor: colors.glassStrong,
+    marginBottom: 16
   },
-  feedFabText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700"
+  quickTitle: {
+    color: colors.inkOnDark,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  quickSubtitle: {
+    marginTop: 4,
+    color: colors.inkOnDarkSoft,
+    fontSize: 11,
+    lineHeight: 16
+  },
+  row: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
   },
   metricRow: {
     flexDirection: "row",
@@ -219,7 +322,10 @@ const styles = StyleSheet.create({
   },
   supportText: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: 13,
+    lineHeight: 20
+  },
+  pressed: {
+    opacity: 0.92
   }
 });

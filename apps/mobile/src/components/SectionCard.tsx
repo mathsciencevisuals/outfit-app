@@ -7,13 +7,14 @@ export function SectionCard({
   title,
   subtitle,
   eyebrow,
-  children
-}: PropsWithChildren<{ title: string; subtitle?: string; eyebrow?: string }>) {
+  children,
+  tone = "light"
+}: PropsWithChildren<{ title: string; subtitle?: string; eyebrow?: string; tone?: "light" | "dark" }>) {
   return (
-    <View style={styles.card}>
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    <View style={[styles.card, tone === "dark" && styles.cardDark]}>
+      {eyebrow ? <Text style={[styles.eyebrow, tone === "dark" && styles.eyebrowDark]}>{eyebrow}</Text> : null}
+      <Text style={[styles.title, tone === "dark" && styles.titleDark]}>{title}</Text>
+      {subtitle ? <Text style={[styles.subtitle, tone === "dark" && styles.subtitleDark]}>{subtitle}</Text> : null}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -27,25 +28,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     gap: 6,
+    overflow: "hidden",
     ...shadow
   },
+  cardDark: {
+    backgroundColor: colors.panelDark,
+    borderColor: colors.lineDark
+  },
   eyebrow: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     color: colors.brand
   },
+  eyebrowDark: {
+    color: colors.inkOnDarkSoft
+  },
   title: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 28,
     color: colors.ink,
     fontFamily: fonts.display
   },
+  titleDark: {
+    color: colors.inkOnDark
+  },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 20,
     color: colors.inkSoft
+  },
+  subtitleDark: {
+    color: colors.inkOnDarkSoft
   },
   content: {
     marginTop: 10,

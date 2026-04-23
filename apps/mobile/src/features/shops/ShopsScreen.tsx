@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import { colors, fonts, radius } from "../../theme/design";
+import { colors, radius } from "../../theme/design";
 import type { Recommendation } from "../../types/api";
 
 export function ShopsScreen() {
@@ -68,11 +68,12 @@ export function ShopsScreen() {
       <SectionCard
         eyebrow="Shops"
         title="Retail comparison built for handoff"
-        subtitle="Compare best price, stock, and recommended size before you leave the app for the retailer."
+        subtitle="Badges, pricing, and CTA order are stronger, but the screen still reads as a practical commerce surface."
       >
-        <View style={styles.topRow}>
+        <View style={styles.topCard}>
           <View style={styles.headerCopy}>
             <Text style={styles.headerLabel}>Retail handoff</Text>
+            <Text style={styles.headerTitle}>{comparison?.productName ?? items[0]?.product?.name ?? "Shop comparison"}</Text>
             <Text style={styles.headerText}>Keep selection, fit context, and price clarity visible before sending users off-platform.</Text>
           </View>
           <Pressable onPress={() => router.push("/recommendations")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
@@ -113,25 +114,27 @@ export function ShopsScreen() {
           </SectionCard>
 
           {comparison.bestOffer ? (
-            <SectionCard eyebrow="Best Offer" title={`${comparison.bestOffer.shop?.name ?? "Retailer"} leads`} subtitle="This CTA is the clearest outbound path based on visible price and availability.">
-              <View style={styles.row}>
-                <Pill label={`$${Math.round(comparison.bestOffer.price ?? 0)}`} tone="warning" />
-                <Pill label={(comparison.bestOffer.stock ?? 0) > 0 ? "In stock" : "Sold out"} tone={(comparison.bestOffer.stock ?? 0) > 0 ? "success" : "danger"} />
-                <Pill label={comparison.bestOffer.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"} tone="info" />
-              </View>
-              <Text style={styles.offerText}>This is the cleanest handoff right now based on visible price and availability.</Text>
-              <View style={styles.ctaRow}>
-                <PrimaryButton onPress={() => comparison.bestOffer?.externalUrl && Linking.openURL(comparison.bestOffer.externalUrl)}>
-                  Buy now
-                </PrimaryButton>
-                <PrimaryButton onPress={() => router.push("/try-on")} variant="secondary">
-                  Try on again
-                </PrimaryButton>
+            <SectionCard eyebrow="Best Offer" title={`${comparison.bestOffer.shop?.name ?? "Retailer"} leads`} subtitle="The strongest CTA stays obvious: best price, visible stock, then the outbound path.">
+              <View style={styles.bestOfferCard}>
+                <View style={styles.row}>
+                  <Pill label={`$${Math.round(comparison.bestOffer.price ?? 0)}`} tone="warning" />
+                  <Pill label={(comparison.bestOffer.stock ?? 0) > 0 ? "In stock" : "Sold out"} tone={(comparison.bestOffer.stock ?? 0) > 0 ? "success" : "danger"} />
+                  <Pill label={comparison.bestOffer.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"} tone="info" />
+                </View>
+                <Text style={styles.offerText}>This is the cleanest handoff right now based on visible price and availability.</Text>
+                <View style={styles.ctaRow}>
+                  <PrimaryButton onPress={() => comparison.bestOffer?.externalUrl && Linking.openURL(comparison.bestOffer.externalUrl)}>
+                    Buy now
+                  </PrimaryButton>
+                  <PrimaryButton onPress={() => router.push("/try-on")} variant="secondary">
+                    Try on again
+                  </PrimaryButton>
+                </View>
               </View>
             </SectionCard>
           ) : null}
 
-          <SectionCard eyebrow="Partner Cards" title="Shop comparison" subtitle="Keep retailer cards consistent so price, stock, and CTA hierarchy scan quickly.">
+          <SectionCard eyebrow="Partner Cards" title="Shop comparison" subtitle="Retailer cards stay readable while the badges and CTA hierarchy become more assertive.">
             {comparison.offers.map((offer) => (
               <View key={offer.id} style={styles.shopCard}>
                 <View style={styles.shopHeader}>
@@ -143,15 +146,15 @@ export function ShopsScreen() {
                 </View>
                 <View style={styles.offerStrip}>
                   <View style={styles.offerMetric}>
-                    <Feather name="tag" size={16} color={colors.ink} />
+                    <Feather name="tag" size={15} color={colors.accent} />
                     <Text style={styles.offerLabel}>${Math.round(offer.price)}</Text>
                   </View>
                   <View style={styles.offerMetric}>
-                    <Feather name="box" size={16} color={colors.ink} />
+                    <Feather name="box" size={15} color={colors.accent} />
                     <Text style={styles.offerLabel}>{offer.stock} units</Text>
                   </View>
                   <View style={styles.offerMetric}>
-                    <Feather name="shopping-bag" size={16} color={colors.ink} />
+                    <Feather name="shopping-bag" size={15} color={colors.accent} />
                     <Text style={styles.offerLabel}>{offer.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"}</Text>
                   </View>
                 </View>
@@ -178,43 +181,51 @@ export function ShopsScreen() {
 }
 
 const styles = StyleSheet.create({
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+  topCard: {
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
     gap: 12
   },
   headerCopy: {
-    flex: 1,
     gap: 4
   },
   headerLabel: {
     color: colors.brand,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
     textTransform: "uppercase"
+  },
+  headerTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "700"
   },
   headerText: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: 12,
+    lineHeight: 18
   },
   profileChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
     borderRadius: radius.pill,
-    backgroundColor: colors.pageStrong,
+    backgroundColor: colors.panelStrong,
     borderWidth: 1,
-    borderColor: colors.lineStrong
+    borderColor: colors.line
   },
   profileChipText: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "700"
+    fontSize: 12,
+    fontWeight: "800"
   },
   pressed: {
     opacity: 0.92
@@ -228,12 +239,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10
   },
+  bestOfferCard: {
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 12
+  },
   ctaRow: {
     gap: 10
   },
   shopCard: {
     borderRadius: radius.lg,
-    backgroundColor: "#fcf8f2",
+    backgroundColor: colors.panelStrong,
     borderWidth: 1,
     borderColor: colors.line,
     padding: 14,
@@ -251,55 +270,56 @@ const styles = StyleSheet.create({
   },
   shopTitle: {
     color: colors.ink,
-    fontSize: 24,
-    lineHeight: 28,
-    fontFamily: fonts.display
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: "700"
   },
   shopSubtitle: {
     color: colors.inkSoft,
-    fontSize: 14
+    fontSize: 12
   },
   offerStrip: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     flexWrap: "wrap"
   },
   offerMetric: {
     flexDirection: "row",
-    gap: 8,
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    backgroundColor: colors.pageStrong
+    gap: 6,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: colors.accentSoft
   },
   offerLabel: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "600"
+    fontSize: 12,
+    fontWeight: "800"
   },
   offerText: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: 12,
+    lineHeight: 18
   },
   altCard: {
-    borderRadius: radius.lg,
-    backgroundColor: "#f8f2ea",
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: colors.infoSoft,
     borderWidth: 1,
-    borderColor: colors.line,
-    padding: 14,
+    borderColor: "rgba(47,109,246,0.16)",
     gap: 10
   },
   altTitle: {
-    color: colors.ink,
-    fontSize: 24,
-    lineHeight: 28,
-    fontFamily: fonts.display
+    color: colors.info,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1
   },
   altText: {
-    color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 18
   }
 });

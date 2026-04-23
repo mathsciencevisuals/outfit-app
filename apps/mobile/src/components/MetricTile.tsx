@@ -14,7 +14,9 @@ export function MetricTile({
   return (
     <View style={styles.tile}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      <Text numberOfLines={1} style={styles.value}>
+        {value}
+      </Text>
       {caption ? <Text style={styles.caption}>{caption}</Text> : null}
     </View>
   );
@@ -24,7 +26,7 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: "#fcf8f2",
+    backgroundColor: colors.panelStrong,
     borderRadius: radius.lg,
     padding: 14,
     borderWidth: 1,
@@ -33,20 +35,20 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.brand,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.8
+    letterSpacing: 1
   },
   value: {
     color: colors.ink,
-    fontSize: 24,
-    lineHeight: 28,
+    fontSize: 20,
+    lineHeight: 24,
     fontFamily: fonts.display
   },
   caption: {
     color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18
+    fontSize: 11,
+    lineHeight: 16
   }
 });

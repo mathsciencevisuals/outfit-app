@@ -15,7 +15,7 @@ export function NavigationCard({ icon, title, subtitle, badge, onPress }: Naviga
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.iconWrap}>
-        <Feather name={icon} size={18} color={colors.ink} />
+        <Feather name={icon} size={17} color={colors.ink} />
       </View>
       <View style={styles.copy}>
         <View style={styles.titleRow}>
@@ -24,7 +24,9 @@ export function NavigationCard({ icon, title, subtitle, badge, onPress }: Naviga
         </View>
         <Text style={styles.subtitle}>{subtitle}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.brand} />
+      <View style={styles.chevronWrap}>
+        <Feather name="chevron-right" size={17} color={colors.brand} />
+      </View>
     </Pressable>
   );
 }
@@ -33,11 +35,11 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
+    gap: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
     borderRadius: radius.lg,
-    backgroundColor: "#fcf8f2",
+    backgroundColor: colors.panelStrong,
     borderWidth: 1,
     borderColor: colors.line
   },
@@ -48,10 +50,18 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 14,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.pageStrong
+  },
+  chevronWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.panelMuted
   },
   copy: {
     flex: 1,
@@ -65,23 +75,23 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: "700"
+    fontSize: 15,
+    fontWeight: "800"
   },
   subtitle: {
     color: colors.inkSoft,
-    fontSize: 13,
-    lineHeight: 19
+    fontSize: 12,
+    lineHeight: 18
   },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radius.pill,
-    backgroundColor: colors.pageStrong,
-    color: colors.brand,
-    fontSize: 11,
-    fontWeight: "700",
+    backgroundColor: colors.accentSoft,
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.5
+    letterSpacing: 0.7
   }
 });

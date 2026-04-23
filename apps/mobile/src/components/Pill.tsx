@@ -47,42 +47,42 @@ export function Pill({
 const styles = StyleSheet.create({
   base: {
     borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     alignSelf: "flex-start",
     borderWidth: 1
   },
   neutral: {
-    backgroundColor: "#efe5d7",
+    backgroundColor: colors.panelStrong,
     borderColor: colors.line
   },
   accent: {
-    backgroundColor: "#dde5ea",
-    borderColor: "#c8d4dc"
+    backgroundColor: colors.accentSoft,
+    borderColor: "rgba(99,91,255,0.24)"
   },
   success: {
-    backgroundColor: "#ddefe4",
-    borderColor: "#bfddcc"
+    backgroundColor: colors.successSoft,
+    borderColor: "rgba(26,163,111,0.18)"
   },
   warning: {
-    backgroundColor: "#f5e5d3",
-    borderColor: "#ebc89a"
+    backgroundColor: colors.warningSoft,
+    borderColor: "rgba(217,139,25,0.18)"
   },
   danger: {
-    backgroundColor: "#f2dfdb",
-    borderColor: "#dfb5ad"
+    backgroundColor: colors.dangerSoft,
+    borderColor: "rgba(213,91,103,0.2)"
   },
   info: {
-    backgroundColor: "#e4edf7",
-    borderColor: "#c7d9eb"
+    backgroundColor: colors.infoSoft,
+    borderColor: "rgba(47,109,246,0.18)"
   },
   text: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "800",
     letterSpacing: 0.3
   },
   neutralText: {
-    color: "#6a5742"
+    color: colors.brand
   },
   accentText: {
     color: colors.accent

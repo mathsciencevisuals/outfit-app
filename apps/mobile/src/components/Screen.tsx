@@ -3,12 +3,25 @@ import { ScrollView, StyleSheet, View } from "react-native";
 
 import { colors } from "../theme/design";
 
-export function Screen({ children }: PropsWithChildren) {
+export function Screen({
+  children,
+  tone = "light"
+}: PropsWithChildren<{ tone?: "light" | "dark" }>) {
   return (
-    <ScrollView contentContainerStyle={styles.content} style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.glowTop} />
-      <View style={styles.glowRight} />
-      <View style={styles.glowMiddle} />
+    <ScrollView contentContainerStyle={styles.content} style={[styles.container, tone === "dark" && styles.containerDark]} showsVerticalScrollIndicator={false}>
+      {tone === "light" ? (
+        <>
+          <View style={styles.glowTop} />
+          <View style={styles.glowRight} />
+          <View style={styles.glowMiddle} />
+        </>
+      ) : (
+        <>
+          <View style={styles.darkGlowTop} />
+          <View style={styles.darkGlowBottom} />
+          <View style={styles.darkGlowSide} />
+        </>
+      )}
       <View style={styles.body}>{children}</View>
     </ScrollView>
   );
@@ -19,9 +32,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.page
   },
+  containerDark: {
+    backgroundColor: colors.panelDarkStrong
+  },
   content: {
     paddingHorizontal: 18,
-    paddingTop: 20,
+    paddingTop: 18,
     paddingBottom: 144
   },
   body: {
@@ -29,32 +45,59 @@ const styles = StyleSheet.create({
   },
   glowTop: {
     position: "absolute",
-    top: -56,
-    right: -18,
+    top: -72,
+    right: -22,
     width: 240,
     height: 240,
     borderRadius: 999,
-    backgroundColor: "#f1ddc0",
-    opacity: 0.68
+    backgroundColor: "#e4dcff",
+    opacity: 0.8
   },
   glowRight: {
     position: "absolute",
-    top: 112,
-    right: -60,
-    width: 150,
-    height: 150,
+    top: 120,
+    right: -50,
+    width: 170,
+    height: 170,
     borderRadius: 999,
-    backgroundColor: "#efe1cd",
-    opacity: 0.72
+    backgroundColor: "#d8e4ff",
+    opacity: 0.68
   },
   glowMiddle: {
     position: "absolute",
-    top: 210,
-    left: -96,
+    top: 260,
+    left: -110,
     width: 220,
     height: 220,
     borderRadius: 999,
-    backgroundColor: "#ead8c9",
-    opacity: 0.52
+    backgroundColor: "#e9eefb",
+    opacity: 0.9
+  },
+  darkGlowTop: {
+    position: "absolute",
+    top: -90,
+    right: -40,
+    width: 280,
+    height: 280,
+    borderRadius: 999,
+    backgroundColor: colors.heroGlow
+  },
+  darkGlowBottom: {
+    position: "absolute",
+    bottom: 180,
+    left: -90,
+    width: 250,
+    height: 250,
+    borderRadius: 999,
+    backgroundColor: "rgba(63,96,255,0.18)"
+  },
+  darkGlowSide: {
+    position: "absolute",
+    top: 220,
+    right: -80,
+    width: 180,
+    height: 180,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)"
   }
 });

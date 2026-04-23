@@ -42,22 +42,27 @@ const styles = StyleSheet.create({
   },
   option: {
     borderRadius: radius.pill,
-    paddingVertical: 11,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     alignItems: "center"
   },
   optionActive: {
     backgroundColor: colors.panelStrong,
     borderWidth: 1,
-    borderColor: colors.line
+    borderColor: colors.line,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3
   },
   pressed: {
     opacity: 0.94
   },
   label: {
     color: colors.brand,
-    fontSize: 13,
-    fontWeight: "700"
+    fontSize: 12,
+    fontWeight: "800"
   },
   labelActive: {
     color: colors.ink

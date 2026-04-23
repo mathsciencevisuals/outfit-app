@@ -1,5 +1,6 @@
+import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { Image, Linking, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { InfoRow } from "../../components/InfoRow";
@@ -12,7 +13,7 @@ import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import { colors, fonts, radius } from "../../theme/design";
+import { colors, radius } from "../../theme/design";
 import type { FitIssue, FitResult, Recommendation, TryOnRequest } from "../../types/api";
 
 const loadingQuotes = [
@@ -106,7 +107,9 @@ export function TryOnResultScreen() {
 
         setData(nextRequest);
         setError(null);
-        setLoading(false);
+
+        const isPending = nextRequest.status === "QUEUED" || nextRequest.status === "PROCESSING";
+        setLoading(isPending);
 
         if (nextRequest.variant?.product?.id) {
           const [preview, nextRecommendations] = await Promise.all([
@@ -122,7 +125,7 @@ export function TryOnResultScreen() {
           }
         }
 
-        if (nextRequest.status === "QUEUED" || nextRequest.status === "PROCESSING") {
+        if (isPending) {
           timeoutId = setTimeout(load, 2500);
         }
       } catch (nextError: unknown) {
@@ -135,7 +138,6 @@ export function TryOnResultScreen() {
       }
     };
 
-    setLoading(true);
     void load();
 
     return () => {
@@ -148,6 +150,7 @@ export function TryOnResultScreen() {
 
   const visualConfidence = data?.result?.confidence ?? 0;
   const fitConfidence = fitResult?.confidenceScore ?? 0;
+  const isPending = data?.status === "QUEUED" || data?.status === "PROCESSING";
   const fallbackIssues = useMemo(() => {
     if (!data) {
       return [];
@@ -155,11 +158,11 @@ export function TryOnResultScreen() {
     if (data.status === "FAILED") {
       return ["Generation did not finish cleanly, so this preview should not be used for buying decisions yet."];
     }
-    if (data.status === "QUEUED" || data.status === "PROCESSING") {
+    if (isPending) {
       return ["The request is still running, so the fit interpretation is provisional until processing completes."];
     }
     return ["No major structured fit issues surfaced for the recommended size."];
-  }, [data]);
+  }, [data, isPending]);
 
   const saveLook = async () => {
     if (!data?.variant?.product?.id) {
@@ -183,9 +186,18 @@ export function TryOnResultScreen() {
     setActionMessage("Opened the generated image for download.");
   };
 
-  if (loading) {
+  const shareLook = async () => {
+    if (!data?.id) {
+      return;
+    }
+
+    await mobileApi.shareLook({ tryOnRequestId: data.id, channel: "native-share" });
+    setActionMessage("Share event logged.");
+  };
+
+  if (loading && !data) {
     return (
-      <Screen>
+      <Screen tone="dark">
         <LoadingState title="Try-on result" subtitle={loadingQuotes[quoteIndex]} />
       </Screen>
     );
@@ -193,7 +205,7 @@ export function TryOnResultScreen() {
 
   if (error) {
     return (
-      <Screen>
+      <Screen tone="dark">
         <ErrorState title="Try-on result" message="The latest try-on result could not be loaded." actionLabel="Upload another photo" onRetry={() => router.push("/try-on")} />
       </Screen>
     );
@@ -201,42 +213,59 @@ export function TryOnResultScreen() {
 
   if (!data) {
     return (
-      <Screen>
+      <Screen tone="dark">
         <EmptyState title="No try-on request yet" message="Start from the try-on tab to create a queued request." actionLabel="Go to upload" onAction={() => router.push("/try-on")} />
       </Screen>
     );
   }
 
   return (
-    <Screen>
+    <Screen tone="dark">
       <SectionCard
+        tone="dark"
         eyebrow="Result"
         title={data.variant?.product?.name ?? "Latest try-on preview"}
-        subtitle="Review the generated look, fit read, and wardrobe actions together before you buy."
+        subtitle="Keep loading, result actions, and fit interpretation on a single surface instead of splitting them into separate states."
       >
         <View style={styles.row}>
           <Pill label={data.status} tone={data.status === "COMPLETED" ? "success" : data.status === "FAILED" ? "danger" : "info"} />
           <Pill label={data.fitStyle ?? "balanced"} tone="neutral" />
           <Pill label={`${Math.round(visualConfidence * 100)}% visual confidence`} tone={confidenceTone(visualConfidence)} />
         </View>
+
         <View style={styles.compareRow}>
           <View style={styles.compareCard}>
             {data.sourceUpload?.publicUrl ? <Image source={{ uri: data.sourceUpload.publicUrl }} style={styles.compareImage} /> : null}
             <Text style={styles.compareLabel}>Original</Text>
           </View>
-          <View style={styles.compareCard}>
+          <View style={[styles.compareCard, styles.compareCardAccent]}>
             {data.result?.outputImageUrl ? <Image source={{ uri: data.result.outputImageUrl }} style={styles.compareImage} /> : null}
             <Text style={styles.compareLabel}>AI try-on</Text>
           </View>
         </View>
-        {data.status !== "COMPLETED" ? (
-          <View style={styles.quoteCard}>
-            <Text style={styles.quoteLabel}>Loading note</Text>
-            <Text style={styles.quoteText}>{loadingQuotes[quoteIndex]}</Text>
+
+        {isPending ? (
+          <View style={styles.progressCard}>
+            <View style={styles.progressOrb} />
+            <Text style={styles.progressLabel}>Generation in motion</Text>
+            <Text style={styles.progressQuote}>{loadingQuotes[quoteIndex]}</Text>
+            <Text style={styles.progressText}>{data.statusMessage ?? "Your request is queued and will refresh automatically."}</Text>
           </View>
         ) : null}
+
+        {data.status === "FAILED" ? (
+          <View style={styles.failedCard}>
+            <Text style={styles.failedTitle}>Generation failed</Text>
+            <Text style={styles.failedText}>{data.statusMessage ?? "The request did not complete cleanly."}</Text>
+            <PrimaryButton onPress={() => router.push("/try-on")} variant="secondary" fullWidth={false}>
+              Try again
+            </PrimaryButton>
+          </View>
+        ) : null}
+
         {actionMessage ? <Text style={styles.message}>{actionMessage}</Text> : null}
-        <View style={styles.actionRow}>
+
+        <View style={styles.actionGrid}>
           <PrimaryButton onPress={saveLook} disabled={data.status !== "COMPLETED"}>
             Save to wardrobe
           </PrimaryButton>
@@ -244,9 +273,17 @@ export function TryOnResultScreen() {
             Download image
           </PrimaryButton>
         </View>
+        <View style={styles.actionGrid}>
+          <PrimaryButton onPress={shareLook} variant="secondary" disabled={data.status !== "COMPLETED"}>
+            Share look
+          </PrimaryButton>
+          <PrimaryButton onPress={() => router.push("/retail")} variant="ghost">
+            Shop this fit
+          </PrimaryButton>
+        </View>
       </SectionCard>
 
-      <SectionCard eyebrow="Fit" title="Recommended size and fit read">
+      <SectionCard eyebrow="Fit" title="Recommended size and fit read" subtitle="Fit and visual confidence remain readable even while the render is richer.">
         <View style={styles.fitHero}>
           <View style={styles.fitHeroCopy}>
             <Text style={styles.fitHeroEyebrow}>Recommended size</Text>
@@ -318,27 +355,28 @@ export function TryOnResultScreen() {
 
       <SectionCard eyebrow="Complete The Look" title="Style and commerce next steps">
         {recommendations.length > 0 ? (
-          recommendations.map((item) => (
+          recommendations.map((recommendation) => (
             <ProductCard
-              key={item.id ?? item.productId}
-              title={item.product?.name ?? item.productId}
-              subtitle={`${item.product?.brand?.name ?? "Brand"} · ${item.product?.category ?? "category"} · ${item.product?.baseColor ?? "color"}`}
-              badge="Suggested next"
-              highlight={item.explanation ?? "Recommended from the current try-on result."}
-              bestSizeLabel={item.bestSizeLabel}
-              fitLabel={item.bestFitLabel}
-              confidenceLabel={item.fitResult ? `${Math.round(item.fitResult.confidenceScore * 100)}% confidence` : null}
-              contextTags={item.occasionTags}
-              rankingBadges={item.rankingBadges}
-              priceLabel={item.offerSummary?.lowestPrice != null ? `From $${Math.round(item.offerSummary.lowestPrice)}` : null}
+              key={recommendation.id ?? recommendation.productId}
+              title={recommendation.product?.name ?? recommendation.productId}
+              subtitle={recommendation.product?.category ?? "Recommendation"}
+              badge={(recommendation.rankingBadges ?? [])[0] ?? "Next step"}
+              scoreLabel={`Score ${Math.round(recommendation.score)}`}
+              highlight={recommendation.explanation ?? "Recommended from the current try-on result."}
+              bestSizeLabel={recommendation.bestSizeLabel}
+              fitLabel={recommendation.bestFitLabel}
+              confidenceLabel={recommendation.fitResult ? `${Math.round(recommendation.fitResult.confidenceScore * 100)}% confidence` : null}
+              contextTags={recommendation.reasonTags}
+              rankingBadges={recommendation.rankingBadges}
+              priceLabel={recommendation.offerSummary?.lowestPrice != null ? `From $${Math.round(recommendation.offerSummary.lowestPrice)}` : null}
               primaryLabel="Compare shops"
               onPrimaryPress={() => router.push("/retail")}
-              secondaryLabel="Try on again"
+              secondaryLabel="Try another vibe"
               onSecondaryPress={() => router.push("/try-on")}
             />
           ))
         ) : (
-          <Text style={styles.summaryText}>No related recommendation cards are available for this result yet.</Text>
+          <EmptyState title="No linked recommendations yet" message="Recommendation cards will appear once the catalog and fit signals overlap more strongly." actionLabel="Back to feed" onAction={() => router.push("/feed")} />
         )}
       </SectionCard>
     </Screen>
@@ -351,144 +389,187 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap"
   },
-  actionRow: {
-    gap: 10
-  },
   compareRow: {
     flexDirection: "row",
-    gap: 12
+    gap: 10
   },
   compareCard: {
     flex: 1,
-    borderRadius: radius.lg,
-    backgroundColor: "#fcf8f2",
-    padding: 12,
-    gap: 8,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.line
+    borderColor: colors.lineDark,
+    minHeight: 214
+  },
+  compareCardAccent: {
+    backgroundColor: "rgba(99,91,255,0.18)"
   },
   compareImage: {
     width: "100%",
-    height: 220,
-    borderRadius: 18,
-    backgroundColor: colors.pageStrong
+    height: 180
   },
   compareLabel: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700"
+    color: colors.inkOnDark,
+    fontSize: 12,
+    fontWeight: "800",
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
-  quoteCard: {
-    borderRadius: radius.lg,
-    backgroundColor: "#f7efe4",
+  progressCard: {
+    position: "relative",
+    borderRadius: 24,
+    padding: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: colors.line,
-    padding: 14,
+    borderColor: colors.lineDark,
+    overflow: "hidden",
     gap: 6
   },
-  quoteLabel: {
-    color: colors.brand,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
+  progressOrb: {
+    position: "absolute",
+    right: -20,
+    top: -12,
+    width: 120,
+    height: 120,
+    borderRadius: radius.pill,
+    backgroundColor: colors.heroGlow
+  },
+  progressLabel: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.1,
     textTransform: "uppercase"
   },
-  quoteText: {
-    color: colors.ink,
-    fontSize: 15,
+  progressQuote: {
+    color: colors.inkOnDark,
+    fontSize: 18,
     lineHeight: 22,
-    fontFamily: fonts.display
+    fontWeight: "700"
+  },
+  progressText: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: "90%"
+  },
+  failedCard: {
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: "rgba(213,91,103,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(213,91,103,0.26)",
+    gap: 10
+  },
+  failedTitle: {
+    color: "#ffd5dc",
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  failedText: {
+    color: "#ffcad2",
+    fontSize: 12,
+    lineHeight: 18
   },
   message: {
-    color: colors.warning,
-    fontSize: 14,
-    lineHeight: 21
+    color: colors.inkOnDark,
+    fontSize: 12,
+    lineHeight: 18
+  },
+  actionGrid: {
+    gap: 10
   },
   fitHero: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: colors.panelMuted,
+    gap: 10
   },
   fitHeroCopy: {
-    flex: 1,
-    gap: 6
+    gap: 4
   },
   fitHeroEyebrow: {
     color: colors.brand,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.8
+    letterSpacing: 1
   },
   fitHeroSize: {
     color: colors.ink,
-    fontSize: 34,
-    lineHeight: 38,
-    fontFamily: fonts.display
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: "700"
   },
   fitHeroText: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: 12,
+    lineHeight: 18
   },
   fitHeroBadges: {
+    flexDirection: "row",
     gap: 8,
-    alignItems: "flex-end"
+    flexWrap: "wrap"
   },
   metricRow: {
     flexDirection: "row",
     gap: 10
   },
   alertCard: {
-    borderRadius: radius.lg,
-    backgroundColor: "#f8ead6",
-    borderWidth: 1,
-    borderColor: "#efcf9f",
+    borderRadius: 18,
     padding: 14,
-    gap: 6
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: "rgba(217,139,25,0.18)",
+    gap: 4
   },
   alertTitle: {
     color: colors.warning,
-    fontSize: 15,
-    fontWeight: "700"
+    fontSize: 12,
+    fontWeight: "800"
   },
   warningText: {
-    color: colors.warning,
-    fontSize: 13,
-    lineHeight: 20
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 18
   },
   summaryText: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: 12,
+    lineHeight: 18
   },
   issueList: {
     gap: 10
   },
   issueCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 14,
+    backgroundColor: colors.panelMuted,
     borderWidth: 1,
     borderColor: colors.line,
-    gap: 8,
-    backgroundColor: "#fcf8f2"
+    gap: 8
   },
   issueHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 10
+    gap: 10,
+    alignItems: "center"
   },
   issueTitle: {
+    flex: 1,
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: "700"
+    fontSize: 13,
+    fontWeight: "800"
   },
   issueText: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 20
+    fontSize: 12,
+    lineHeight: 18
   },
   issueRow: {
-    paddingVertical: 6
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: colors.panelMuted
   }
 });

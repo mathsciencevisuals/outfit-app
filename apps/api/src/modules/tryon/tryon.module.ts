@@ -190,8 +190,6 @@ export class TryOnService {
         }
       );
     } catch {
-      // Fall back to inline processing when the queue backend is unavailable so
-      // mobile try-on creation still completes instead of surfacing an infra error.
       void this.processQueuedRequest(request.id);
     }
 
@@ -233,7 +231,7 @@ export class TryOnService {
 
     try {
       const providerMode = request.provider === "http" ? "http" : "mock";
-      const providerBaseUrl = this.configService.getOrThrow<string>("TRYON_HTTP_BASE_URL");
+      const providerBaseUrl = this.configService.get<string>("TRYON_HTTP_BASE_URL") ?? "http://localhost:4010";
       const input = {
         requestId: request.id,
         personImageUrl: request.imageUrl,
@@ -294,7 +292,7 @@ export class TryOnService {
         where: { id: request.id },
         data: {
           status: "COMPLETED",
-          statusMessage: "Try-on completed",
+          statusMessage: providerMode === "http" ? "Try-on completed" : "Try-on completed with preview renderer",
           processedAt: new Date()
         }
       });

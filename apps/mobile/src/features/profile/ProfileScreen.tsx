@@ -316,32 +316,35 @@ export function ProfileScreen() {
 
   return (
     <Screen>
-      <SectionCard eyebrow="Profile" title="Your wardrobe" subtitle="Saved AI looks, liked garments, and style identity all in one place.">
-        <View style={styles.profileHero}>
-          <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}>
-            {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatar} /> : <Feather name="camera" size={22} color={colors.ink} />}
-          </Pressable>
-          <View style={styles.profileCopy}>
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.email}>{userEmail || "Member account"}</Text>
-            <View style={styles.badgeRow}>
-              <Pill label={`${completionScore}/6 profile signals set`} tone={completionScore >= 4 ? "success" : "warning"} />
-              <Pill label={profile.bodyShape ?? "Shape pending"} tone="neutral" />
-              {uploadingAvatar ? <Pill label="Uploading photo..." tone="info" /> : null}
+      <SectionCard eyebrow="Profile" title="Your wardrobe hub" subtitle="Avatar, logout, profile signals, and saved looks stay in one lighter premium surface.">
+        <View style={styles.heroCard}>
+          <View style={styles.heroBackdrop} />
+          <View style={styles.profileHero}>
+            <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}>
+              {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatar} /> : <Feather name="camera" size={22} color={colors.ink} />}
+            </Pressable>
+            <View style={styles.profileCopy}>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.email}>{userEmail || "Member account"}</Text>
+              <View style={styles.badgeRow}>
+                <Pill label={`${completionScore}/6 profile signals set`} tone={completionScore >= 4 ? "success" : "warning"} />
+                <Pill label={profile.bodyShape ?? "Shape pending"} tone="neutral" />
+                {uploadingAvatar ? <Pill label="Uploading photo..." tone="info" /> : null}
+              </View>
             </View>
           </View>
-        </View>
 
-        {message ? <Text style={styles.message}>{message}</Text> : null}
+          <View style={styles.profileActions}>
+            <PrimaryButton onPress={pickAvatar} variant="secondary">
+              Change photo
+            </PrimaryButton>
+            <PrimaryButton onPress={() => setEditorOpen((current) => !current)}>{editorOpen ? "Close editor" : "Edit profile"}</PrimaryButton>
+            <PrimaryButton variant="ghost" onPress={handleLogout}>
+              Logout
+            </PrimaryButton>
+          </View>
 
-        <View style={styles.profileActions}>
-          <PrimaryButton onPress={pickAvatar} variant="secondary">
-            Change photo
-          </PrimaryButton>
-          <PrimaryButton onPress={() => setEditorOpen((current) => !current)}>{editorOpen ? "Close editor" : "Edit profile"}</PrimaryButton>
-          <PrimaryButton variant="ghost" onPress={handleLogout}>
-            Logout
-          </PrimaryButton>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
         </View>
 
         <View style={styles.metricGrid}>
@@ -354,12 +357,22 @@ export function ProfileScreen() {
         </View>
       </SectionCard>
 
-      <SectionCard eyebrow="Wardrobe" title="Saved fits and liked pieces" subtitle="Saved looks now sit directly in profile to match the redesign contract.">
+      <SectionCard eyebrow="Navigation" title="Move through your style workflow" subtitle="Profile stays the hub for fit, try-on, wardrobe, retail, and recommendation routes.">
+        <NavigationCard icon="sliders" title="Measurements" subtitle="Refresh sizing inputs and fit preference." badge={latestMeasurement ? "Ready" : "Pending"} onPress={() => router.push("/measurements")} />
+        <NavigationCard icon="camera" title="Try-On" subtitle="Capture or upload a new look with your current profile context." badge={lastTryOnRequestId ? "Recent" : null} onPress={() => router.push("/try-on")} />
+        <NavigationCard icon="heart" title="Wardrobe" subtitle="Review saved looks, liked items, and wardrobe memory." badge={`${savedLooksCount}`} onPress={() => router.push("/saved")} />
+        <NavigationCard icon="shopping-bag" title="Shops" subtitle="Compare offers and outbound retailer paths." onPress={() => router.push("/retail")} />
+        <NavigationCard icon="star" title="Recommendations" subtitle="See ranked picks shaped by fit, color, and budget." onPress={() => router.push("/recommendations")} />
+      </SectionCard>
+
+      <SectionCard eyebrow="Wardrobe" title="Saved fits and liked pieces" subtitle="Saved looks sit directly inside profile so the page remains a true hub.">
         <View style={styles.wardrobeGrid}>
           {wardrobeItems.length > 0 ? (
             wardrobeItems.map((look, index) => (
               <View key={look.id} style={styles.wardrobeItem}>
-                <View style={[styles.wardrobeThumb, index % 2 === 1 && styles.wardrobeThumbAlt]} />
+                <View style={[styles.wardrobeThumb, index % 2 === 1 && styles.wardrobeThumbAlt]}>
+                  <Text style={styles.wardrobeThumbText}>{look.isWishlist ? "Liked" : "Saved"}</Text>
+                </View>
                 <View style={styles.wardrobeMeta}>
                   <Text style={styles.wardrobeTitle}>{look.name}</Text>
                   <Text style={styles.wardrobeText}>{look.isWishlist ? "Liked garment" : look.note ?? "Saved just now"}</Text>
@@ -374,29 +387,21 @@ export function ProfileScreen() {
         </View>
       </SectionCard>
 
-      <SectionCard eyebrow="Navigation" title="Move through your style workflow" subtitle="Profile stays the hub for fit, try-on, wardrobe, retail, and recommendation routes.">
-        <NavigationCard icon="sliders" title="Measurements" subtitle="Refresh sizing inputs and fit preference." badge={latestMeasurement ? "Ready" : "Pending"} onPress={() => router.push("/measurements")} />
-        <NavigationCard icon="camera" title="Try-On" subtitle="Capture or upload a new look with your current profile context." badge={lastTryOnRequestId ? "Recent" : null} onPress={() => router.push("/try-on")} />
-        <NavigationCard icon="heart" title="Wardrobe" subtitle="Review saved looks, liked items, and wardrobe memory." badge={`${savedLooksCount}`} onPress={() => router.push("/saved")} />
-        <NavigationCard icon="shopping-bag" title="Shops" subtitle="Compare offers and outbound retailer paths." onPress={() => router.push("/retail")} />
-        <NavigationCard icon="star" title="Recommendations" subtitle="See ranked picks shaped by fit, color, and budget." onPress={() => router.push("/recommendations")} />
-      </SectionCard>
-
       {editorOpen ? (
-        <SectionCard eyebrow="Identity" title="Update your profile signals" subtitle="Changes save into the current profile store so other screens stay in sync.">
+        <SectionCard eyebrow="Identity" title="Update your profile signals" subtitle="Changes save back into the shared profile store so the rest of the app stays synchronized.">
           <View style={styles.inlineRow}>
-            <TextInput style={[styles.input, styles.half]} placeholder="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" placeholderTextColor="#978b7d" />
-            <TextInput style={[styles.input, styles.half]} placeholder="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" placeholderTextColor="#978b7d" />
+            <TextInput style={[styles.input, styles.half]} placeholder="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" placeholderTextColor={colors.inkMuted} />
+            <TextInput style={[styles.input, styles.half]} placeholder="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" placeholderTextColor={colors.inkMuted} />
           </View>
           <View style={styles.inlineRow}>
-            <TextInput style={[styles.input, styles.half]} placeholder="Body shape" value={bodyShape} onChangeText={setBodyShape} placeholderTextColor="#978b7d" />
-            <TextInput style={[styles.input, styles.half]} placeholder="Gender" value={gender} onChangeText={setGender} placeholderTextColor="#978b7d" />
+            <TextInput style={[styles.input, styles.half]} placeholder="Body shape" value={bodyShape} onChangeText={setBodyShape} placeholderTextColor={colors.inkMuted} />
+            <TextInput style={[styles.input, styles.half]} placeholder="Gender" value={gender} onChangeText={setGender} placeholderTextColor={colors.inkMuted} />
           </View>
           <View style={styles.inlineRow}>
-            <TextInput style={[styles.input, styles.half]} placeholder="Budget label" value={budgetLabel} onChangeText={setBudgetLabel} placeholderTextColor="#978b7d" />
-            <TextInput style={[styles.input, styles.half]} placeholder="Budget max" value={budgetMax} onChangeText={setBudgetMax} keyboardType="numeric" placeholderTextColor="#978b7d" />
+            <TextInput style={[styles.input, styles.half]} placeholder="Budget label" value={budgetLabel} onChangeText={setBudgetLabel} placeholderTextColor={colors.inkMuted} />
+            <TextInput style={[styles.input, styles.half]} placeholder="Budget max" value={budgetMax} onChangeText={setBudgetMax} keyboardType="numeric" placeholderTextColor={colors.inkMuted} />
           </View>
-          <TextInput style={styles.input} placeholder="Budget min" value={budgetMin} onChangeText={setBudgetMin} keyboardType="numeric" placeholderTextColor="#978b7d" />
+          <TextInput style={styles.input} placeholder="Budget min" value={budgetMin} onChangeText={setBudgetMin} keyboardType="numeric" placeholderTextColor={colors.inkMuted} />
 
           <Text style={styles.label}>Preferred styles</Text>
           <View style={styles.chipWrap}>
@@ -449,6 +454,25 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  heroCard: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 16
+  },
+  heroBackdrop: {
+    position: "absolute",
+    top: -38,
+    right: -22,
+    width: 140,
+    height: 140,
+    borderRadius: radius.pill,
+    backgroundColor: "#dfe4ff"
+  },
   profileHero: {
     flexDirection: "row",
     gap: 16,
@@ -475,14 +499,14 @@ const styles = StyleSheet.create({
   },
   name: {
     color: colors.ink,
-    fontSize: 32,
-    lineHeight: 36,
+    fontSize: 26,
+    lineHeight: 30,
     fontFamily: fonts.display
   },
   email: {
     color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 20
+    fontSize: 13,
+    lineHeight: 18
   },
   badgeRow: {
     flexDirection: "row",
@@ -492,6 +516,15 @@ const styles = StyleSheet.create({
   profileActions: {
     gap: 10
   },
+  message: {
+    color: colors.brand,
+    fontSize: 12,
+    lineHeight: 18
+  },
+  metricGrid: {
+    flexDirection: "row",
+    gap: 10
+  },
   wardrobeGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -499,18 +532,27 @@ const styles = StyleSheet.create({
   },
   wardrobeItem: {
     width: "48%",
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.line,
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.88)"
+    backgroundColor: colors.panelStrong
   },
   wardrobeThumb: {
     height: 118,
-    backgroundColor: "#eadfd6"
+    backgroundColor: "#e7eaff",
+    padding: 12,
+    justifyContent: "flex-end"
   },
   wardrobeThumbAlt: {
-    backgroundColor: "#d9e2ff"
+    backgroundColor: "#dce8ff"
+  },
+  wardrobeThumbText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1
   },
   wardrobeMeta: {
     padding: 10,
@@ -518,8 +560,8 @@ const styles = StyleSheet.create({
   },
   wardrobeTitle: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "700"
+    fontSize: 14,
+    fontWeight: "800"
   },
   wardrobeText: {
     color: colors.inkSoft,
@@ -527,39 +569,34 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
   emptyWardrobe: {
+    width: "100%",
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.panelStrong,
-    padding: 14
-  },
-  metricGrid: {
-    flexDirection: "row",
-    gap: 10
+    backgroundColor: colors.panelMuted,
+    padding: 16
   },
   inlineRow: {
     flexDirection: "row",
     gap: 10
   },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: "#fbf8f3",
-    borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    fontSize: 16,
-    color: colors.ink
-  },
   half: {
     flex: 1
   },
+  input: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panelStrong,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    color: colors.ink,
+    fontSize: 13
+  },
   label: {
     color: colors.brand,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.8
+    letterSpacing: 1
   },
   chipWrap: {
     flexDirection: "row",
@@ -568,28 +605,23 @@ const styles = StyleSheet.create({
   },
   selectChip: {
     borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.pageStrong
+    backgroundColor: colors.panelStrong
   },
   selectChipActive: {
-    backgroundColor: "#e4edf2",
-    borderColor: "#bfcfda"
+    borderColor: "rgba(99,91,255,0.24)",
+    backgroundColor: colors.accentSoft
   },
   selectChipText: {
     color: colors.brand,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700"
   },
   selectChipTextActive: {
     color: colors.accent
-  },
-  message: {
-    color: colors.warning,
-    fontSize: 14,
-    lineHeight: 21
   },
   editorActions: {
     gap: 10

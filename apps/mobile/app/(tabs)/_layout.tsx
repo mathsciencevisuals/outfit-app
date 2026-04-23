@@ -16,33 +16,38 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.panelStrong,
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.tabMuted,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "700",
-          marginBottom: 4
+          fontSize: 10,
+          fontWeight: "800",
+          marginBottom: 3
         },
         tabBarStyle: {
           position: "absolute",
           left: 14,
           right: 14,
           bottom: 12,
-          height: 78,
-          paddingTop: 10,
+          height: 76,
+          paddingTop: 9,
           paddingBottom: 10,
           borderTopWidth: 1,
-          borderTopColor: "rgba(229,231,235,0.8)",
+          borderTopColor: "rgba(255,255,255,0.56)",
           borderRadius: 28,
-          backgroundColor: colors.tab
+          backgroundColor: colors.tab,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: 0.12,
+          shadowRadius: 26,
+          elevation: 12
         },
         tabBarIcon: ({ color, focused }) => (
           <Feather
             name={tabIcons[route.name as keyof typeof tabIcons]}
-            size={19}
+            size={18}
             color={color}
-            style={{ opacity: focused ? 1 : 0.88 }}
+            style={{ opacity: focused ? 1 : 0.9 }}
           />
         ),
         sceneContainerStyle: {

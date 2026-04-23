@@ -68,7 +68,8 @@ export function ProductCard({
   onPrimaryPress,
   primaryLabel,
   onSecondaryPress,
-  secondaryLabel
+  secondaryLabel,
+  tone = "light"
 }: {
   title: string;
   subtitle: string;
@@ -87,49 +88,53 @@ export function ProductCard({
   primaryLabel?: string;
   onSecondaryPress?: () => void;
   secondaryLabel?: string;
+  tone?: "light" | "dark";
 }) {
   const hasFitSummary = Boolean(bestSizeLabel || fitLabel || confidenceLabel);
+  const dark = tone === "dark";
 
   return (
-    <View style={styles.card}>
-      <View style={styles.preview}>
-        <View style={styles.previewOrbLarge} />
-        <View style={styles.previewOrbSmall} />
+    <View style={[styles.card, dark && styles.cardDark]}>
+      <View style={[styles.preview, dark && styles.previewDark]}>
+        <View style={[styles.previewOrbLarge, dark && styles.previewOrbLargeDark]} />
+        <View style={[styles.previewOrbSmall, dark && styles.previewOrbSmallDark]} />
         <View style={styles.previewTopRow}>
           {badge ? <Pill label={badge} tone="accent" /> : null}
           {priceLabel ? <Pill label={priceLabel} tone="warning" /> : null}
         </View>
         <View style={styles.previewCaption}>
-          <Text style={styles.previewCaptionLabel}>Recommendation</Text>
-          <Text style={styles.previewCaptionText}>Fit, style, budget, and retail cues aligned in one card.</Text>
+          <Text style={[styles.previewCaptionLabel, dark && styles.previewCaptionLabelDark]}>Fashion rank</Text>
+          <Text style={[styles.previewCaptionText, dark && styles.previewCaptionTextDark]}>
+            Bold discovery card with fit, style, budget, and handoff context stacked together.
+          </Text>
         </View>
       </View>
       <View style={styles.copy}>
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text style={[styles.title, dark && styles.titleDark]}>{title}</Text>
+            <Text style={[styles.subtitle, dark && styles.subtitleDark]}>{subtitle}</Text>
           </View>
           {scoreLabel ? (
-            <View style={styles.metaBadge}>
-              <Feather name="star" size={14} color={colors.ink} />
-              <Text style={styles.metaText}>{scoreLabel}</Text>
+            <View style={[styles.metaBadge, dark && styles.metaBadgeDark]}>
+              <Feather name="star" size={14} color={dark ? colors.inkOnDark : colors.ink} />
+              <Text style={[styles.metaText, dark && styles.metaTextDark]}>{scoreLabel}</Text>
             </View>
           ) : null}
         </View>
 
         {hasFitSummary ? (
-          <View style={styles.fitSummary}>
+          <View style={[styles.fitSummary, dark && styles.fitSummaryDark]}>
             <View style={styles.fitSummaryHeader}>
-              <Text style={styles.fitSummaryTitle}>Fit read</Text>
-              {bestSizeLabel ? <Text style={styles.fitSummarySize}>Size {bestSizeLabel}</Text> : null}
+              <Text style={[styles.fitSummaryTitle, dark && styles.fitSummaryTitleDark]}>Fit read</Text>
+              {bestSizeLabel ? <Text style={[styles.fitSummarySize, dark && styles.fitSummarySizeDark]}>Size {bestSizeLabel}</Text> : null}
             </View>
             <View style={styles.metaRow}>
               {fitLabel ? <Pill label={`${fitLabel} fit`} tone={fitTone(fitLabel)} /> : null}
               {confidenceLabel ? <Pill label={confidenceLabel} tone={confidenceTone(confidenceLabel)} /> : null}
               {bestSizeLabel ? <Pill label="Recommended" tone="success" /> : null}
             </View>
-            {warning ? <Text style={styles.warning}>{warning}</Text> : null}
+            {warning ? <Text style={[styles.warning, dark && styles.warningDark]}>{warning}</Text> : null}
           </View>
         ) : null}
 
@@ -141,7 +146,7 @@ export function ProductCard({
           </View>
         ) : null}
 
-        {highlight ? <Text style={styles.highlight}>{highlight}</Text> : null}
+        {highlight ? <Text style={[styles.highlight, dark && styles.highlightDark]}>{highlight}</Text> : null}
 
         {(contextTags?.length ?? 0) > 0 ? (
           <View style={styles.issueRow}>
@@ -196,17 +201,24 @@ export function productSubtitle(product?: Product) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 26,
+    borderRadius: 28,
     overflow: "hidden",
     backgroundColor: colors.panelStrong,
     borderWidth: 1,
     borderColor: colors.line
   },
+  cardDark: {
+    backgroundColor: colors.panelDark,
+    borderColor: colors.lineDark
+  },
   preview: {
-    minHeight: 146,
+    minHeight: 152,
     backgroundColor: colors.pageStrong,
     padding: 16,
     justifyContent: "space-between"
+  },
+  previewDark: {
+    backgroundColor: colors.heroStart
   },
   previewTopRow: {
     flexDirection: "row",
@@ -219,34 +231,46 @@ const styles = StyleSheet.create({
   },
   previewCaptionLabel: {
     color: colors.brand,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
     textTransform: "uppercase"
+  },
+  previewCaptionLabelDark: {
+    color: colors.inkOnDarkSoft
   },
   previewCaptionText: {
     color: colors.inkSoft,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 12,
+    lineHeight: 18,
     maxWidth: "80%"
+  },
+  previewCaptionTextDark: {
+    color: colors.inkOnDarkSoft
   },
   previewOrbLarge: {
     position: "absolute",
     right: -16,
     top: -10,
-    width: 120,
-    height: 120,
+    width: 124,
+    height: 124,
     borderRadius: radius.pill,
-    backgroundColor: "#dbc6aa"
+    backgroundColor: "#dcdfff"
+  },
+  previewOrbLargeDark: {
+    backgroundColor: "rgba(123,104,255,0.42)"
   },
   previewOrbSmall: {
     position: "absolute",
-    left: 24,
-    bottom: -24,
-    width: 74,
-    height: 74,
+    left: 22,
+    bottom: -26,
+    width: 78,
+    height: 78,
     borderRadius: radius.pill,
-    backgroundColor: "#d9e1de"
+    backgroundColor: "#cfe6ff"
+  },
+  previewOrbSmallDark: {
+    backgroundColor: "rgba(255,255,255,0.12)"
   },
   copy: {
     padding: 16,
@@ -264,34 +288,49 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 26,
-    lineHeight: 30,
+    fontSize: 22,
+    lineHeight: 26,
     fontFamily: fonts.display
+  },
+  titleDark: {
+    color: colors.inkOnDark
   },
   subtitle: {
     color: colors.inkSoft,
-    fontSize: 13,
-    lineHeight: 19
+    fontSize: 12,
+    lineHeight: 18
+  },
+  subtitleDark: {
+    color: colors.inkOnDarkSoft
   },
   metaBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: colors.pageStrong,
-    borderRadius: radius.pill,
     paddingHorizontal: 10,
-    paddingVertical: 8
+    paddingVertical: 8,
+    borderRadius: radius.pill
+  },
+  metaBadgeDark: {
+    backgroundColor: colors.glass
   },
   metaText: {
     color: colors.ink,
-    fontSize: 12,
-    fontWeight: "700"
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  metaTextDark: {
+    color: colors.inkOnDark
   },
   fitSummary: {
-    backgroundColor: "#faf4eb",
-    borderRadius: radius.lg,
-    padding: 14,
-    gap: 10
+    borderRadius: radius.md,
+    padding: 12,
+    backgroundColor: colors.panelMuted,
+    gap: 8
+  },
+  fitSummaryDark: {
+    backgroundColor: "rgba(255,255,255,0.05)"
   },
   fitSummaryHeader: {
     flexDirection: "row",
@@ -300,37 +339,49 @@ const styles = StyleSheet.create({
   },
   fitSummaryTitle: {
     color: colors.brand,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.8
+    letterSpacing: 1
+  },
+  fitSummaryTitleDark: {
+    color: colors.inkOnDarkSoft
   },
   fitSummarySize: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "700"
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  fitSummarySizeDark: {
+    color: colors.inkOnDark
   },
   metaRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
+    gap: 8,
+    flexWrap: "wrap"
   },
   warning: {
     color: colors.warning,
-    fontSize: 13,
-    lineHeight: 20
+    fontSize: 12,
+    lineHeight: 18
+  },
+  warningDark: {
+    color: "#ffcf7d"
   },
   highlight: {
-    color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    color: colors.ink,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  highlightDark: {
+    color: colors.inkOnDark
   },
   issueRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
+    gap: 8,
+    flexWrap: "wrap"
   },
   actions: {
-    gap: 8
+    gap: 10
   }
 });
