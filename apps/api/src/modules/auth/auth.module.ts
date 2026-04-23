@@ -44,6 +44,30 @@ class LoginDto {
   password!: string;
 }
 
+type SafeProfileRow = {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  avatarUploadId: string | null;
+  avatarUrl: string | null;
+  gender: string | null;
+  age: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  bodyShape: string | null;
+  fitPreference: string | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  budgetLabel: string | null;
+  closetStatus: string | null;
+  stylePreference: Prisma.JsonValue | null;
+  preferredColors: string[] | null;
+  avoidedColors: string[] | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -74,6 +98,7 @@ export class AuthService {
         "lastName",
         "preferredColors",
         "avoidedColors",
+        "fitPreference",
         "createdAt",
         "updatedAt"
       )
@@ -84,6 +109,7 @@ export class AuthService {
         ${dto.lastName},
         ARRAY[]::text[],
         ARRAY[]::text[],
+        ${"regular"},
         NOW(),
         NOW()
       )
@@ -128,34 +154,24 @@ export class AuthService {
   }
 
   private async getSafeProfile(userId: string) {
-    const rows = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        userId: string;
-        firstName: string;
-        lastName: string;
-        gender: string | null;
-        age: number | null;
-        heightCm: number | null;
-        weightKg: number | null;
-        bodyShape: string | null;
-        stylePreference: Prisma.JsonValue | null;
-        preferredColors: string[] | null;
-        avoidedColors: string[] | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }>
-    >(Prisma.sql`
+    const rows = await this.prisma.$queryRaw<Array<SafeProfileRow>>(Prisma.sql`
       SELECT
         id,
         "userId",
         "firstName",
         "lastName",
+        "avatarUploadId",
+        "avatarUrl",
         gender,
         age,
         "heightCm",
         "weightKg",
         "bodyShape",
+        "fitPreference",
+        "budgetMin",
+        "budgetMax",
+        "budgetLabel",
+        "closetStatus",
         "stylePreference",
         "preferredColors",
         "avoidedColors",
@@ -173,12 +189,10 @@ export class AuthService {
 
     return {
       ...profile,
-      avatarUploadId: null,
-      avatarUrl: null,
-      budgetMin: null,
-      budgetMax: null,
-      budgetLabel: null,
-      closetStatus: "COMING_SOON"
+      fitPreference: profile.fitPreference ?? "regular",
+      preferredColors: profile.preferredColors ?? [],
+      avoidedColors: profile.avoidedColors ?? [],
+      closetStatus: profile.closetStatus ?? "COMING_SOON"
     };
   }
 

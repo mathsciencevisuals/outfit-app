@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback } from "react";
+import { BackHandler, StyleSheet, Text, View } from "react-native";
 
 import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
@@ -32,6 +33,17 @@ const onboardingSignals = [
 export function OnboardingScreen() {
   const router = useRouter();
   const { data, loading } = useAsyncResource(() => mobileApi.onboarding(), []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        BackHandler.exitApp();
+        return true;
+      });
+
+      return () => subscription.remove();
+    }, [])
+  );
 
   if (loading) {
     return (

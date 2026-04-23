@@ -4,6 +4,8 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { SessionUser, UserProfile, UserRole } from "../types/api";
 
+const STORAGE_KEY = "fitme-app-store";
+
 type AppState = {
   userId: string;
   userRole: UserRole | null;
@@ -15,7 +17,8 @@ type AppState = {
   setSession: (input: { token: string; user: SessionUser }) => void;
   setProfile: (profile: UserProfile | null) => void;
   finishAuthCheck: () => void;
-  setLastTryOnRequestId: (requestId: string) => void;
+  setLastTryOnRequestId: (requestId?: string) => void;
+  resetSession: () => void;
   logout: () => Promise<void>;
 };
 
@@ -34,27 +37,36 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       ...initialState,
       setSession: ({ token, user }) =>
-        set({
+        set((state) => ({
           token,
           userId: user.id,
           userRole: user.role,
-          profile: user.profile ?? null,
+          profile: user.profile ?? state.profile ?? null,
           isAuthenticated: true,
           authChecked: true
-        }),
-      setProfile: (profile) => set({ profile }),
+        })),
+      setProfile: (profile) =>
+        set((state) => ({
+          profile,
+          isAuthenticated: state.token != null ? true : state.isAuthenticated
+        })),
       finishAuthCheck: () => set({ authChecked: true }),
       setLastTryOnRequestId: (lastTryOnRequestId) => set({ lastTryOnRequestId }),
+      resetSession: () =>
+        set({
+          ...initialState,
+          authChecked: true
+        }),
       logout: async () => {
         set({
           ...initialState,
           authChecked: true
         });
-        await AsyncStorage.removeItem("fitme-app-store");
+        await AsyncStorage.removeItem(STORAGE_KEY);
       }
     }),
     {
-      name: "fitme-app-store",
+      name: STORAGE_KEY,
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         userId: state.userId,

@@ -33,7 +33,11 @@ export const sizeChartEntrySchema = z.object({
   hipsMinCm: z.number().nullable().optional(),
   hipsMaxCm: z.number().nullable().optional(),
   inseamMinCm: z.number().nullable().optional(),
-  inseamMaxCm: z.number().nullable().optional()
+  inseamMaxCm: z.number().nullable().optional(),
+  shoulderMinCm: z.number().nullable().optional(),
+  shoulderMaxCm: z.number().nullable().optional(),
+  footLengthMinCm: z.number().nullable().optional(),
+  footLengthMaxCm: z.number().nullable().optional()
 });
 
 export type Product = z.infer<typeof productSchema>;

@@ -9,6 +9,6 @@
     "dev": "tsc -w -p tsconfig.json",
     "lint": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node -e \"console.log('No tests configured for @fitme/fit-engine yet')\""
+    "test": "node --import tsx --test src/computeFit.test.ts"
   }
 }

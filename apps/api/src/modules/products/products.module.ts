@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Injectable, Module, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
-import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
+import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 
+import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
+import { FitModule, FitService } from "../fit/fit.module";
 
 class VariantDto {
   @IsString()
@@ -76,7 +79,12 @@ class ProductsService {
       where: category ? { category } : undefined,
       include: {
         brand: true,
-        variants: { include: { inventoryOffers: { include: { shop: true } } } }
+        variants: {
+          include: {
+            inventoryOffers: { include: { shop: true } },
+            sizeChartEntries: true
+          }
+        }
       }
     });
   }
@@ -140,7 +148,10 @@ class ProductsService {
 @ApiTags("products")
 @Controller("products")
 class ProductsController {
-  constructor(private readonly service: ProductsService) {}
+  constructor(
+    private readonly service: ProductsService,
+    private readonly fitService: FitService
+  ) {}
 
   @Get()
   list(@Query("category") category?: string) {
@@ -150,6 +161,17 @@ class ProductsController {
   @Get(":id")
   get(@Param("id") id: string) {
     return this.service.get(id);
+  }
+
+  @Get(":id/fit-preview")
+  getFitPreview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Query("variantId") variantId?: string,
+    @Query("chosenSizeLabel") chosenSizeLabel?: string,
+    @Query("fitPreference") fitPreference?: "slim" | "regular" | "relaxed"
+  ) {
+    return this.fitService.previewForProduct(user, id, { variantId, chosenSizeLabel, fitPreference });
   }
 
   @Roles("ADMIN")
@@ -166,6 +188,7 @@ class ProductsController {
 }
 
 @Module({
+  imports: [FitModule],
   controllers: [ProductsController],
   providers: [ProductsService, PrismaService],
   exports: [ProductsService]

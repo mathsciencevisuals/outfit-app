@@ -14,7 +14,7 @@ import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
 import type { Recommendation } from "../../types/api";
 
-const filterOptions = ["All", "Color-led", "Avoid clashes"];
+const filterOptions = ["All", "Best fit", "Color-led", "Avoid clashes"];
 
 export function RecommendationsScreen() {
   const router = useRouter();
@@ -27,6 +27,9 @@ export function RecommendationsScreen() {
 
   const recommendations = data ?? [];
   const filtered = useMemo(() => {
+    if (activeFilter === "Best fit") {
+      return recommendations.filter((item) => (item.fitResult?.fitScore ?? 0) >= 78);
+    }
     if (activeFilter === "Color-led") {
       return recommendations.filter((item) => (item.matchingColors?.length ?? 0) > 0);
     }
@@ -77,18 +80,19 @@ export function RecommendationsScreen() {
       <SectionCard
         eyebrow="Recommendations"
         title="What fits your profile best"
-        subtitle="These picks are now stronger on color clarity, showing both matching colors and combinations to avoid."
+        subtitle="Ranking now blends fit score, fit confidence, color affinity, and style direction."
       >
         <View style={styles.row}>
           <Pill label={recommendationBadge(best)} tone="success" />
           <Pill label={`${recommendations.length} ranked pieces`} tone="neutral" />
+          {best.fitResult?.recommendedSize ? <Pill label={`Top size ${best.fitResult.recommendedSize}`} tone="accent" /> : null}
         </View>
         <View style={styles.metricRow}>
           <MetricTile label="Top score" value={`${Math.round(best.score)}`} caption="Best current product match" />
           <MetricTile
-            label="Color match"
-            value={`${best.matchingColors?.length ?? 0}`}
-            caption={best.matchingColors?.join(", ") || "No explicit match"}
+            label="Fit confidence"
+            value={`${Math.round((best.fitResult?.confidenceScore ?? 0) * 100)}%`}
+            caption={best.fitResult?.fitLabel ? `${best.fitResult.fitLabel} fit` : "Needs more data"}
           />
         </View>
         <SegmentedControl options={filterOptions} selected={activeFilter} onSelect={setActiveFilter} />
@@ -111,6 +115,13 @@ export function RecommendationsScreen() {
                 badge={recommendationBadge(item)}
                 scoreLabel={`Score ${Math.round(item.score)}`}
                 highlight={item.explanation ?? "Routed here through fit-aware ranking."}
+                bestSizeLabel={item.bestSizeLabel}
+                fitLabel={item.bestFitLabel}
+                confidenceLabel={
+                  item.fitResult ? `${Math.round(item.fitResult.confidenceScore * 100)}% confidence` : null
+                }
+                warning={item.fitWarning}
+                issueLabels={item.fitResult?.issues.map((issue) => issue.code)}
                 primaryLabel="Compare shops"
                 onPrimaryPress={() => router.push("/shops")}
                 secondaryLabel="Try on now"

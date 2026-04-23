@@ -11,7 +11,7 @@ import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import type { TryOnRequest } from "../../types/api";
+import type { FitIssue, FitResult, TryOnRequest } from "../../types/api";
 
 function confidenceTone(confidence?: number) {
   if (!confidence) {
@@ -21,9 +21,36 @@ function confidenceTone(confidence?: number) {
     return "success" as const;
   }
   if (confidence >= 0.7) {
-    return "accent" as const;
+    return "info" as const;
   }
   return "warning" as const;
+}
+
+function fitTone(fitLabel?: string | null) {
+  if (fitLabel === "slim") {
+    return "accent" as const;
+  }
+  if (fitLabel === "relaxed") {
+    return "info" as const;
+  }
+  return "neutral" as const;
+}
+
+function issueTone(issue: FitIssue) {
+  if (issue.severity === "high") {
+    return "danger" as const;
+  }
+  if (issue.severity === "medium") {
+    return "warning" as const;
+  }
+  return "info" as const;
+}
+
+function issueTitle(issue: FitIssue) {
+  return issue.code
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function TryOnResultScreen() {
@@ -31,6 +58,7 @@ export function TryOnResultScreen() {
   const requestId = useAppStore((state) => state.lastTryOnRequestId);
   const userId = useAppStore((state) => state.userId);
   const [data, setData] = useState<TryOnRequest | null>(null);
+  const [fitResult, setFitResult] = useState<FitResult | null>(null);
   const [loading, setLoading] = useState(Boolean(requestId));
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -56,6 +84,16 @@ export function TryOnResultScreen() {
         setError(null);
         setLoading(false);
 
+        if (nextRequest.variant?.product?.id) {
+          const preview = await mobileApi.productFitPreview(nextRequest.variant.product.id, {
+            variantId: nextRequest.variant.id,
+            chosenSizeLabel: nextRequest.variant.sizeLabel
+          });
+          if (mounted) {
+            setFitResult(preview);
+          }
+        }
+
         if (nextRequest.status === "QUEUED" || nextRequest.status === "PROCESSING") {
           timeoutId = setTimeout(load, 2500);
         }
@@ -80,30 +118,20 @@ export function TryOnResultScreen() {
     };
   }, [requestId]);
 
-  const confidence = data?.result?.confidence ?? 0;
-  const issues = useMemo(() => {
+  const visualConfidence = data?.result?.confidence ?? 0;
+  const fitConfidence = fitResult?.confidenceScore ?? 0;
+  const fallbackIssues = useMemo(() => {
     if (!data) {
       return [];
     }
     if (data.status === "FAILED") {
-      return ["Generation did not finish cleanly, so this preview should not be used for buy decisions yet."];
+      return ["Generation did not finish cleanly, so this preview should not be used for buying decisions yet."];
     }
     if (data.status === "QUEUED" || data.status === "PROCESSING") {
-      return ["The request is still in progress, so fit interpretation is provisional until completion."];
+      return ["The request is still running, so the fit interpretation is provisional until processing completes."];
     }
-
-    const derivedIssues: string[] = [];
-    if (confidence < 0.8) {
-      derivedIssues.push("Confidence is moderate, so fabric drape and silhouette may need a second pass.");
-    }
-    if (!data.result?.overlayImageUrl) {
-      derivedIssues.push("No overlay asset was returned, so garment placement feedback is limited.");
-    }
-
-    return derivedIssues.length > 0
-      ? derivedIssues
-      : ["No blocking issues surfaced. This preview is strong enough to move into recommendation and shop comparison."];
-  }, [confidence, data]);
+    return ["No major structured fit issues surfaced for the recommended size."];
+  }, [data]);
 
   const saveLook = async () => {
     if (!data?.variant?.product?.id) {
@@ -163,14 +191,17 @@ export function TryOnResultScreen() {
   return (
     <Screen>
       <SectionCard
-        eyebrow="Try-On Review"
+        eyebrow="Look"
         title={data.variant?.product?.name ?? "Latest try-on preview"}
-        subtitle="Review the generated look, fit confidence, open issues, comparisons, and save/share actions before you buy."
+        subtitle="Review the generated look and the structured fit guidance together before you buy."
       >
         <View style={styles.row}>
-          <Pill label={data.status} tone={data.status === "COMPLETED" ? "success" : data.status === "FAILED" ? "warning" : "accent"} />
+          <Pill
+            label={data.status}
+            tone={data.status === "COMPLETED" ? "success" : data.status === "FAILED" ? "danger" : "info"}
+          />
           <Pill label={data.fitStyle ?? "balanced"} tone="neutral" />
-          <Pill label={`${Math.round(confidence * 100)}% confidence`} tone={confidenceTone(confidence)} />
+          <Pill label={`${Math.round(visualConfidence * 100)}% visual confidence`} tone={confidenceTone(visualConfidence)} />
         </View>
         <View style={styles.compareRow}>
           <View style={styles.compareCard}>
@@ -185,23 +216,96 @@ export function TryOnResultScreen() {
         {actionMessage ? <Text style={styles.message}>{actionMessage}</Text> : null}
       </SectionCard>
 
-      <SectionCard eyebrow="Fit Review" title="Fit and variation details">
-        <View style={styles.metricRow}>
-          <MetricTile label="Confidence" value={`${Math.round(confidence * 100)}%`} caption="Provider-reported confidence" />
-          <MetricTile label="Status" value={data.status} caption={data.statusMessage ?? "Latest queue state"} />
+      <SectionCard eyebrow="Fit" title="Recommended size and fit read">
+        <View style={styles.fitHero}>
+          <View style={styles.fitHeroCopy}>
+            <Text style={styles.fitHeroEyebrow}>Recommended size</Text>
+            <Text style={styles.fitHeroSize}>{fitResult?.recommendedSize ?? data.variant?.sizeLabel ?? "--"}</Text>
+            <Text style={styles.fitHeroText}>
+              {fitResult?.explanation ?? "Fit guidance will strengthen once measurement and size-chart data are both available."}
+            </Text>
+          </View>
+          <View style={styles.fitHeroBadges}>
+            <Pill label={`${fitResult?.fitLabel ?? "regular"} fit`} tone={fitTone(fitResult?.fitLabel)} />
+            <Pill label={`${Math.round(fitConfidence * 100)}% fit confidence`} tone={confidenceTone(fitConfidence)} />
+          </View>
         </View>
-        <InfoRow label="Product" value={data.variant?.product?.name ?? "Current try-on target"} />
-        <InfoRow label="Selected size" value={String(data.result?.metadata?.selectedSize ?? data.variant?.sizeLabel ?? "Auto")} />
+
+        <View style={styles.metricRow}>
+          <MetricTile label="Selected" value={data.variant?.sizeLabel ?? "--"} caption="Current try-on size" />
+          <MetricTile label="Fit score" value={`${Math.round(fitResult?.fitScore ?? 0)}`} caption="Relative suitability" />
+        </View>
+        <View style={styles.metricRow}>
+          <MetricTile label="Visual confidence" value={`${Math.round(visualConfidence * 100)}%`} caption="Generation quality signal" />
+          <MetricTile label="Fit label" value={fitResult?.fitLabel ?? "regular"} caption="Likely silhouette" />
+        </View>
+
+        {fitResult?.recommendedSize && fitResult.recommendedSize !== data.variant?.sizeLabel ? (
+          <View style={styles.alertCard}>
+            <Text style={styles.alertTitle}>Selected size differs</Text>
+            <Text style={styles.warningText}>
+              The render used {data.variant?.sizeLabel ?? "--"}, but the fit engine prefers {fitResult.recommendedSize}.
+            </Text>
+          </View>
+        ) : null}
+
         <InfoRow label="Selected color" value={String(data.result?.metadata?.selectedColor ?? data.variant?.color ?? "Catalog")} />
         <InfoRow label="Fit style" value={String(data.result?.metadata?.fitStyle ?? data.fitStyle ?? "balanced")} />
       </SectionCard>
 
-      <SectionCard eyebrow="Issues" title="What to watch">
-        {issues.map((issue) => (
-          <View key={issue} style={styles.issueRow}>
-            <Text style={styles.issueText}>{issue}</Text>
+      <SectionCard eyebrow="Confidence" title="How strong this guidance is">
+        <View style={styles.row}>
+          <Pill label={`${Math.round(visualConfidence * 100)}% visual`} tone={confidenceTone(visualConfidence)} />
+          <Pill label={`${Math.round(fitConfidence * 100)}% fit`} tone={confidenceTone(fitConfidence)} />
+          <Pill
+            label={`${Math.round((fitResult?.measurementProfile?.completenessScore ?? 0) * 100)}% profile complete`}
+            tone={(fitResult?.measurementProfile?.completenessScore ?? 0) >= 0.75 ? "success" : "warning"}
+          />
+        </View>
+        <Text style={styles.summaryText}>
+          {fitResult?.measurementProfile?.guidance ??
+            "This guidance combines your saved body measurements with the selected product size chart."}
+        </Text>
+      </SectionCard>
+
+      <SectionCard eyebrow="Potential Issues" title="What to watch">
+        {fitResult?.issues?.length ? (
+          <View style={styles.issueList}>
+            {fitResult.issues.map((issue) => (
+              <View key={issue.code} style={styles.issueCard}>
+                <View style={styles.issueHeader}>
+                  <Text style={styles.issueTitle}>{issueTitle(issue)}</Text>
+                  <Pill label={issue.severity} tone={issueTone(issue)} />
+                </View>
+                <Text style={styles.issueText}>{issue.message}</Text>
+              </View>
+            ))}
           </View>
-        ))}
+        ) : (
+          fallbackIssues.map((issue) => (
+            <View key={issue} style={styles.issueRow}>
+              <Text style={styles.issueText}>{issue}</Text>
+            </View>
+          ))
+        )}
+      </SectionCard>
+
+      <SectionCard eyebrow="Alternatives" title="Other sizes worth trying">
+        {fitResult?.alternatives?.length ? (
+          <View style={styles.altList}>
+            {fitResult.alternatives.map((alternative) => (
+              <View key={alternative.sizeLabel} style={styles.altCard}>
+                <View style={styles.altHeader}>
+                  <Text style={styles.altSize}>{alternative.sizeLabel}</Text>
+                  <Pill label={`${Math.round(alternative.fitScore)} fit score`} tone="info" />
+                </View>
+                <Text style={styles.summaryText}>{alternative.reason}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.summaryText}>No strong alternative sizes surfaced beyond the current recommendation.</Text>
+        )}
       </SectionCard>
 
       <SectionCard eyebrow="Actions" title="Save, share, and compare">
@@ -251,21 +355,124 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700"
   },
+  fitHero: {
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: "#f9f3eb",
+    borderWidth: 1,
+    borderColor: "#eadcc7",
+    gap: 12
+  },
+  fitHeroCopy: {
+    gap: 6
+  },
+  fitHeroEyebrow: {
+    color: "#836d53",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  fitHeroSize: {
+    color: "#172033",
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "800"
+  },
+  fitHeroText: {
+    color: "#536075",
+    fontSize: 15,
+    lineHeight: 22
+  },
+  fitHeroBadges: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
+  },
   metricRow: {
     flexDirection: "row",
     gap: 10
+  },
+  summaryText: {
+    color: "#5c6679",
+    fontSize: 14,
+    lineHeight: 21
+  },
+  alertCard: {
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "#fff6eb",
+    borderWidth: 1,
+    borderColor: "#efcf9f",
+    gap: 4
+  },
+  alertTitle: {
+    color: "#8a4f12",
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7
+  },
+  warningText: {
+    color: "#8a4f12",
+    fontSize: 14,
+    lineHeight: 20
+  },
+  issueList: {
+    gap: 10
+  },
+  issueCard: {
+    borderRadius: 18,
+    backgroundColor: "#fbf8f3",
+    borderWidth: 1,
+    borderColor: "#eadcc7",
+    padding: 14,
+    gap: 8
+  },
+  issueHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10
+  },
+  issueTitle: {
+    color: "#172033",
+    fontSize: 15,
+    fontWeight: "700"
   },
   issueRow: {
     borderRadius: 18,
     backgroundColor: "#fbf8f3",
     borderWidth: 1,
     borderColor: "#eadcc7",
-    padding: 12
+    padding: 14
   },
   issueText: {
-    color: "#5d687d",
+    color: "#5f697d",
     fontSize: 14,
     lineHeight: 21
+  },
+  altList: {
+    gap: 10
+  },
+  altCard: {
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "#f4f7fb",
+    borderWidth: 1,
+    borderColor: "#d4dfec",
+    gap: 8
+  },
+  altHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10
+  },
+  altSize: {
+    color: "#172033",
+    fontSize: 17,
+    fontWeight: "700"
   },
   message: {
     color: "#5f697d",

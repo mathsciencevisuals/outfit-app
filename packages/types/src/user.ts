@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const userRoleSchema = z.enum(["USER", "ADMIN"]);
+export const userRoleSchema = z.enum(["USER", "ADMIN", "OPERATOR"]);
 
 export const userSchema = z.object({
   id: z.string(),
@@ -19,6 +19,7 @@ export const profileSchema = z.object({
   heightCm: z.number().nullable().optional(),
   weightKg: z.number().nullable().optional(),
   bodyShape: z.string().nullable().optional(),
+  fitPreference: z.enum(["slim", "regular", "relaxed"]).nullable().optional(),
   stylePreference: z.record(z.any()).nullable().optional(),
   preferredColors: z.array(z.string()).default([]),
   avoidedColors: z.array(z.string()).default([])

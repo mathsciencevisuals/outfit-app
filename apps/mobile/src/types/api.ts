@@ -1,4 +1,19 @@
 export type UserRole = "USER" | "ADMIN" | "OPERATOR";
+export type FitPreference = "slim" | "regular" | "relaxed";
+export type FitLabel = "slim" | "regular" | "relaxed";
+export type FitIssueCode =
+  | "chest-tight"
+  | "chest-loose"
+  | "waist-tight"
+  | "waist-loose"
+  | "shoulder-tight"
+  | "shoulder-loose"
+  | "sleeve-long"
+  | "sleeve-short"
+  | "hip-tight"
+  | "hip-loose"
+  | "inseam-short"
+  | "inseam-long";
 
 export type RewardReason =
   | "FIRST_TRY_ON"
@@ -40,6 +55,93 @@ export interface UploadAsset {
   createdAt: string;
 }
 
+export interface SizeChartEntry {
+  id?: string;
+  sizeLabel: string;
+  chestMinCm?: number | null;
+  chestMaxCm?: number | null;
+  waistMinCm?: number | null;
+  waistMaxCm?: number | null;
+  hipsMinCm?: number | null;
+  hipsMaxCm?: number | null;
+  inseamMinCm?: number | null;
+  inseamMaxCm?: number | null;
+  shoulderMinCm?: number | null;
+  shoulderMaxCm?: number | null;
+  footLengthMinCm?: number | null;
+  footLengthMaxCm?: number | null;
+}
+
+export interface FitIssue {
+  code: FitIssueCode;
+  severity: "low" | "medium" | "high";
+  dimension: string;
+  direction: "tight" | "loose" | "short" | "long";
+  deltaCm: number;
+  message: string;
+}
+
+export interface SizeAlternative {
+  sizeLabel: string;
+  fitScore: number;
+  reason: string;
+}
+
+export interface SizeComparison {
+  sizeLabel: string;
+  variantId?: string | null;
+  fitScore: number;
+  confidenceScore: number;
+  fitLabel: FitLabel;
+  issues: FitIssue[];
+  explanation: string;
+  isRecommended: boolean;
+  isSelected: boolean;
+}
+
+export interface FitResult {
+  userId?: string;
+  productId?: string;
+  productName?: string;
+  variantId?: string | null;
+  selectedSizeLabel?: string | null;
+  fitPreference?: FitPreference;
+  recommendedSize: string | null;
+  fitLabel: FitLabel;
+  confidenceScore: number;
+  fitScore: number;
+  issues: FitIssue[];
+  explanation: string;
+  alternatives: SizeAlternative[];
+  sizeComparisons: SizeComparison[];
+  measurementProfile?: {
+    fitPreference: FitPreference;
+    providedMeasurements: string[];
+    relevantMeasurements: string[];
+    completenessScore: number;
+    guidance: string;
+  };
+  assessmentId?: string;
+}
+
+export interface FitAssessmentRecord {
+  id: string;
+  userId: string;
+  productId: string;
+  variantId?: string | null;
+  chosenSizeLabel?: string | null;
+  recommendedSize?: string | null;
+  fitLabel?: string | null;
+  score: number;
+  confidence: number;
+  verdict: string;
+  notes: string;
+  issues?: string[];
+  explanation?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface SavedLookItem {
   id: string;
   productId: string;
@@ -65,6 +167,7 @@ export interface UserProfile {
   heightCm?: number | null;
   weightKg?: number | null;
   bodyShape?: string | null;
+  fitPreference?: FitPreference | null;
   preferredColors?: string[];
   avoidedColors?: string[];
   budgetMin?: number | null;
@@ -74,6 +177,17 @@ export interface UserProfile {
   stylePreference?: Record<string, unknown> | null;
   measurements?: Measurement[];
   savedLooks?: SavedLook[];
+}
+
+export interface FitProfileResponse {
+  userId: string;
+  fitPreference: FitPreference;
+  completenessScore: number;
+  providedMeasurements: string[];
+  relevantMeasurements: string[];
+  guidance: string;
+  profile?: UserProfile | null;
+  latestMeasurement?: Measurement | null;
 }
 
 export interface SessionUser {
@@ -112,6 +226,7 @@ export interface ProductVariant {
   imageUrl?: string | null;
   price?: number;
   currency?: string;
+  sizeChartEntries?: SizeChartEntry[];
   inventoryOffers?: InventoryOffer[];
 }
 
@@ -138,6 +253,10 @@ export interface Recommendation {
   explanation?: string;
   matchingColors?: string[];
   incompatibleColors?: string[];
+  fitResult?: FitResult | null;
+  bestSizeLabel?: string | null;
+  bestFitLabel?: FitLabel | null;
+  fitWarning?: string | null;
 }
 
 export interface Shop {

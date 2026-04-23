@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { MetricTile } from "../../components/MetricTile";
@@ -7,20 +7,37 @@ import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
+import { SegmentedControl } from "../../components/SegmentedControl";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
+import type { FitPreference } from "../../types/api";
+
+const fitPreferenceOptions: FitPreference[] = ["slim", "regular", "relaxed"];
 
 export function MeasurementsScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
+  const setProfile = useAppStore((state) => state.setProfile);
   const [refreshKey, setRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const { data, loading, error } = useAsyncResource(() => mobileApi.measurements(userId), [userId, refreshKey]);
-  const latest = data?.[0] ?? null;
 
+  const { data, loading, error } = useAsyncResource(async () => {
+    const fitProfile = await mobileApi.fitProfile();
+    if (fitProfile.profile) {
+      setProfile(fitProfile.profile);
+    }
+    return fitProfile;
+  }, [userId, refreshKey]);
+
+  const profile = data?.profile ?? null;
+  const latest = data?.latestMeasurement ?? null;
+
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [fitPreference, setFitPreference] = useState<FitPreference>("regular");
   const [chestCm, setChestCm] = useState("");
   const [waistCm, setWaistCm] = useState("");
   const [hipsCm, setHipsCm] = useState("");
@@ -29,29 +46,76 @@ export function MeasurementsScreen() {
   const [footLengthCm, setFootLengthCm] = useState("");
 
   useEffect(() => {
+    setHeightCm(profile?.heightCm != null ? `${profile.heightCm}` : "");
+    setWeightKg(profile?.weightKg != null ? `${profile.weightKg}` : "");
+    setFitPreference(profile?.fitPreference ?? "regular");
     setChestCm(latest?.chestCm != null ? `${latest.chestCm}` : "");
     setWaistCm(latest?.waistCm != null ? `${latest.waistCm}` : "");
     setHipsCm(latest?.hipsCm != null ? `${latest.hipsCm}` : "");
     setInseamCm(latest?.inseamCm != null ? `${latest.inseamCm}` : "");
     setShoulderCm(latest?.shoulderCm != null ? `${latest.shoulderCm}` : "");
     setFootLengthCm(latest?.footLengthCm != null ? `${latest.footLengthCm}` : "");
-  }, [latest]);
+  }, [latest, profile]);
+
+  const coverage = useMemo(
+    () =>
+      [
+        chestCm,
+        waistCm,
+        hipsCm,
+        inseamCm,
+        shoulderCm,
+        footLengthCm,
+        heightCm
+      ].filter((value) => value != null && value !== "").length,
+    [chestCm, footLengthCm, heightCm, hipsCm, inseamCm, shoulderCm, waistCm]
+  );
 
   const saveMeasurements = async () => {
+    if (!profile) {
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     try {
-      await mobileApi.saveMeasurement(userId, {
-        id: latest?.id,
-        chestCm: chestCm ? Number(chestCm) : null,
-        waistCm: waistCm ? Number(waistCm) : null,
-        hipsCm: hipsCm ? Number(hipsCm) : null,
-        inseamCm: inseamCm ? Number(inseamCm) : null,
-        shoulderCm: shoulderCm ? Number(shoulderCm) : null,
-        footLengthCm: footLengthCm ? Number(footLengthCm) : null,
-        source: latest?.source ?? "manual"
+      const [savedMeasurement, nextProfile] = await Promise.all([
+        mobileApi.saveMeasurement(userId, {
+          id: latest?.id,
+          chestCm: chestCm ? Number(chestCm) : null,
+          waistCm: waistCm ? Number(waistCm) : null,
+          hipsCm: hipsCm ? Number(hipsCm) : null,
+          inseamCm: inseamCm ? Number(inseamCm) : null,
+          shoulderCm: shoulderCm ? Number(shoulderCm) : null,
+          footLengthCm: footLengthCm ? Number(footLengthCm) : null,
+          source: latest?.source ?? "manual"
+        }),
+        mobileApi.updateProfile(userId, {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          avatarUploadId: profile.avatarUploadId ?? null,
+          avatarUrl: profile.avatarUrl ?? null,
+          gender: profile.gender ?? null,
+          age: profile.age ?? null,
+          heightCm: heightCm ? Number(heightCm) : null,
+          weightKg: weightKg ? Number(weightKg) : null,
+          bodyShape: profile.bodyShape ?? null,
+          fitPreference,
+          budgetMin: profile.budgetMin ?? null,
+          budgetMax: profile.budgetMax ?? null,
+          budgetLabel: profile.budgetLabel ?? null,
+          closetStatus: profile.closetStatus ?? "COMING_SOON",
+          stylePreference: profile.stylePreference ?? null,
+          preferredColors: profile.preferredColors ?? [],
+          avoidedColors: profile.avoidedColors ?? []
+        })
+      ]);
+
+      setProfile({
+        ...nextProfile,
+        measurements: savedMeasurement ? [savedMeasurement] : nextProfile.measurements
       });
-      setMessage("Measurements saved");
+      setMessage("Fit profile saved")
       setRefreshKey((value) => value + 1);
     } catch (nextError: unknown) {
       setMessage(nextError instanceof Error ? nextError.message : "Measurements could not be saved");
@@ -60,7 +124,7 @@ export function MeasurementsScreen() {
     }
   };
 
-  if (loading && !latest) {
+  if (loading && !profile) {
     return (
       <Screen>
         <LoadingState title="Measurements" subtitle="Loading fit calibration inputs." />
@@ -68,7 +132,7 @@ export function MeasurementsScreen() {
     );
   }
 
-  if (error && !latest) {
+  if (error && !profile) {
     return (
       <Screen>
         <ErrorState
@@ -81,37 +145,44 @@ export function MeasurementsScreen() {
     );
   }
 
-  const coverage = [
-    latest?.chestCm ?? chestCm,
-    latest?.waistCm ?? waistCm,
-    latest?.hipsCm ?? hipsCm,
-    latest?.inseamCm ?? inseamCm,
-    latest?.shoulderCm ?? shoulderCm,
-    latest?.footLengthCm ?? footLengthCm
-  ].filter((value) => value != null && value !== "").length;
-
   return (
     <Screen>
       <SectionCard
-        eyebrow="Body Measurements"
-        title="Manual measurement entry"
-        subtitle="These values drive fit scoring, recommendation confidence, and size decisions."
+        eyebrow="Fit Profile"
+        title="Body measurements and preference"
+        subtitle="These values drive size recommendation, confidence, issue detection, and recommendation ranking."
       >
         <View style={styles.row}>
-          <Pill label={`Coverage ${coverage}/6`} tone={coverage >= 4 ? "success" : "warning"} />
-          <Pill label={latest?.source ?? "manual"} tone="neutral" />
+          <Pill label={`Coverage ${coverage}/7`} tone={coverage >= 5 ? "success" : "warning"} />
+          <Pill label={`Preference ${fitPreference}`} tone="neutral" />
+          <Pill label={data?.guidance ?? "Add more measurements for better confidence"} tone="accent" />
         </View>
         <View style={styles.metricRow}>
-          <MetricTile label="Chest" value={chestCm || "--"} />
-          <MetricTile label="Waist" value={waistCm || "--"} />
+          <MetricTile label="Height" value={heightCm || "--"} caption="cm" />
+          <MetricTile label="Chest" value={chestCm || "--"} caption="cm" />
         </View>
         <View style={styles.metricRow}>
-          <MetricTile label="Hips" value={hipsCm || "--"} />
-          <MetricTile label="Inseam" value={inseamCm || "--"} />
+          <MetricTile label="Waist" value={waistCm || "--"} caption="cm" />
+          <MetricTile label="Hips" value={hipsCm || "--"} caption="cm" />
+        </View>
+        <View style={styles.metricRow}>
+          <MetricTile label="Shoulder" value={shoulderCm || "--"} caption="cm" />
+          <MetricTile label="Inseam" value={inseamCm || "--"} caption="cm" />
         </View>
       </SectionCard>
 
+      <SectionCard eyebrow="Preference" title="How close should the garment wear?">
+        <Text style={styles.supportText}>
+          Slim accepts slightly tighter suggestions, regular aims for balance, and relaxed tolerates extra room.
+        </Text>
+        <SegmentedControl options={fitPreferenceOptions} selected={fitPreference} onSelect={(value) => setFitPreference(value as FitPreference)} />
+      </SectionCard>
+
       <SectionCard eyebrow="Manual Entry" title="Update your values">
+        <View style={styles.inlineRow}>
+          <TextInput style={[styles.input, styles.half]} value={heightCm} onChangeText={setHeightCm} placeholder="Height" keyboardType="numeric" placeholderTextColor="#978b7d" />
+          <TextInput style={[styles.input, styles.half]} value={weightKg} onChangeText={setWeightKg} placeholder="Weight" keyboardType="numeric" placeholderTextColor="#978b7d" />
+        </View>
         <View style={styles.inlineRow}>
           <TextInput style={[styles.input, styles.half]} value={chestCm} onChangeText={setChestCm} placeholder="Chest" keyboardType="numeric" placeholderTextColor="#978b7d" />
           <TextInput style={[styles.input, styles.half]} value={waistCm} onChangeText={setWaistCm} placeholder="Waist" keyboardType="numeric" placeholderTextColor="#978b7d" />
@@ -125,24 +196,15 @@ export function MeasurementsScreen() {
           <TextInput style={[styles.input, styles.half]} value={footLengthCm} onChangeText={setFootLengthCm} placeholder="Foot length" keyboardType="numeric" placeholderTextColor="#978b7d" />
         </View>
         {message ? <Text style={styles.message}>{message}</Text> : null}
-        <PrimaryButton onPress={saveMeasurements} disabled={saving}>
-          {saving ? "Saving measurements..." : "Save measurements"}
-        </PrimaryButton>
-      </SectionCard>
-
-      <SectionCard eyebrow="Auto Measurement" title="Pose detection">
-        <Text style={styles.supportText}>
-          Automatic measurement via pose detection is future-scoped. The UI is intentionally non-broken and disabled until the camera + model workflow is ready.
-        </Text>
-        <PrimaryButton variant="ghost" disabled>
-          Auto detect coming soon
+        <PrimaryButton onPress={saveMeasurements} disabled={saving || !profile}>
+          {saving ? "Saving fit profile..." : "Save fit profile"}
         </PrimaryButton>
       </SectionCard>
 
       {!latest && !loading ? (
         <EmptyState
           title="No measurements saved yet"
-          message="Add chest, waist, hips, and inseam to unlock better fit confidence."
+          message="Add chest, waist, hips, shoulders, and inseam to unlock stronger fit guidance."
           actionLabel="Go to discover"
           onAction={() => router.push("/discover")}
         />

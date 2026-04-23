@@ -38,6 +38,7 @@ export function ProfileScreen() {
   }, [userId, refreshKey]);
 
   const profile = data ?? cachedProfile;
+  const latestMeasurement = profile?.measurements?.[0] ?? null;
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -128,9 +129,17 @@ export function ProfileScreen() {
       return;
     }
 
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setMessage("Photo library permission is required to upload a profile image");
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.6
     });
 
     if (result.canceled) {
@@ -178,6 +187,7 @@ export function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
+    (router as { dismissAll?: () => void }).dismissAll?.();
     router.replace("/onboarding");
   };
 
@@ -258,6 +268,25 @@ export function ProfileScreen() {
         <TextInput style={styles.input} value={lastName} onChangeText={setLastName} placeholder="Last name" placeholderTextColor="#978b7d" />
         <TextInput style={styles.input} value={gender} onChangeText={setGender} placeholder="Gender" placeholderTextColor="#978b7d" />
         <TextInput style={styles.input} value={bodyShape} onChangeText={setBodyShape} placeholder="Body shape" placeholderTextColor="#978b7d" />
+      </SectionCard>
+
+      <SectionCard eyebrow="Measurements" title="Fit calibration">
+        <View style={styles.metricRow}>
+          <MetricTile label="Chest" value={latestMeasurement?.chestCm != null ? `${latestMeasurement.chestCm}` : "--"} caption="cm" />
+          <MetricTile label="Waist" value={latestMeasurement?.waistCm != null ? `${latestMeasurement.waistCm}` : "--"} caption="cm" />
+        </View>
+        <View style={styles.metricRow}>
+          <MetricTile label="Hips" value={latestMeasurement?.hipsCm != null ? `${latestMeasurement.hipsCm}` : "--"} caption="cm" />
+          <MetricTile label="Inseam" value={latestMeasurement?.inseamCm != null ? `${latestMeasurement.inseamCm}` : "--"} caption="cm" />
+        </View>
+        <Text style={styles.sectionText}>
+          {latestMeasurement
+            ? "Measurements are live and editable. Update them when your fit baseline changes."
+            : "No measurements saved yet. Add chest, waist, hips, and inseam to improve fit confidence."}
+        </Text>
+        <PrimaryButton onPress={() => router.push("/measurements")} variant="secondary">
+          {latestMeasurement ? "Edit measurements" : "Add measurements"}
+        </PrimaryButton>
       </SectionCard>
 
       <SectionCard eyebrow="Style Preferences" title="How recommendations should feel">

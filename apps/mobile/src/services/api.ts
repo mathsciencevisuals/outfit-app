@@ -4,6 +4,10 @@ import type {
   ChallengeParticipation,
   Coupon,
   CouponRedemption,
+  FitAssessmentRecord,
+  FitPreference,
+  FitProfileResponse,
+  FitResult,
   LookRating,
   Measurement,
   Product,
@@ -13,8 +17,8 @@ import type {
   RewardTransaction,
   RewardWallet,
   SavedLook,
-  ShareEvent,
   SessionResponse,
+  ShareEvent,
   Shop,
   TryOnRequest,
   UploadAsset,
@@ -24,10 +28,149 @@ import type {
 import { useAppStore } from "../store/app-store";
 import { env } from "../utils/env";
 
+const apiBaseUrl = env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
+const apiOrigin = new URL(apiBaseUrl);
+const imageUrlKeys = new Set([
+  "avatarUrl",
+  "publicUrl",
+  "imageUrl",
+  "garmentImageUrl",
+  "outputImageUrl",
+  "overlayImageUrl"
+]);
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+
+type LocalUploadAsset = {
+  uri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
+
+type ProfileInput = {
+  firstName: string;
+  lastName: string;
+  avatarUploadId?: string | null;
+  avatarUrl?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  bodyShape?: string | null;
+  fitPreference?: FitPreference | null;
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  budgetLabel?: string | null;
+  closetStatus?: string | null;
+  stylePreference?: Record<string, unknown> | null;
+  preferredColors: string[];
+  avoidedColors: string[];
+};
+
+function isFormDataBody(body: RequestInit["body"] | null | undefined) {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    return true;
+  }
+
+  return typeof (body as FormData).append === "function";
+}
+
+function extensionFromAsset(asset: LocalUploadAsset) {
+  const explicitName = asset.fileName?.trim();
+  if (explicitName && explicitName.includes(".")) {
+    return explicitName.slice(explicitName.lastIndexOf(".")).toLowerCase();
+  }
+
+  const uri = asset.uri.split("?")[0] ?? "";
+  const uriSegment = uri.slice(uri.lastIndexOf("/") + 1);
+  if (uriSegment.includes(".")) {
+    return uriSegment.slice(uriSegment.lastIndexOf(".")).toLowerCase();
+  }
+
+  return ".jpg";
+}
+
+function mimeTypeFromExtension(extension: string) {
+  switch (extension) {
+    case ".png":
+      return "image/png";
+    case ".webp":
+      return "image/webp";
+    case ".heic":
+    case ".heif":
+      return "image/heic";
+    default:
+      return "image/jpeg";
+  }
+}
+
+function normalizeUploadAsset(asset: LocalUploadAsset) {
+  const extension = extensionFromAsset(asset);
+  const mimeType = asset.mimeType ?? mimeTypeFromExtension(extension);
+  const fileName = asset.fileName?.trim() || `upload${extension}`;
+
+  return {
+    ...asset,
+    fileName,
+    mimeType
+  };
+}
+
+function normalizeRemoteUrl(value: string | null | undefined) {
+  if (!value) {
+    return value ?? null;
+  }
+
+  if (value.startsWith("/")) {
+    return `${apiBaseUrl}${value}`;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (!loopbackHosts.has(parsed.hostname)) {
+      return parsed.toString();
+    }
+
+    parsed.protocol = apiOrigin.protocol;
+    parsed.hostname = apiOrigin.hostname;
+    return parsed.toString();
+  } catch {
+    return value;
+  }
+}
+
+function normalizeImageFields<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeImageFields(entry)) as T;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, currentValue]) => {
+        if (typeof currentValue === "string" && imageUrlKeys.has(key)) {
+          return [key, normalizeRemoteUrl(currentValue)];
+        }
+
+        if (currentValue && typeof currentValue === "object") {
+          return [key, normalizeImageFields(currentValue)];
+        }
+
+        return [key, currentValue];
+      })
+    ) as T;
+  }
+
+  return value;
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = useAppStore.getState().token;
-  const isFormDataRequest = typeof FormData !== "undefined" && init?.body instanceof FormData;
-  const response = await fetch(`${env.EXPO_PUBLIC_API_URL}${path}`, {
+  const isFormDataRequest = isFormDataBody(init?.body);
+  const requestPath = path.startsWith("http") ? path : `${apiBaseUrl}${path}`;
+  const response = await fetch(requestPath, {
     headers: {
       ...(isFormDataRequest ? {} : { "content-type": "application/json" }),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -53,33 +196,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   const payload = (await response.json()) as { data: T };
-  return payload.data;
+  return normalizeImageFields(payload.data);
 }
-
-type LocalUploadAsset = {
-  uri: string;
-  fileName?: string | null;
-  mimeType?: string | null;
-};
-
-type ProfileInput = {
-  firstName: string;
-  lastName: string;
-  avatarUploadId?: string | null;
-  avatarUrl?: string | null;
-  gender?: string | null;
-  age?: number | null;
-  heightCm?: number | null;
-  weightKg?: number | null;
-  bodyShape?: string | null;
-  budgetMin?: number | null;
-  budgetMax?: number | null;
-  budgetLabel?: string | null;
-  closetStatus?: string | null;
-  stylePreference?: Record<string, unknown> | null;
-  preferredColors: string[];
-  avoidedColors: string[];
-};
 
 export const mobileApi = {
   login: (email: string, password: string): Promise<AuthResponse> =>
@@ -99,11 +217,42 @@ export const mobileApi = {
       subtitle: "Profile, measurements, try-on, and recommendations in one flow."
     }) as const,
   profile: (userId: string): Promise<UserProfile> => apiFetch(`/profile/${userId}`),
+  fitProfile: (): Promise<FitProfileResponse> => apiFetch("/users/me/fit-profile"),
   updateProfile: (userId: string, input: ProfileInput): Promise<UserProfile> =>
     apiFetch(`/profile/${userId}`, {
       method: "PUT",
       body: JSON.stringify(input)
     }),
+  fitAssess: (input: {
+    userId: string;
+    productId: string;
+    variantId?: string;
+    chosenSizeLabel?: string;
+    fitPreference?: FitPreference;
+  }): Promise<FitResult> =>
+    apiFetch("/fit/assess", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  fitAssessments: (userId: string): Promise<FitAssessmentRecord[]> => apiFetch(`/fit/assessments?userId=${userId}`),
+  productFitPreview: (
+    productId: string,
+    input?: { variantId?: string; chosenSizeLabel?: string; fitPreference?: FitPreference }
+  ): Promise<FitResult> => {
+    const params = new URLSearchParams();
+    if (input?.variantId) {
+      params.set("variantId", input.variantId);
+    }
+    if (input?.chosenSizeLabel) {
+      params.set("chosenSizeLabel", input.chosenSizeLabel);
+    }
+    if (input?.fitPreference) {
+      params.set("fitPreference", input.fitPreference);
+    }
+
+    const query = params.toString();
+    return apiFetch(`/products/${productId}/fit-preview${query ? `?${query}` : ""}`);
+  },
   updateStylePreferences: (
     userId: string,
     input: {
@@ -155,27 +304,31 @@ export const mobileApi = {
     userId: string,
     asset: LocalUploadAsset,
     purpose = "general"
-  ): Promise<UploadSession> =>
-    apiFetch("/uploads/presign", {
+  ): Promise<UploadSession> => {
+    const normalizedAsset = normalizeUploadAsset(asset);
+
+    return apiFetch("/uploads/presign", {
       method: "POST",
       body: JSON.stringify({
         userId,
-        mimeType: asset.mimeType ?? "image/jpeg",
-        fileName: asset.fileName ?? "asset.jpg",
+        mimeType: normalizedAsset.mimeType,
+        fileName: normalizedAsset.fileName,
         purpose
       })
-    }),
+    });
+  },
   uploadAsset: async (
     userId: string,
     session: UploadSession,
     asset: LocalUploadAsset
   ): Promise<UploadAsset> => {
+    const normalizedAsset = normalizeUploadAsset(asset);
     const formData = new FormData();
     formData.append("userId", userId);
     formData.append("file", {
-      uri: asset.uri,
-      name: asset.fileName ?? "asset.jpg",
-      type: asset.mimeType ?? "image/jpeg"
+      uri: normalizedAsset.uri,
+      name: normalizedAsset.fileName,
+      type: normalizedAsset.mimeType
     } as never);
 
     return apiFetch(session.uploadPath, {
@@ -191,8 +344,9 @@ export const mobileApi = {
     userId: string,
     variantId: string,
     input: {
-      uploadId: string;
+      uploadId?: string;
       garmentUploadId?: string;
+      imageUrl?: string;
       fitStyle?: string;
       comparisonLabel?: string;
     }

@@ -38,6 +38,47 @@ const productDefinitions: Array<[string, string, string, string, string[], strin
   ["Northline", "Canvas Sneaker", "footwear", "white", ["tan"], ["casual", "street"]]
 ];
 
+function brandAdjustment(brandName: string) {
+  if (brandName === "Atelier Mono") {
+    return { chest: -1, waist: -1, hips: -1, shoulder: -0.5, foot: -0.3 };
+  }
+  if (brandName === "Northline") {
+    return { chest: 1.5, waist: 1, hips: 1, shoulder: 0.5, foot: 0 };
+  }
+  return { chest: 0, waist: 0, hips: 0, shoulder: 0.25, foot: 0.2 };
+}
+
+function sizeChartForCategory(brandName: string, category: string, index: number) {
+  const adjustment = brandAdjustment(brandName);
+
+  if (category === "footwear") {
+    return {
+      footLengthMinCm: 24 + index * 1.1 + adjustment.foot,
+      footLengthMaxCm: 25 + index * 1.1 + adjustment.foot
+    };
+  }
+
+  if (category === "bottoms") {
+    return {
+      waistMinCm: 73 + index * 4 + adjustment.waist,
+      waistMaxCm: 79 + index * 4 + adjustment.waist,
+      hipsMinCm: 90 + index * 4 + adjustment.hips,
+      hipsMaxCm: 97 + index * 4 + adjustment.hips,
+      inseamMinCm: 75 + index * 2,
+      inseamMaxCm: 80 + index * 2
+    };
+  }
+
+  return {
+    chestMinCm: 87 + index * 4 + adjustment.chest,
+    chestMaxCm: 94 + index * 4 + adjustment.chest,
+    waistMinCm: 74 + index * 4 + adjustment.waist,
+    waistMaxCm: 81 + index * 4 + adjustment.waist,
+    shoulderMinCm: 41 + index * 1.3 + adjustment.shoulder,
+    shoulderMaxCm: 43.5 + index * 1.3 + adjustment.shoulder
+  };
+}
+
 async function resetDatabase() {
   await (prisma as any).challengeParticipation.deleteMany();
   await (prisma as any).shareEvent.deleteMany();
@@ -114,26 +155,21 @@ async function main() {
       include: { variants: true }
     });
 
-    await prisma.sizeChart.create({
+    const sizeChart = await prisma.sizeChart.create({
       data: {
         brandId: brand.id,
         category,
-        notes: `${brandName} ${category} sample chart`,
-        entries: {
-          create: product.variants.map((variant, index) => ({
-            variantId: variant.id,
-            sizeLabel: variant.sizeLabel,
-            chestMinCm: 88 + index * 4,
-            chestMaxCm: 95 + index * 4,
-            waistMinCm: 74 + index * 4,
-            waistMaxCm: 81 + index * 4,
-            hipsMinCm: 90 + index * 4,
-            hipsMaxCm: 97 + index * 4,
-            inseamMinCm: 76 + index * 2,
-            inseamMaxCm: 81 + index * 2
-          }))
-        }
+        notes: `${brandName} ${category} sample chart`
       }
+    });
+
+    await prisma.sizeChartEntry.createMany({
+      data: product.variants.map((variant, index) => ({
+        sizeChartId: sizeChart.id,
+        variantId: variant.id,
+        sizeLabel: variant.sizeLabel,
+        ...sizeChartForCategory(brandName, category, index)
+      })) as any
     });
 
     for (const [index, variant] of product.variants.entries()) {
@@ -169,10 +205,11 @@ async function main() {
           heightCm: 168,
           weightKg: 61,
           bodyShape: "athletic",
+          fitPreference: "regular",
           stylePreference: { preferredStyles: ["minimal", "smart", "sport"] },
           preferredColors: ["black", "white", "olive", "blue"],
           avoidedColors: ["orange"]
-        }
+        } as any
       }
     },
     include: { profile: true }
@@ -188,9 +225,10 @@ async function main() {
         create: {
           firstName: "Admin",
           lastName: "User",
+          fitPreference: "regular",
           preferredColors: ["black"],
           avoidedColors: []
-        }
+        } as any
       }
     }
   });
@@ -205,9 +243,10 @@ async function main() {
         create: {
           firstName: "Operator",
           lastName: "User",
+          fitPreference: "relaxed",
           preferredColors: ["olive"],
           avoidedColors: []
-        }
+        } as any
       }
     }
   });
@@ -220,6 +259,7 @@ async function main() {
       hipsCm: 97,
       inseamCm: 79,
       shoulderCm: 42,
+      footLengthCm: 25,
       source: "seed"
     }
   });
@@ -229,11 +269,20 @@ async function main() {
     data: {
       userId: demoUser.id,
       productId: firstProduct.id,
+      variantId: firstProduct.variants[1].id,
+      chosenSizeLabel: firstProduct.variants[1].sizeLabel,
+      recommendedSize: firstProduct.variants[1].sizeLabel,
+      fitLabel: "regular",
       score: 89,
       confidence: 0.82,
-      verdict: "good",
-      notes: "Seeded baseline fit for recommendation demos."
-    }
+      verdict: "regular",
+      notes: "Size M looks balanced for the seeded demo fit profile.",
+      issues: [],
+      explanation: "Seeded baseline fit guidance for recommendation demos.",
+      metadata: {
+        alternatives: [{ sizeLabel: "L", fitScore: 82, reason: "Try L for a more relaxed drape." }]
+      }
+    } as any
   });
 
   await prisma.providerConfig.createMany({

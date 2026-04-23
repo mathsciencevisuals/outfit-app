@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node -e \"console.log('No tests configured for @fitme/api yet')\"",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:seed": "node --import tsx prisma/seed.ts",
     "prisma:studio": "prisma studio"
   },
   "dependencies": {

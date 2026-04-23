@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Injectable, Module, Param, 
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { IsArray, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsArray, IsIn, IsNumber, IsOptional, IsString } from "class-validator";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
@@ -20,50 +20,54 @@ class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
-  avatarUploadId?: string;
+  avatarUploadId?: string | null;
 
   @IsOptional()
   @IsString()
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 
   @IsOptional()
   @IsString()
-  gender?: string;
+  gender?: string | null;
 
   @IsOptional()
   @IsNumber()
-  age?: number;
+  age?: number | null;
 
   @IsOptional()
   @IsNumber()
-  heightCm?: number;
+  heightCm?: number | null;
 
   @IsOptional()
   @IsNumber()
-  weightKg?: number;
+  weightKg?: number | null;
 
   @IsOptional()
   @IsString()
-  bodyShape?: string;
+  bodyShape?: string | null;
+
+  @IsOptional()
+  @IsIn(["slim", "regular", "relaxed"])
+  fitPreference?: "slim" | "regular" | "relaxed" | null;
 
   @IsOptional()
   @IsNumber()
-  budgetMin?: number;
+  budgetMin?: number | null;
 
   @IsOptional()
   @IsNumber()
-  budgetMax?: number;
+  budgetMax?: number | null;
 
   @IsOptional()
   @IsString()
-  budgetLabel?: string;
+  budgetLabel?: string | null;
 
   @IsOptional()
   @IsString()
-  closetStatus?: string;
+  closetStatus?: string | null;
 
   @IsOptional()
-  stylePreference?: Record<string, unknown>;
+  stylePreference?: Record<string, unknown> | null;
 
   @IsArray()
   preferredColors!: string[];
@@ -71,6 +75,30 @@ class UpdateProfileDto {
   @IsArray()
   avoidedColors!: string[];
 }
+
+type SafeProfileRow = {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  avatarUploadId: string | null;
+  avatarUrl: string | null;
+  gender: string | null;
+  age: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  bodyShape: string | null;
+  fitPreference: string | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  budgetLabel: string | null;
+  closetStatus: string | null;
+  stylePreference: Prisma.JsonValue | null;
+  preferredColors: string[] | null;
+  avoidedColors: string[] | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 @Injectable()
 class UsersService {
@@ -126,14 +154,19 @@ class UsersService {
   async updateProfile(user: AuthenticatedUser, userId: string, dto: UpdateProfileDto) {
     this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot update this profile");
 
+    const existingProfile = await this.getSafeProfile(userId);
+
+    let avatarUploadId: string | null = dto.avatarUploadId ?? null;
     let avatarUrl: string | null = dto.avatarUrl ?? null;
-    if (dto.avatarUploadId) {
+    const fitPreference = dto.fitPreference ?? existingProfile?.fitPreference ?? "regular";
+
+    if (avatarUploadId) {
       const [upload] = await this.prisma.$queryRaw<
         Array<{ id: string; userId: string; publicUrl: string }>
       >(Prisma.sql`
         SELECT id, "userId", "publicUrl"
         FROM "Upload"
-        WHERE id = ${dto.avatarUploadId}
+        WHERE id = ${avatarUploadId}
         LIMIT 1
       `);
 
@@ -141,37 +174,28 @@ class UsersService {
         throw new BadRequestException("Profile image upload is invalid for this user");
       }
 
+      avatarUploadId = upload.id;
       avatarUrl = upload.publicUrl;
     }
 
-    const [profile] = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        userId: string;
-        firstName: string;
-        lastName: string;
-        gender: string | null;
-        age: number | null;
-        heightCm: number | null;
-        weightKg: number | null;
-        bodyShape: string | null;
-        stylePreference: Prisma.JsonValue | null;
-        preferredColors: string[] | null;
-        avoidedColors: string[] | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }>
-    >(Prisma.sql`
+    const [profile] = await this.prisma.$queryRaw<Array<SafeProfileRow>>(Prisma.sql`
       INSERT INTO "Profile" (
         id,
         "userId",
         "firstName",
         "lastName",
+        "avatarUploadId",
+        "avatarUrl",
         gender,
         age,
         "heightCm",
         "weightKg",
         "bodyShape",
+        "fitPreference",
+        "budgetMin",
+        "budgetMax",
+        "budgetLabel",
+        "closetStatus",
         "stylePreference",
         "preferredColors",
         "avoidedColors",
@@ -183,11 +207,18 @@ class UsersService {
         ${userId},
         ${dto.firstName},
         ${dto.lastName},
+        ${avatarUploadId},
+        ${avatarUrl},
         ${dto.gender ?? null},
         ${dto.age ?? null},
         ${dto.heightCm ?? null},
         ${dto.weightKg ?? null},
         ${dto.bodyShape ?? null},
+        ${fitPreference},
+        ${dto.budgetMin ?? null},
+        ${dto.budgetMax ?? null},
+        ${dto.budgetLabel ?? null},
+        ${dto.closetStatus ?? "COMING_SOON"},
         CAST(${JSON.stringify(dto.stylePreference ?? null)} AS jsonb),
         ${this.toTextArray(dto.preferredColors)},
         ${this.toTextArray(dto.avoidedColors)},
@@ -197,11 +228,18 @@ class UsersService {
       ON CONFLICT ("userId") DO UPDATE SET
         "firstName" = EXCLUDED."firstName",
         "lastName" = EXCLUDED."lastName",
+        "avatarUploadId" = EXCLUDED."avatarUploadId",
+        "avatarUrl" = EXCLUDED."avatarUrl",
         gender = EXCLUDED.gender,
         age = EXCLUDED.age,
         "heightCm" = EXCLUDED."heightCm",
         "weightKg" = EXCLUDED."weightKg",
         "bodyShape" = EXCLUDED."bodyShape",
+        "fitPreference" = EXCLUDED."fitPreference",
+        "budgetMin" = EXCLUDED."budgetMin",
+        "budgetMax" = EXCLUDED."budgetMax",
+        "budgetLabel" = EXCLUDED."budgetLabel",
+        "closetStatus" = EXCLUDED."closetStatus",
         "stylePreference" = EXCLUDED."stylePreference",
         "preferredColors" = EXCLUDED."preferredColors",
         "avoidedColors" = EXCLUDED."avoidedColors",
@@ -211,11 +249,18 @@ class UsersService {
         "userId",
         "firstName",
         "lastName",
+        "avatarUploadId",
+        "avatarUrl",
         gender,
         age,
         "heightCm",
         "weightKg",
         "bodyShape",
+        "fitPreference",
+        "budgetMin",
+        "budgetMax",
+        "budgetLabel",
+        "closetStatus",
         "stylePreference",
         "preferredColors",
         "avoidedColors",
@@ -226,7 +271,7 @@ class UsersService {
     const completionSignals = [
       profile.firstName,
       profile.lastName,
-      avatarUrl,
+      profile.avatarUrl,
       profile.heightCm,
       profile.bodyShape,
       profile.preferredColors?.length ? "palette" : null
@@ -236,38 +281,34 @@ class UsersService {
       await this.rewardsService.awardProfileCompletion(userId);
     }
 
-    return profile;
+    return {
+      ...profile,
+      fitPreference: profile.fitPreference ?? "regular",
+      preferredColors: profile.preferredColors ?? [],
+      avoidedColors: profile.avoidedColors ?? [],
+      closetStatus: profile.closetStatus ?? "COMING_SOON"
+    };
   }
 
   private async getSafeProfile(userId: string) {
-    const rows = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        userId: string;
-        firstName: string;
-        lastName: string;
-        gender: string | null;
-        age: number | null;
-        heightCm: number | null;
-        weightKg: number | null;
-        bodyShape: string | null;
-        stylePreference: Prisma.JsonValue | null;
-        preferredColors: string[] | null;
-        avoidedColors: string[] | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }>
-    >(Prisma.sql`
+    const rows = await this.prisma.$queryRaw<Array<SafeProfileRow>>(Prisma.sql`
       SELECT
         id,
         "userId",
         "firstName",
         "lastName",
+        "avatarUploadId",
+        "avatarUrl",
         gender,
         age,
         "heightCm",
         "weightKg",
         "bodyShape",
+        "fitPreference",
+        "budgetMin",
+        "budgetMax",
+        "budgetLabel",
+        "closetStatus",
         "stylePreference",
         "preferredColors",
         "avoidedColors",
@@ -285,12 +326,10 @@ class UsersService {
 
     return {
       ...profile,
-      avatarUploadId: null,
-      avatarUrl: null,
-      budgetMin: null,
-      budgetMax: null,
-      budgetLabel: null,
-      closetStatus: "COMING_SOON"
+      fitPreference: profile.fitPreference ?? "regular",
+      preferredColors: profile.preferredColors ?? [],
+      avoidedColors: profile.avoidedColors ?? [],
+      closetStatus: profile.closetStatus ?? "COMING_SOON"
     };
   }
 

@@ -3,6 +3,10 @@ export interface RecommendationCandidate {
   styleTags: string[];
   colors: string[];
   fitScore: number;
+  fitConfidenceScore?: number;
+  issueCount?: number;
+  severeIssueCount?: number;
+  hasRecommendedSize?: boolean;
 }
 
 export interface RecommendationPreference {
