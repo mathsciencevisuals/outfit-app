@@ -20,7 +20,6 @@
       "@nestjs/core",
       "@scarf/scarf",
       "esbuild",
-      "msgpackr-extract",
       "prisma"
     ]
   },

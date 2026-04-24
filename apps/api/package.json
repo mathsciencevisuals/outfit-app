@@ -22,6 +22,7 @@
     "@fitme/fit-engine": "workspace:*",
     "@fitme/recommendation-engine": "workspace:*",
     "@fitme/types": "workspace:*",
+    "@google-cloud/storage": "^7.19.0",
     "@nestjs/bullmq": "^10.2.3",
     "@nestjs/common": "^10.4.2",
     "@nestjs/config": "^3.2.3",
@@ -50,7 +51,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.7.4",
     "prisma": "^5.20.0",
-    "tsx": "^4.19.1",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.1"
   }
 }

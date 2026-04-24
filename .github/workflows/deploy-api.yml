@@ -1,0 +1,83 @@
+name: Deploy API To Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/api/**"
+      - "packages/ai-client/**"
+      - "packages/config/**"
+      - "packages/fit-engine/**"
+      - "packages/recommendation-engine/**"
+      - "packages/types/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-api-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+      GAR_IMAGE: ${{ vars.GAR_IMAGE }}
+      CLOUD_RUN_API_SERVICE: ${{ vars.CLOUD_RUN_API_SERVICE }}
+    steps:
+      - name: Check Out Repo
+        uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate To Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set Up Gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker Auth
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Compute Image URI
+        run: |
+          echo "IMAGE_URI=${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${GAR_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Build Image
+        run: |
+          docker build \
+            --progress=plain \
+            -f apps/api/Dockerfile \
+            -t "${IMAGE_URI}" \
+            .
+
+      - name: Push Image
+        run: docker push "${IMAGE_URI}"
+
+      - id: deploy
+        name: Deploy To Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          region: ${{ env.GCP_REGION }}
+          service: ${{ env.CLOUD_RUN_API_SERVICE }}
+          image: ${{ env.IMAGE_URI }}
+
+      - name: Show Service URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

@@ -27,11 +27,11 @@ RUN pnpm --filter @fitme/api build
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl
+RUN npm install -g pnpm@10.10.0
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/api/prisma ./apps/api/prisma
 COPY packages/ai-client/package.json ./packages/ai-client/
@@ -39,6 +39,7 @@ COPY packages/config/package.json ./packages/config/
 COPY packages/fit-engine/package.json ./packages/fit-engine/
 COPY packages/recommendation-engine/package.json ./packages/recommendation-engine/
 COPY packages/types/package.json ./packages/types/
+RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/ai-client/dist ./packages/ai-client/dist
@@ -49,5 +50,5 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 
 WORKDIR /app/apps/api
 
-EXPOSE 8080
-CMD ["node", "dist/apps/api/src/main.js"]
+EXPOSE 3001
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/apps/api/src/main.js"]

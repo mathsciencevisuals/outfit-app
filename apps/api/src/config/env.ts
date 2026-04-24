@@ -10,11 +10,10 @@ const baseEnvSchema = z
     JWT_ISSUER: z.string().default("fitme-api"),
     JWT_AUDIENCE: z.string().default("fitme-clients"),
     ACCESS_TOKEN_TTL: z.string().default("7d"),
-    STORAGE_PROVIDER: z.enum(["cloudinary", "minio"]).default("cloudinary"),
-    CLOUDINARY_CLOUD_NAME: z.string().optional(),
-    CLOUDINARY_API_KEY: z.string().optional(),
-    CLOUDINARY_API_SECRET: z.string().optional(),
-    CLOUDINARY_FOLDER: z.string().default("fitme"),
+    STORAGE_PROVIDER: z.enum(["gcs", "minio"]).default("gcs"),
+    GCS_BUCKET: z.string().optional(),
+    GCS_PROJECT_ID: z.string().optional(),
+    GCS_PUBLIC_BASE_URL: z.string().url().optional(),
     MINIO_ENDPOINT: z.string().optional(),
     MINIO_PORT: z.coerce.number().optional(),
     MINIO_ACCESS_KEY: z.string().optional(),
@@ -27,16 +26,8 @@ const baseEnvSchema = z
     TRYON_HTTP_BASE_URL: z.string().optional()
   })
   .superRefine((config, ctx) => {
-    if (config.STORAGE_PROVIDER === "cloudinary") {
-      if (!config.CLOUDINARY_CLOUD_NAME) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["CLOUDINARY_CLOUD_NAME"], message: "CLOUDINARY_CLOUD_NAME is required when STORAGE_PROVIDER=cloudinary" });
-      }
-      if (!config.CLOUDINARY_API_KEY) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["CLOUDINARY_API_KEY"], message: "CLOUDINARY_API_KEY is required when STORAGE_PROVIDER=cloudinary" });
-      }
-      if (!config.CLOUDINARY_API_SECRET) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["CLOUDINARY_API_SECRET"], message: "CLOUDINARY_API_SECRET is required when STORAGE_PROVIDER=cloudinary" });
-      }
+    if (config.STORAGE_PROVIDER === "gcs" && !config.GCS_BUCKET) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["GCS_BUCKET"], message: "GCS_BUCKET is required when STORAGE_PROVIDER=gcs" });
     }
 
     if (config.STORAGE_PROVIDER === "minio") {

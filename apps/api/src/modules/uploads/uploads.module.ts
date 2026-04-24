@@ -16,8 +16,9 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { Storage } from "@google-cloud/storage";
 import { Prisma } from "@prisma/client";
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { extname } from "path";
 import { IsOptional, IsString } from "class-validator";
 
@@ -61,36 +62,40 @@ type UploadRow = {
 
 @Injectable()
 class UploadsService {
-  private readonly storageProvider: "cloudinary" | "minio";
+  private readonly storageProvider: "gcs" | "minio";
   private readonly bucket: string;
-  private readonly client?: S3Client;
+  private readonly gcs?: Storage;
+  private readonly s3Client?: S3Client;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly authorizationService: AuthorizationService
   ) {
-    this.storageProvider = this.configService.get<"cloudinary" | "minio">("STORAGE_PROVIDER") ?? "cloudinary";
-    this.bucket =
-      this.storageProvider === "cloudinary"
-        ? this.configService.getOrThrow<string>("CLOUDINARY_CLOUD_NAME")
-        : this.configService.getOrThrow<string>("MINIO_BUCKET");
+    this.storageProvider = this.configService.get<"gcs" | "minio">("STORAGE_PROVIDER") ?? "gcs";
 
-    if (this.storageProvider === "minio") {
-      const endpoint = this.configService.getOrThrow<string>("MINIO_ENDPOINT");
-      const port = Number(this.configService.getOrThrow<number>("MINIO_PORT"));
-      const useSsl = this.configService.get<boolean>("MINIO_USE_SSL") ?? false;
-
-      this.client = new S3Client({
-        region: this.configService.get<string>("MINIO_REGION") ?? "us-east-1",
-        endpoint: `${useSsl ? "https" : "http"}://${endpoint}:${port}`,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId: this.configService.getOrThrow<string>("MINIO_ACCESS_KEY"),
-          secretAccessKey: this.configService.getOrThrow<string>("MINIO_SECRET_KEY")
-        }
-      });
+    if (this.storageProvider === "gcs") {
+      const projectId = this.configService.get<string>("GCS_PROJECT_ID");
+      this.bucket = this.configService.getOrThrow<string>("GCS_BUCKET");
+      this.gcs = new Storage(projectId ? { projectId } : undefined);
+      return;
     }
+
+    this.bucket = this.configService.getOrThrow<string>("MINIO_BUCKET");
+
+    const endpoint = this.configService.getOrThrow<string>("MINIO_ENDPOINT");
+    const port = Number(this.configService.getOrThrow<number>("MINIO_PORT"));
+    const useSsl = this.configService.get<boolean>("MINIO_USE_SSL") ?? false;
+
+    this.s3Client = new S3Client({
+      region: this.configService.get<string>("MINIO_REGION") ?? "us-east-1",
+      endpoint: `${useSsl ? "https" : "http"}://${endpoint}:${port}`,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: this.configService.getOrThrow<string>("MINIO_ACCESS_KEY"),
+        secretAccessKey: this.configService.getOrThrow<string>("MINIO_SECRET_KEY")
+      }
+    });
   }
 
   list(user: AuthenticatedUser, userId?: string) {
@@ -150,8 +155,8 @@ class UploadsService {
 
     try {
       const publicUrl =
-        this.storageProvider === "cloudinary"
-          ? await this.uploadToCloudinary(upload, file)
+        this.storageProvider === "gcs"
+          ? await this.uploadToGcs(upload, file)
           : await this.uploadToMinio(upload, file);
 
       const [updated] = await this.prisma.$queryRaw<Array<UploadRow>>(Prisma.sql`
@@ -168,56 +173,38 @@ class UploadsService {
     }
   }
 
-  private async uploadToCloudinary(
+  private async uploadToGcs(
     upload: UploadRow,
     file: { buffer?: Buffer; mimetype?: string }
   ) {
-    const cloudName = this.configService.getOrThrow<string>("CLOUDINARY_CLOUD_NAME");
-    const apiKey = this.configService.getOrThrow<string>("CLOUDINARY_API_KEY");
-    const apiSecret = this.configService.getOrThrow<string>("CLOUDINARY_API_SECRET");
-    const folder = this.configService.get<string>("CLOUDINARY_FOLDER") ?? "fitme";
-    const timestamp = Math.floor(Date.now() / 1000);
-    const publicId = upload.key.replace(/\.[^.]+$/, "");
-    const signatureBase = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
-    const signature = createHash("sha1").update(signatureBase).digest("hex");
+    if (!this.gcs) {
+      throw new Error("GCS client is not configured");
+    }
 
-    const formData = new FormData();
-    const fileBytes = new Uint8Array(file.buffer as Buffer);
-    formData.append("file", new Blob([fileBytes], { type: file.mimetype ?? upload.mimeType }), upload.key.split("/").pop() ?? "upload.jpg");
-    formData.append("api_key", apiKey);
-    formData.append("timestamp", String(timestamp));
-    formData.append("signature", signature);
-    formData.append("folder", folder);
-    formData.append("public_id", publicId);
+    const bucket = this.gcs.bucket(upload.bucket);
+    const object = bucket.file(upload.key);
 
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-      method: "POST",
-      body: formData
+    await object.save(file.buffer as Buffer, {
+      resumable: false,
+      contentType: file.mimetype ?? upload.mimeType,
+      metadata: {
+        cacheControl: "public, max-age=31536000"
+      }
     });
 
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || `Cloudinary upload failed with status ${response.status}`);
-    }
-
-    const payload = (await response.json()) as { secure_url?: string };
-    if (!payload.secure_url) {
-      throw new Error("Cloudinary upload did not return a secure URL");
-    }
-
-    return payload.secure_url;
+    return this.buildPublicUrl(upload.key);
   }
 
   private async uploadToMinio(
     upload: UploadRow,
     file: { buffer?: Buffer; mimetype?: string; size?: number }
   ) {
-    if (!this.client) {
+    if (!this.s3Client) {
       throw new Error("MinIO client is not configured");
     }
 
     await this.ensureBucketExists();
-    await this.client.send(
+    await this.s3Client.send(
       new PutObjectCommand({
         Bucket: upload.bucket,
         Key: upload.key,
@@ -231,23 +218,27 @@ class UploadsService {
   }
 
   private async ensureBucketExists() {
-    if (!this.client) {
+    if (!this.s3Client) {
       return;
     }
 
     try {
-      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
     } catch {
-      await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+      await this.s3Client.send(new CreateBucketCommand({ Bucket: this.bucket }));
     }
   }
 
   private buildPublicUrl(key: string) {
-    if (this.storageProvider === "cloudinary") {
-      const cloudName = this.configService.getOrThrow<string>("CLOUDINARY_CLOUD_NAME");
-      const folder = this.configService.get<string>("CLOUDINARY_FOLDER") ?? "fitme";
-      const publicId = key.replace(/\.[^.]+$/, "");
-      return `https://res.cloudinary.com/${cloudName}/image/upload/${folder}/${publicId}`;
+    if (this.storageProvider === "gcs") {
+      const configuredBase = this.configService.get<string>("GCS_PUBLIC_BASE_URL");
+      const encodedKey = key.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+
+      if (configuredBase) {
+        return `${configuredBase.replace(/\/$/, "")}/${encodedKey}`;
+      }
+
+      return `https://storage.googleapis.com/${this.bucket}/${encodedKey}`;
     }
 
     const configuredBase = this.configService.get<string>("MINIO_PUBLIC_URL");

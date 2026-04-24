@@ -9,8 +9,9 @@ substitutions:
   _VPC_NETWORK: default
   _VPC_SUBNET: default
   _REDIS_URL: redis://10.0.0.3:6379
-  _STORAGE_PROVIDER: cloudinary
-  _CLOUDINARY_FOLDER: fitme
+  _STORAGE_PROVIDER: gcs
+  _GCS_BUCKET: fitme-assets
+  _GCS_PUBLIC_BASE_URL: https://storage.googleapis.com/fitme-assets
   _TRYON_PROVIDER: mock
 
 steps:
@@ -37,7 +38,7 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}
       - --service-account=${_SERVICE_ACCOUNT}
       - --allow-unauthenticated
-      - --port=3001
+      - --port=8080
       - --cpu=1
       - --memory=1Gi
       - --min-instances=0
@@ -46,8 +47,8 @@ steps:
       - --network=${_VPC_NETWORK}
       - --subnet=${_VPC_SUBNET}
       - --vpc-egress=private-ranges-only
-      - --set-env-vars=NODE_ENV=production,STORAGE_PROVIDER=${_STORAGE_PROVIDER},CLOUDINARY_FOLDER=${_CLOUDINARY_FOLDER},REDIS_URL=${_REDIS_URL},TRYON_PROVIDER=${_TRYON_PROVIDER}
-      - --update-secrets=DATABASE_URL=fitme-database-url:latest,JWT_SECRET=fitme-jwt-secret:latest,CLOUDINARY_CLOUD_NAME=fitme-cloudinary-cloud-name:latest,CLOUDINARY_API_KEY=fitme-cloudinary-api-key:latest,CLOUDINARY_API_SECRET=fitme-cloudinary-api-secret:latest
+      - --set-env-vars=NODE_ENV=production,STORAGE_PROVIDER=${_STORAGE_PROVIDER},GCS_BUCKET=${_GCS_BUCKET},GCS_PROJECT_ID=${PROJECT_ID},GCS_PUBLIC_BASE_URL=${_GCS_PUBLIC_BASE_URL},REDIS_URL=${_REDIS_URL},TRYON_PROVIDER=${_TRYON_PROVIDER}
+      - --update-secrets=DATABASE_URL=fitme-database-url:latest,JWT_SECRET=fitme-jwt-secret:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}
