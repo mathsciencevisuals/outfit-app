@@ -1,52 +1,34 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from 'react-native';
+import { Colors, FontSize, FontWeight, Spacing } from '../utils/theme';
 
-import { colors } from "../theme/design";
-
-export function InfoRow({
-  label,
-  value,
-  emphasized = false
-}: {
+interface InfoRowProps {
   label: string;
   value: string;
-  emphasized?: boolean;
-}) {
+  valueColor?: string;
+  last?: boolean;
+}
+
+export function InfoRow({ label, value, valueColor, last = false }: InfoRowProps) {
   return (
-    <View style={[styles.row, emphasized && styles.rowEmphasized]}>
+    <View style={[styles.row, last && styles.lastRow]}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, emphasized && styles.valueEmphasized]}>{value}</Text>
+      <Text style={[styles.value, valueColor ? { color: valueColor } : null]}>
+        {value}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eadfce"
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
   },
-  rowEmphasized: {
-    borderBottomColor: colors.lineStrong
-  },
-  label: {
-    flex: 1,
-    color: colors.brand,
-    fontSize: 14,
-    fontWeight: "500"
-  },
-  value: {
-    flex: 1,
-    color: colors.ink,
-    fontWeight: "600",
-    fontSize: 14,
-    textAlign: "right"
-  },
-  valueEmphasized: {
-    fontSize: 16,
-    color: colors.ink
-  }
+  lastRow: { borderBottomWidth: 0 },
+  label: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  value: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.textPrimary },
 });

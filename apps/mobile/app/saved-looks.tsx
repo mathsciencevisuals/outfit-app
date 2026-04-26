@@ -1,13 +1,5 @@
-import { View, StyleSheet } from 'react-native';
+import { AppShell } from '../src/components/AppShell';
 import { SavedLooksScreen } from '../src/features/saved/SavedLooksScreen';
-import { BottomTabBar } from '../src/components/BottomTabBar';
-
 export default function SavedLooksPage() {
-  return (
-    <View style={styles.container}>
-      <View style={styles.content}><SavedLooksScreen /></View>
-      <BottomTabBar active="saved" />
-    </View>
-  );
+  return <AppShell active="saved"><SavedLooksScreen /></AppShell>;
 }
-const styles = StyleSheet.create({ container: { flex: 1 }, content: { flex: 1 } });

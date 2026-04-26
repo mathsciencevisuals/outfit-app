@@ -1,8 +1,7 @@
-import { Redirect } from "expo-router";
-
-import { useAppStore } from "../src/store/app-store";
-
+// Index is handled by NavigationGuard in _layout.tsx.
+// This file must exist for expo-router to register the route,
+// but it renders nothing — the guard redirects immediately.
+import { View } from 'react-native';
 export default function IndexRoute() {
-  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
-  return <Redirect href={isAuthenticated ? "/feed" : "/auth"} />;
+  return <View />;
 }

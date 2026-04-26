@@ -1,352 +1,394 @@
-import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { SmartImage } from "../../components/SmartImage";
-import { demoData } from "../../demo/demo-data";
-import { useAsyncResource } from "../../hooks/useAsyncResource";
-import { mobileApi } from "../../services/api";
-import { useAppStore } from "../../store/app-store";
-import { colors, radius } from "../../theme/design";
-import { demoModeEnabled } from "../../utils/env";
+import { EmptyState } from '../../components/EmptyState';
+import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { PrimaryButton } from '../../components/PrimaryButton';
+import { ProductVariantPicker } from '../../components/ProductVariantPicker';
+import { Screen } from '../../components/Screen';
+import { SectionCard } from '../../components/SectionCard';
+import { useAsyncResource } from '../../hooks/useAsyncResource';
+import { mobileApi } from '../../services/api';
+import { useAppStore } from '../../store/app-store';
+import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
+import type { Product, ProductVariant } from '../../types';
+
+// ─── Permission helpers ────────────────────────────────────────────────────────
+
+async function requestCameraPermission(): Promise<boolean> {
+  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert(
+      'Camera permission needed',
+      'Please allow camera access in your device settings to take photos.',
+      [{ text: 'OK' }]
+    );
+    return false;
+  }
+  return true;
+}
+
+async function requestGalleryPermission(): Promise<boolean> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert(
+      'Photo library permission needed',
+      'Please allow photo library access to select images.',
+      [{ text: 'OK' }]
+    );
+    return false;
+  }
+  return true;
+}
+
+// ─── Image picker options ──────────────────────────────────────────────────────
+
+const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+  allowsEditing: true,
+  aspect: [3, 4],      // portrait crop — best for body silhouette
+  quality: 0.85,
+};
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export function TryOnUploadScreen() {
   const router = useRouter();
-  const userId = useAppStore((state) => state.userId);
-  const profile = useAppStore((state) => state.profile);
-  const setLastTryOnRequestId = useAppStore((state) => state.setLastTryOnRequestId);
-  const { data } = useAsyncResource(() => mobileApi.products(), []);
 
-  const [tab, setTab] = useState<"store" | "photo">("store");
-  const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  // Store
+  const userId              = useAppStore((s) => s.userId);
+  const capturedPhotoUri    = useAppStore((s) => s.capturedPhotoUri);
+  const selectedVariant     = useAppStore((s) => s.selectedVariant);
+  const selectedProduct     = useAppStore((s) => s.selectedProduct);
+  const tryOnStatus         = useAppStore((s) => s.tryOnStatus);
+  const tryOnProgress       = useAppStore((s) => s.tryOnProgress);
+  const setCapturedPhoto    = useAppStore((s) => s.setCapturedPhoto);
+  const selectVariant       = useAppStore((s) => s.selectVariant);
+  const setTryOnStatus      = useAppStore((s) => s.setTryOnStatus);
+  const setTryOnProgress    = useAppStore((s) => s.setTryOnProgress);
+  const setTryOnError       = useAppStore((s) => s.setTryOnError);
+  const setLastTryOnRequestId = useAppStore((s) => s.setLastTryOnRequestId);
+  const resetTryOn          = useAppStore((s) => s.resetTryOn);
 
-  const products = data && data.length > 0 ? data : demoData.products;
-  const selectedProduct = products.find((entry) => entry.id === selectedProductId) ?? products[0];
-  const selectedVariant = selectedProduct?.variants?.[1] ?? selectedProduct?.variants?.[0];
-  const previewPhoto = photo?.uri ?? profile?.avatarUrl ?? (demoModeEnabled ? demoData.tryOnRequest.sourceUpload?.publicUrl : null);
+  // Catalog
+  const { data: productsData, loading: catalogLoading, error: catalogError } =
+    useAsyncResource(() => mobileApi.products({ limit: 20 }), []);
+  const products: Product[] = Array.isArray(productsData) ? productsData : [];
 
-  const storeProducts = useMemo(() => products.slice(0, 8), [products]);
+  const isSubmitting = tryOnStatus === 'uploading' || tryOnStatus === 'processing';
+  const canSubmit    = !!capturedPhotoUri && !!selectedVariant && !isSubmitting;
 
-  const pickImage = async (source: "camera" | "library") => {
-    const permission =
-      source === "camera"
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+  // ── Photo capture ────────────────────────────────────────────────────────────
 
-    if (!permission.granted) {
-      setMessage(source === "camera" ? "Camera permission is required." : "Photo library permission is required.");
-      return;
+  const handleCamera = useCallback(async () => {
+    const allowed = await requestCameraPermission();
+    if (!allowed) return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      ...PICKER_OPTIONS,
+      // On Android, front camera gives better body framing
+      cameraType: ImagePicker.CameraType.front,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setCapturedPhoto(result.assets[0].uri);
     }
+  }, [setCapturedPhoto]);
 
-    const result =
-      source === "camera"
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+  const handleGallery = useCallback(async () => {
+    const allowed = await requestGalleryPermission();
+    if (!allowed) return;
 
-    if (!result.canceled) {
-      setPhoto(result.assets[0] ?? null);
-      setMessage(null);
+    const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
+
+    if (!result.canceled && result.assets[0]) {
+      setCapturedPhoto(result.assets[0].uri);
     }
-  };
+  }, [setCapturedPhoto]);
 
-  const startStoreTryOn = async (productId?: string) => {
-    const product = products.find((entry) => entry.id === (productId ?? selectedProduct?.id)) ?? selectedProduct;
-    const variant = product?.variants?.[1] ?? product?.variants?.[0];
-    if (!product || !variant) {
-      return;
-    }
+  // ── Variant selection ────────────────────────────────────────────────────────
 
-    setSubmitting(true);
-    setMessage(null);
+  const handleSelectVariant = useCallback(
+    (product: Product, variant: ProductVariant) => {
+      selectVariant(variant, product);
+    },
+    [selectVariant]
+  );
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
+
+  const handleSubmit = useCallback(async () => {
+    if (!capturedPhotoUri || !selectedVariant) return;
+
     try {
-      const request = profile?.avatarUploadId
-        ? await mobileApi.createTryOn(userId, variant.id, {
-            uploadId: profile.avatarUploadId,
-            fitStyle: profile.fitPreference ?? "regular",
-            comparisonLabel: product.name
-          })
-        : await mobileApi.createTryOn(userId, variant.id, {
-            imageUrl: demoData.tryOnRequest.sourceUpload?.publicUrl,
-            fitStyle: profile?.fitPreference ?? "regular",
-            comparisonLabel: product.name
-          });
+      setTryOnStatus('uploading');
+      setTryOnProgress(5);
 
-      setLastTryOnRequestId(request.id);
-      router.push({ pathname: "/processing" as never, params: { item: product.name } } as never);
-    } catch (nextError: unknown) {
-      setMessage(nextError instanceof Error ? nextError.message : "Could not start try-on.");
-    } finally {
-      setSubmitting(false);
+      // 1. Upload photo + variant — server queues GPU job
+      const created = await mobileApi.createTryOn(
+        userId,
+        selectedVariant.id,
+        capturedPhotoUri
+      );
+      setLastTryOnRequestId(created.id);
+      setTryOnStatus('processing');
+      setTryOnProgress(15);
+
+      // 2. Poll until done (800 ms interval, 30 s max)
+      await mobileApi.pollTryOnResult(created.id, (pct) => {
+        setTryOnProgress(15 + Math.round(pct * 0.85)); // scale 15→100
+      });
+
+      setTryOnStatus('complete');
+      router.push('/tryon-result');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong.';
+      setTryOnError(message);
+      setTryOnStatus('error');
+      Alert.alert('Try-on failed', message, [
+        { text: 'Retry', onPress: () => setTryOnStatus('idle') },
+        { text: 'Cancel', style: 'cancel', onPress: resetTryOn },
+      ]);
     }
-  };
+  }, [
+    capturedPhotoUri, selectedVariant, userId,
+    setTryOnStatus, setTryOnProgress, setTryOnError,
+    setLastTryOnRequestId, resetTryOn, router,
+  ]);
 
-  const startPhotoTryOn = async () => {
-    if (!selectedVariant) {
-      return;
-    }
+  // ── Render ───────────────────────────────────────────────────────────────────
 
-    setSubmitting(true);
-    setMessage(null);
-    try {
-      const request = photo
-        ? await mobileApi.createTryOnFromAssets(
-            userId,
-            selectedVariant.id,
-            {
-              uri: photo.uri,
-              fileName: photo.fileName,
-              mimeType: photo.mimeType
-            },
-            {
-              fitStyle: profile?.fitPreference ?? "regular",
-            comparisonLabel: selectedProduct?.name ?? undefined
-          }
-        )
-        : await mobileApi.createTryOn(userId, selectedVariant.id, {
-            uploadId: profile?.avatarUploadId ?? undefined,
-            imageUrl: demoData.tryOnRequest.sourceUpload?.publicUrl,
-            fitStyle: profile?.fitPreference ?? "regular",
-            comparisonLabel: selectedProduct?.name ?? undefined
-          });
-
-      setLastTryOnRequestId(request.id);
-      router.push({ pathname: "/processing" as never, params: { item: selectedProduct?.name ?? "your look" } } as never);
-    } catch (nextError: unknown) {
-      setMessage(nextError instanceof Error ? nextError.message : "Could not start photo try-on.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const progressMessage =
+    tryOnStatus === 'uploading'   ? 'Uploading your photo…'  :
+    tryOnStatus === 'processing'  ? 'Generating your look…'  : '';
 
   return (
-    <Screen tone="dark" showProfileStrip={false}>
-      <View style={styles.shell}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Try-On Studio</Text>
-          <Text style={styles.subtitle}>See how clothes look on you before you buy.</Text>
-        </View>
-
-        <View style={styles.tabRow}>
-          <TabButton label="From Store" active={tab === "store"} onPress={() => setTab("store")} />
-          <TabButton label="From Photo" active={tab === "photo"} onPress={() => setTab("photo")} />
-        </View>
-
-        {tab === "store" ? (
-          <View style={styles.grid}>
-            {storeProducts.map((product) => (
-              <Pressable key={product.id} onPress={() => setSelectedProductId(product.id)} style={({ pressed }) => [styles.productCard, selectedProduct?.id === product.id && styles.productCardSelected, pressed && styles.pressed]}>
-                <SmartImage
-                  uri={product.imageUrl}
-                  label={product.name}
-                  containerStyle={styles.productImageWrap}
-                  style={styles.productImage}
-                  fallbackTone="accent"
-                />
-                <View style={styles.productCopy}>
-                  <Text style={styles.productTitle} numberOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.productMeta}>
-                    {product.brand?.name ?? "FitMe"} · Rs. {Math.round(product.variants?.[1]?.price ?? product.variants?.[0]?.price ?? 0)}
-                  </Text>
-                  <PrimaryButton onPress={() => void startStoreTryOn(product.id)} size="sm">
-                    Try-On
-                  </PrimaryButton>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.photoCard}>
-            <SmartImage
-              uri={previewPhoto}
-              label="Your try-on photo"
-              containerStyle={styles.photoPreviewWrap}
-              style={styles.photoPreview}
-            />
-            <Text style={styles.photoTitle}>Upload or capture your photo</Text>
-            <Text style={styles.photoBody}>Use camera, gallery, your saved profile photo, or demo mode so the flow never dead-ends.</Text>
-            <View style={styles.buttonRow}>
-              <PrimaryButton onPress={() => void pickImage("camera")} variant="secondary">
-                Camera
-              </PrimaryButton>
-              <PrimaryButton onPress={() => void pickImage("library")} variant="secondary">
-                Upload
-              </PrimaryButton>
+    <>
+      <Screen>
+        {/* ── Step 1: Your photo ── */}
+        <SectionCard title="Step 1 — Your photo">
+          {capturedPhotoUri ? (
+            /* Preview + retake */
+            <View>
+              <Image
+                source={{ uri: capturedPhotoUri }}
+                style={styles.preview}
+                resizeMode="cover"
+              />
+              <View style={styles.retakeRow}>
+                <PrimaryButton
+                  variant="secondary"
+                  onPress={handleCamera}
+                  style={styles.retakeBtn}
+                >
+                  📷  Retake
+                </PrimaryButton>
+                <PrimaryButton
+                  variant="ghost"
+                  onPress={() => setCapturedPhoto(undefined)}
+                  style={styles.retakeBtn}
+                >
+                  Remove
+                </PrimaryButton>
+              </View>
             </View>
-            <PrimaryButton onPress={() => void startPhotoTryOn()} disabled={submitting}>
-              {submitting ? "Starting..." : "Create Try-On"}
-            </PrimaryButton>
-          </View>
-        )}
+          ) : (
+            /* Photo capture options */
+            <View style={styles.captureOptions}>
+              {/* Primary: camera — prominent for "snap in store" use case */}
+              <Pressable
+                style={({ pressed }) => [styles.cameraBlock, pressed && styles.cameraBlockPressed]}
+                onPress={handleCamera}
+              >
+                <Text style={styles.cameraIcon}>📷</Text>
+                <Text style={styles.cameraTitle}>Take photo</Text>
+                <Text style={styles.cameraHint}>
+                  Best result — stand in front of a plain background
+                </Text>
+              </Pressable>
 
-        {selectedProduct ? (
-          <View style={styles.selectionCard}>
-            <Text style={styles.selectionEyebrow}>Selected piece</Text>
-            <Text style={styles.selectionTitle}>{selectedProduct.name}</Text>
-            <Text style={styles.selectionBody}>
-              {selectedProduct.brand?.name ?? "FitMe"} · Rs. {Math.round(selectedVariant?.price ?? 0)} · Size {selectedVariant?.sizeLabel ?? "M"}
+              <Text style={styles.orText}>or</Text>
+
+              <PrimaryButton
+                variant="secondary"
+                onPress={handleGallery}
+              >
+                Choose from gallery
+              </PrimaryButton>
+
+              <Text style={styles.tipText}>
+                💡 Tip: wear fitted clothing and stand with arms slightly away from your body
+              </Text>
+            </View>
+          )}
+        </SectionCard>
+
+        {/* ── Step 2: Garment selector ── */}
+        <SectionCard title="Step 2 — Choose outfit">
+          {catalogLoading ? (
+            <Text style={styles.loadingText}>Loading catalogue…</Text>
+          ) : catalogError ? (
+            <EmptyState
+              icon="⚠️"
+              title="Couldn't load products"
+              subtitle={catalogError}
+            />
+          ) : products.length === 0 ? (
+            <EmptyState
+              icon="🛍️"
+              title="No products available"
+              subtitle="Check back soon for new arrivals."
+            />
+          ) : (
+            <ProductVariantPicker
+              products={products}
+              selectedVariant={selectedVariant}
+              selectedProduct={selectedProduct}
+              onSelect={handleSelectVariant}
+            />
+          )}
+        </SectionCard>
+
+        {/* ── Step 3: Generate ── */}
+        <SectionCard>
+          {/* Readiness checklist */}
+          <View style={styles.checklist}>
+            <CheckItem done={!!capturedPhotoUri} label="Photo added" />
+            <CheckItem done={!!selectedVariant}  label="Outfit selected" />
+          </View>
+
+          <PrimaryButton
+            onPress={handleSubmit}
+            disabled={!canSubmit}
+            loading={isSubmitting}
+          >
+            {isSubmitting ? 'Processing…' : '✨  Generate try-on'}
+          </PrimaryButton>
+
+          {tryOnStatus === 'error' && (
+            <Text style={styles.errorText}>
+              Try-on failed. Tap Generate to retry.
             </Text>
-          </View>
-        ) : null}
+          )}
+        </SectionCard>
+      </Screen>
 
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-      </View>
-    </Screen>
+      {/* Full-screen overlay while processing */}
+      <LoadingOverlay
+        visible={isSubmitting}
+        message={progressMessage}
+        progress={tryOnProgress}
+      />
+    </>
   );
 }
 
-function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+// ─── Check item ───────────────────────────────────────────────────────────────
+
+function CheckItem({ done, label }: { done: boolean; label: string }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.tabButton, active && styles.tabButtonActive, pressed && styles.pressed]}>
-      <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>{label}</Text>
-    </Pressable>
+    <View style={styles.checkRow}>
+      <View style={[styles.checkDot, done && styles.checkDotDone]}>
+        <Text style={styles.checkDotText}>{done ? '✓' : ''}</Text>
+      </View>
+      <Text style={[styles.checkLabel, done && styles.checkLabelDone]}>{label}</Text>
+    </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  shell: {
-    gap: 16
+  // Photo preview
+  preview: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface2,
   },
-  header: {
-    gap: 4
+  retakeRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
-  title: {
-    color: colors.inkOnDark,
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "800"
-  },
-  subtitle: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14
-  },
-  tabRow: {
-    flexDirection: "row",
-    gap: 10,
-    padding: 6,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(255,255,255,0.05)"
-  },
-  tabButton: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.lg
-  },
-  tabButtonActive: {
-    backgroundColor: colors.accent
-  },
-  tabButtonText: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  tabButtonTextActive: {
-    color: colors.inkOnDark
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12
-  },
-  productCard: {
-    width: "47%",
-    gap: 10,
-    padding: 10,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.86)",
+  retakeBtn: { flex: 1 },
+
+  // Capture options
+  captureOptions: { gap: Spacing.md },
+  cameraBlock: {
+    backgroundColor: Colors.primaryDim,
+    borderRadius: Radius.md,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.xs,
     borderWidth: 1,
-    borderColor: colors.lineDark
+    borderColor: Colors.primaryLight,
+    ...Shadow.sm,
   },
-  productCardSelected: {
-    borderColor: colors.accent
+  cameraBlockPressed: { opacity: 0.75 },
+  cameraIcon:  { fontSize: 36 },
+  cameraTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
   },
-  productImageWrap: {
-    aspectRatio: 0.76
+  cameraHint: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
-  productImage: {
-    width: "100%",
-    height: "100%"
+  orText: {
+    textAlign: 'center',
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
-  productCopy: {
-    gap: 6
+  tipText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    lineHeight: 18,
   },
-  productTitle: {
-    color: colors.inkOnDark,
-    fontSize: 15,
-    fontWeight: "700"
+  loadingText: {
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: Spacing.lg,
   },
-  productMeta: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 12,
-    lineHeight: 18
+
+  // Checklist
+  checklist: { gap: Spacing.sm, marginBottom: Spacing.md },
+  checkRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  checkDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.surface2,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  photoCard: {
-    gap: 14,
-    padding: 18,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.86)",
-    borderWidth: 1,
-    borderColor: colors.lineDark
+  checkDotDone: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
-  photoPreviewWrap: {
-    aspectRatio: 0.78
+  checkDotText: { fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold },
+  checkLabel:     { fontSize: FontSize.sm, color: Colors.textMuted },
+  checkLabelDone: { color: Colors.textPrimary, fontWeight: FontWeight.medium },
+
+  errorText: {
+    fontSize: FontSize.xs,
+    color: Colors.error,
+    textAlign: 'center',
   },
-  photoPreview: {
-    width: "100%",
-    height: "100%"
-  },
-  photoTitle: {
-    color: colors.inkOnDark,
-    fontSize: 18,
-    fontWeight: "700"
-  },
-  photoBody: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14,
-    lineHeight: 21
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  selectionCard: {
-    gap: 4,
-    padding: 16,
-    borderRadius: radius.xl,
-    backgroundColor: colors.accentSoft,
-    borderWidth: 1,
-    borderColor: "rgba(124,58,237,0.24)"
-  },
-  selectionEyebrow: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase"
-  },
-  selectionTitle: {
-    color: colors.inkOnDark,
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  selectionBody: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14
-  },
-  message: {
-    color: "#fda4af",
-    fontSize: 14
-  },
-  pressed: {
-    opacity: 0.92
-  }
 });

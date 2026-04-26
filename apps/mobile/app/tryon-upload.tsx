@@ -1,5 +1,1 @@
-import { Redirect } from "expo-router";
-
-export default function LegacyTryOnUploadRoute() {
-  return <Redirect href="/try-on" />;
-}
+export { TryOnUploadScreen as default } from "../src/features/tryon/TryOnUploadScreen";

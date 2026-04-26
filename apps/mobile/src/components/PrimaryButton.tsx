@@ -1,104 +1,71 @@
-import { PropsWithChildren } from "react";
-import { Pressable, StyleSheet, Text, ViewStyle } from "react-native";
+import { PropsWithChildren } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { Colors, FontSize, FontWeight, Radius, Spacing } from '../utils/theme';
 
-import { colors, radius } from "../theme/design";
-
-type ButtonVariant = "primary" | "secondary" | "ghost";
-type ButtonSize = "md" | "sm";
+interface PrimaryButtonProps {
+  onPress?: () => void;
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+  loading?: boolean;
+  disabled?: boolean;
+  style?: ViewStyle;
+}
 
 export function PrimaryButton({
   onPress,
   children,
-  disabled,
-  variant = "primary",
-  size = "md",
-  fullWidth = true
-}: PropsWithChildren<{
-  onPress?: () => void;
-  disabled?: boolean;
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  fullWidth?: boolean;
-}>) {
+  variant = 'primary',
+  loading = false,
+  disabled = false,
+  style,
+}: PropsWithChildren<PrimaryButtonProps>) {
+  const isDisabled = disabled || loading;
+
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={onPress}
+      disabled={isDisabled}
       style={({ pressed }) => [
-        styles.button,
-        size === "sm" ? styles.buttonSmall : styles.buttonMedium,
-        variant === "primary" ? styles.primary : variant === "secondary" ? styles.secondary : styles.ghost,
-        !fullWidth && styles.inline,
-        disabled && styles.disabled,
-        pressed && !disabled && styles.pressed
+        styles.base,
+        styles[variant],
+        isDisabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
+        style,
       ]}
     >
-      <Text
-        style={[
-          styles.text,
-          variant === "primary" ? styles.primaryText : variant === "secondary" ? styles.secondaryText : styles.ghostText
-        ]}
-      >
-        {children}
-      </Text>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={variant === 'primary' ? Colors.white : Colors.primary}
+        />
+      ) : (
+        <Text style={[styles.text, styles[`text_${variant}`]]}>{children}</Text>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  button: {
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5
+  base: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
-  buttonMedium: {
-    minHeight: 50,
-    paddingHorizontal: 20,
-    paddingVertical: 13
-  },
-  buttonSmall: {
-    minHeight: 40,
-    paddingHorizontal: 15,
-    paddingVertical: 10
-  },
-  primary: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accentStrong,
-    shadowColor: colors.accentStrong,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    elevation: 6
-  },
-  secondary: {
-    backgroundColor: colors.panelStrong,
-    borderColor: colors.lineStrong
-  },
-  ghost: {
-    backgroundColor: "rgba(255,255,255,0.62)",
-    borderColor: colors.line
-  },
-  text: {
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0.2
-  },
-  primaryText: {
-    color: colors.panelStrong
-  },
-  secondaryText: {
-    color: colors.ink
-  },
-  ghostText: {
-    color: colors.brand
-  },
-  inline: {
-    alignSelf: "flex-start"
-  } as ViewStyle,
-  disabled: {
-    opacity: 0.45
-  },
-  pressed: {
-    transform: [{ scale: 0.985 }]
-  }
+  primary:   { backgroundColor: Colors.primary },
+  secondary: { backgroundColor: Colors.surface2, borderWidth: 1, borderColor: Colors.border },
+  outline:   { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: Colors.primary },
+  ghost:     { backgroundColor: 'transparent' },
+  danger:    { backgroundColor: Colors.error },
+
+  disabled:  { opacity: 0.45 },
+  pressed:   { opacity: 0.80 },
+
+  text:         { fontSize: FontSize.base, fontWeight: FontWeight.bold },
+  text_primary:   { color: Colors.white },
+  text_secondary: { color: Colors.textPrimary },
+  text_outline:   { color: Colors.primary },
+  text_ghost:     { color: Colors.primary },
+  text_danger:    { color: Colors.white },
 });

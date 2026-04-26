@@ -1,5 +1,1 @@
-import { Redirect } from "expo-router";
-
-export default function LegacyProfileRoute() {
-  return <Redirect href="/account" />;
-}
+export { ProfileScreen as default } from "../src/features/profile/ProfileScreen";

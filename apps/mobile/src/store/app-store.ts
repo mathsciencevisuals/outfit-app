@@ -1,121 +1,62 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { SessionUser, UserProfile, UserRole } from "../types/api";
+export type AccentColor = 'teal' | 'purple' | 'blue' | 'pink';
+export type ThemeMode  = 'light' | 'dark';
 
-const STORAGE_KEY = "fitme-app-store";
+interface AppState {
+  userId:            string;
+  theme:             ThemeMode;
+  accent:            AccentColor;
+  savedProductIds:   string[];
+  compareProductIds: string[];
+  lastTryOnRequestId: string | null;
 
-type AppState = {
-  userId: string;
-  userEmail: string;
-  userRole: UserRole | null;
-  token: string | null;
-  profile: UserProfile | null;
-  profileVersion: number;
-  isAuthenticated: boolean;
-  authChecked: boolean;
-  lastTryOnRequestId?: string;
-  setSession: (input: { token: string; user: SessionUser }) => void;
-  startDemoSession: (input: { token: string; user: SessionUser; profile?: UserProfile | null; tryOnRequestId?: string }) => void;
-  setProfile: (profile: UserProfile | null) => void;
-  finishAuthCheck: () => void;
-  setLastTryOnRequestId: (requestId?: string) => void;
-  resetSession: () => void;
-  logout: () => Promise<void>;
-};
-
-const initialState = {
-  userId: "",
-  userEmail: "",
-  userRole: null as UserRole | null,
-  token: null as string | null,
-  profile: null as UserProfile | null,
-  profileVersion: 0,
-  isAuthenticated: false,
-  authChecked: false,
-  lastTryOnRequestId: undefined as string | undefined
-};
-
-function mergeProfile(current: UserProfile | null, next: UserProfile | null) {
-  if (!next) {
-    return null;
-  }
-  if (!current) {
-    return next;
-  }
-
-  return {
-    ...current,
-    ...next,
-    measurements: next.measurements ?? current.measurements ?? [],
-    savedLooks: next.savedLooks ?? current.savedLooks ?? [],
-    preferredColors: next.preferredColors ?? current.preferredColors ?? [],
-    avoidedColors: next.avoidedColors ?? current.avoidedColors ?? []
-  };
+  setUserId:              (id: string) => void;
+  setTheme:               (t: ThemeMode) => void;
+  setAccent:              (a: AccentColor) => void;
+  toggleSavedProduct:     (id: string) => void;
+  addToCompare:           (id: string) => void;
+  removeFromCompare:      (id: string) => void;
+  clearCompare:           () => void;
+  setLastTryOnRequestId:  (id: string | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
-      ...initialState,
-      setSession: ({ token, user }) =>
-        set((state) => ({
-          token,
-          userId: user.id,
-          userEmail: user.email,
-          userRole: user.role,
-          profile: mergeProfile(state.profile, user.profile ?? null),
-          profileVersion: state.profileVersion + 1,
-          isAuthenticated: true,
-          authChecked: true
-        })),
-      startDemoSession: ({ token, user, profile, tryOnRequestId }) =>
-        set((state) => ({
-          token,
-          userId: user.id,
-          userEmail: user.email,
-          userRole: user.role,
-          profile: mergeProfile(state.profile, profile ?? user.profile ?? null),
-          profileVersion: state.profileVersion + 1,
-          isAuthenticated: true,
-          authChecked: true,
-          lastTryOnRequestId: tryOnRequestId ?? state.lastTryOnRequestId
-        })),
-      setProfile: (profile) =>
-        set((state) => ({
-          profile: mergeProfile(state.profile, profile),
-          profileVersion: state.profileVersion + 1,
-          isAuthenticated: state.token != null ? true : state.isAuthenticated
-        })),
-      finishAuthCheck: () => set({ authChecked: true }),
-      setLastTryOnRequestId: (lastTryOnRequestId) => set({ lastTryOnRequestId }),
-      resetSession: () =>
-        set({
-          ...initialState,
-          authChecked: true
-        }),
-      logout: async () => {
-        set({
-          ...initialState,
-          authChecked: true
-        });
-        await AsyncStorage.removeItem(STORAGE_KEY);
-      }
+    (set, get) => ({
+      userId:             'demo-user',
+      theme:              'light',
+      accent:             'teal',
+      savedProductIds:    [],
+      compareProductIds:  [],
+      lastTryOnRequestId: null,
+
+      setUserId:  (id)  => set({ userId: id }),
+      setTheme:   (t)   => set({ theme: t }),
+      setAccent:  (a)   => set({ accent: a }),
+
+      toggleSavedProduct: (id) => {
+        const ids = get().savedProductIds;
+        set({ savedProductIds: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] });
+      },
+
+      addToCompare: (id) => {
+        const ids = get().compareProductIds;
+        if (ids.length < 3 && !ids.includes(id)) set({ compareProductIds: [...ids, id] });
+      },
+
+      removeFromCompare: (id) =>
+        set({ compareProductIds: get().compareProductIds.filter(x => x !== id) }),
+
+      clearCompare: () => set({ compareProductIds: [] }),
+
+      setLastTryOnRequestId: (id) => set({ lastTryOnRequestId: id }),
     }),
     {
-      name: STORAGE_KEY,
+      name:    'fitme-store',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        userId: state.userId,
-        userEmail: state.userEmail,
-        userRole: state.userRole,
-        token: state.token,
-        profile: state.profile,
-        profileVersion: state.profileVersion,
-        isAuthenticated: state.isAuthenticated,
-        lastTryOnRequestId: state.lastTryOnRequestId
-      })
-    }
-  )
+    },
+  ),
 );

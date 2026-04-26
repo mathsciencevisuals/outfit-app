@@ -1,111 +1,52 @@
-import { PropsWithChildren } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { PropsWithChildren } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Colors, Spacing } from '../utils/theme';
 
-import { useAppStore } from "../store/app-store";
-import { colors } from "../theme/design";
-import { AppProfileStrip } from "./AppProfileStrip";
+interface ScreenProps {
+  /** Disable scroll for full-screen camera/result views */
+  scrollable?: boolean;
+  noPadding?: boolean;
+}
 
-export function Screen({
-  children,
-  tone = "light",
-  showProfileStrip = true
-}: PropsWithChildren<{ tone?: "light" | "dark"; showProfileStrip?: boolean }>) {
-  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
+/**
+ * Root screen wrapper.
+ * - SafeAreaView on all edges (handles notch + home bar on both platforms)
+ * - KeyboardAvoidingView so inputs don't get hidden
+ * - ScrollView (opt-out with scrollable=false)
+ */
+export function Screen({ children, scrollable = true, noPadding = false }: PropsWithChildren<ScreenProps>) {
+  const inner = (
+    <KeyboardAvoidingView
+      style={styles.kav}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      {scrollable ? (
+        <ScrollView
+          contentContainerStyle={[styles.content, noPadding && styles.noPadding]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={[styles.fill, noPadding && styles.noPadding]}>{children}</View>
+      )}
+    </KeyboardAvoidingView>
+  );
 
   return (
-    <ScrollView contentContainerStyle={styles.content} style={[styles.container, tone === "dark" && styles.containerDark]} showsVerticalScrollIndicator={false}>
-      {tone === "light" ? (
-        <>
-          <View style={styles.glowTop} />
-          <View style={styles.glowRight} />
-          <View style={styles.glowMiddle} />
-        </>
-      ) : (
-        <>
-          <View style={styles.darkGlowTop} />
-          <View style={styles.darkGlowBottom} />
-          <View style={styles.darkGlowSide} />
-        </>
-      )}
-      <View style={styles.body}>
-        {isAuthenticated && showProfileStrip ? <AppProfileStrip tone={tone} /> : null}
-        {children}
-      </View>
-    </ScrollView>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      {inner}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.page
-  },
-  containerDark: {
-    backgroundColor: colors.panelDarkStrong
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 144
-  },
-  body: {
-    gap: 16
-  },
-  glowTop: {
-    position: "absolute",
-    top: -72,
-    right: -22,
-    width: 240,
-    height: 240,
-    borderRadius: 999,
-    backgroundColor: "#e4dcff",
-    opacity: 0.8
-  },
-  glowRight: {
-    position: "absolute",
-    top: 120,
-    right: -50,
-    width: 170,
-    height: 170,
-    borderRadius: 999,
-    backgroundColor: "#d8e4ff",
-    opacity: 0.68
-  },
-  glowMiddle: {
-    position: "absolute",
-    top: 260,
-    left: -110,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: "#e9eefb",
-    opacity: 0.9
-  },
-  darkGlowTop: {
-    position: "absolute",
-    top: -90,
-    right: -40,
-    width: 280,
-    height: 280,
-    borderRadius: 999,
-    backgroundColor: colors.heroGlow
-  },
-  darkGlowBottom: {
-    position: "absolute",
-    bottom: 180,
-    left: -90,
-    width: 250,
-    height: 250,
-    borderRadius: 999,
-    backgroundColor: "rgba(63,96,255,0.18)"
-  },
-  darkGlowSide: {
-    position: "absolute",
-    top: 220,
-    right: -80,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)"
-  }
+  safe:     { flex: 1, backgroundColor: Colors.bg },
+  kav:      { flex: 1 },
+  fill:     { flex: 1, padding: Spacing.base },
+  content:  { padding: Spacing.base, gap: Spacing.base },
+  noPadding:{ padding: 0 },
 });

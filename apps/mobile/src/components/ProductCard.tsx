@@ -1,387 +1,122 @@
-import { Feather } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../hooks/useTheme';
+import { useAppStore } from '../store/app-store';
+import { formatPrice } from '../utils/currency';
+import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../utils/theme';
+import type { Product } from '../types';
 
-import type { Product, Recommendation } from "../types/api";
-import { colors, fonts, radius } from "../theme/design";
-import { Pill } from "./Pill";
-import { PrimaryButton } from "./PrimaryButton";
-
-function fitTone(fitLabel?: string | null) {
-  if (fitLabel === "slim") {
-    return "accent" as const;
-  }
-  if (fitLabel === "relaxed") {
-    return "info" as const;
-  }
-  return "neutral" as const;
+interface Props {
+  product: Product;
+  showCompare?: boolean;
+  onBuy?: (product: Product) => void;
+  onCompare?: (product: Product) => void;
 }
 
-function confidenceTone(confidenceLabel?: string | null) {
-  const percent = Number((confidenceLabel ?? "").match(/[0-9]+/)?.[0] ?? 0);
-  if (percent >= 82) {
-    return "success" as const;
-  }
-  if (percent >= 65) {
-    return "info" as const;
-  }
-  return "warning" as const;
-}
+export function ProductCard({ product, showCompare, onBuy, onCompare }: Props) {
+  const { C } = useTheme();
+  const savedIds     = useAppStore(s => s.savedProductIds);
+  const compareIds   = useAppStore(s => s.compareProductIds);
+  const toggleSaved  = useAppStore(s => s.toggleSavedProduct);
 
-function issueTone(issue: string) {
-  if (issue.includes("tight") || issue.includes("short")) {
-    return "danger" as const;
-  }
-  return "warning" as const;
-}
-
-function badgeTone(entry: string) {
-  if (entry.includes("Budget") || entry.includes("Price")) {
-    return "warning" as const;
-  }
-  if (entry.includes("Fit")) {
-    return "success" as const;
-  }
-  return "info" as const;
-}
-
-function humanizeIssue(issue: string) {
-  return issue
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-export function ProductCard({
-  title,
-  subtitle,
-  badge,
-  scoreLabel,
-  highlight,
-  fitLabel,
-  confidenceLabel,
-  bestSizeLabel,
-  warning,
-  issueLabels,
-  contextTags,
-  rankingBadges,
-  priceLabel,
-  onPrimaryPress,
-  primaryLabel,
-  onSecondaryPress,
-  secondaryLabel,
-  tone = "light"
-}: {
-  title: string;
-  subtitle: string;
-  badge?: string;
-  scoreLabel?: string;
-  highlight?: string;
-  fitLabel?: string | null;
-  confidenceLabel?: string | null;
-  bestSizeLabel?: string | null;
-  warning?: string | null;
-  issueLabels?: string[];
-  contextTags?: string[];
-  rankingBadges?: string[];
-  priceLabel?: string | null;
-  onPrimaryPress?: () => void;
-  primaryLabel?: string;
-  onSecondaryPress?: () => void;
-  secondaryLabel?: string;
-  tone?: "light" | "dark";
-}) {
-  const hasFitSummary = Boolean(bestSizeLabel || fitLabel || confidenceLabel);
-  const dark = tone === "dark";
+  const isSaved   = savedIds.includes(product.id);
+  const inCompare = compareIds.includes(product.id);
+  const variant   = product.variants[0];
 
   return (
-    <View style={[styles.card, dark && styles.cardDark]}>
-      <View style={[styles.preview, dark && styles.previewDark]}>
-        <View style={[styles.previewOrbLarge, dark && styles.previewOrbLargeDark]} />
-        <View style={[styles.previewOrbSmall, dark && styles.previewOrbSmallDark]} />
-        <View style={styles.previewTopRow}>
-          {badge ? <Pill label={badge} tone="accent" /> : null}
-          {priceLabel ? <Pill label={priceLabel} tone="warning" /> : null}
-        </View>
-        <View style={styles.previewCaption}>
-          <Text style={[styles.previewCaptionLabel, dark && styles.previewCaptionLabelDark]}>Fashion rank</Text>
-          <Text style={[styles.previewCaptionText, dark && styles.previewCaptionTextDark]}>
-            Bold discovery card with fit, style, budget, and handoff context stacked together.
-          </Text>
-        </View>
+    <View style={[styles.card, { backgroundColor: C.surface }, Shadow.sm]}>
+      <View style={styles.imageWrap}>
+        <Image
+          source={{ uri: variant?.imageUrl ?? `https://picsum.photos/seed/${product.id}/400/500` }}
+          style={styles.image}
+          resizeMode="cover"
+        />
+        {/* Heart */}
+        <Pressable
+          style={[styles.heartBtn, { backgroundColor: C.surface + 'ee' }]}
+          onPress={() => toggleSaved(product.id)}
+        >
+          <Ionicons
+            name={isSaved ? 'heart' : 'heart-outline'}
+            size={18}
+            color={isSaved ? '#ef4444' : C.textSecondary}
+          />
+        </Pressable>
+        {/* Trending badge */}
+        {product.trending && (
+          <View style={[styles.badge, { backgroundColor: C.primary }]}>
+            <Ionicons name="logo-instagram" size={10} color="#fff" />
+            <Text style={styles.badgeText}>Trending</Text>
+          </View>
+        )}
       </View>
-      <View style={styles.copy}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerCopy}>
-            <Text style={[styles.title, dark && styles.titleDark]}>{title}</Text>
-            <Text style={[styles.subtitle, dark && styles.subtitleDark]}>{subtitle}</Text>
-          </View>
-          {scoreLabel ? (
-            <View style={[styles.metaBadge, dark && styles.metaBadgeDark]}>
-              <Feather name="star" size={14} color={dark ? colors.inkOnDark : colors.ink} />
-              <Text style={[styles.metaText, dark && styles.metaTextDark]}>{scoreLabel}</Text>
-            </View>
-          ) : null}
+
+      <View style={styles.info}>
+        <Text style={[styles.name, { color: C.textPrimary }]} numberOfLines={1}>
+          {product.name}
+        </Text>
+        <View style={styles.priceRow}>
+          <Text style={[styles.price, { color: C.textPrimary }]}>
+            {formatPrice(variant?.price ?? 0, variant?.currency)}
+          </Text>
+          {product.instagramLikes && (
+            <Text style={[styles.likes, { color: C.textMuted }]}>
+              ♥ {product.instagramLikes}
+            </Text>
+          )}
         </View>
 
-        {hasFitSummary ? (
-          <View style={[styles.fitSummary, dark && styles.fitSummaryDark]}>
-            <View style={styles.fitSummaryHeader}>
-              <Text style={[styles.fitSummaryTitle, dark && styles.fitSummaryTitleDark]}>Fit read</Text>
-              {bestSizeLabel ? <Text style={[styles.fitSummarySize, dark && styles.fitSummarySizeDark]}>Size {bestSizeLabel}</Text> : null}
-            </View>
-            <View style={styles.metaRow}>
-              {fitLabel ? <Pill label={`${fitLabel} fit`} tone={fitTone(fitLabel)} /> : null}
-              {confidenceLabel ? <Pill label={confidenceLabel} tone={confidenceTone(confidenceLabel)} /> : null}
-              {bestSizeLabel ? <Pill label="Recommended" tone="success" /> : null}
-            </View>
-            {warning ? <Text style={[styles.warning, dark && styles.warningDark]}>{warning}</Text> : null}
-          </View>
-        ) : null}
-
-        {(rankingBadges?.length ?? 0) > 0 ? (
-          <View style={styles.metaRow}>
-            {rankingBadges?.slice(0, 3).map((entry) => (
-              <Pill key={entry} label={entry} tone={badgeTone(entry)} />
-            ))}
-          </View>
-        ) : null}
-
-        {highlight ? <Text style={[styles.highlight, dark && styles.highlightDark]}>{highlight}</Text> : null}
-
-        {(contextTags?.length ?? 0) > 0 ? (
-          <View style={styles.issueRow}>
-            {contextTags?.slice(0, 4).map((tag) => (
-              <Pill key={tag} label={tag} tone="info" />
-            ))}
-          </View>
-        ) : null}
-
-        {(issueLabels?.length ?? 0) > 0 ? (
-          <View style={styles.issueRow}>
-            {issueLabels?.slice(0, 3).map((issue) => (
-              <Pill key={issue} label={humanizeIssue(issue)} tone={issueTone(issue)} />
-            ))}
-          </View>
-        ) : null}
-
-        <View style={styles.actions}>
-          {primaryLabel ? <PrimaryButton onPress={onPrimaryPress}>{primaryLabel}</PrimaryButton> : null}
-          {secondaryLabel ? (
-            <PrimaryButton onPress={onSecondaryPress} variant="secondary">
-              {secondaryLabel}
-            </PrimaryButton>
-          ) : null}
+        <View style={styles.btnRow}>
+          {showCompare && (
+            <Pressable
+              style={[
+                styles.btn, styles.btnOutline,
+                { borderColor: inCompare ? C.primary : C.border,
+                  backgroundColor: inCompare ? C.primaryDim : C.surface2 },
+              ]}
+              onPress={() => onCompare?.(product)}
+            >
+              <Text style={[styles.btnText, { color: inCompare ? C.primary : C.textSecondary }]}>
+                {inCompare ? '✓ Added' : '+ Compare'}
+              </Text>
+            </Pressable>
+          )}
+          <Pressable
+            style={[styles.btn, styles.btnFill, { backgroundColor: C.primary, flex: showCompare ? 1 : undefined, width: showCompare ? undefined : '100%' }]}
+            onPress={() => onBuy?.(product)}
+          >
+            <Text style={styles.btnFillText}>Buy Now</Text>
+          </Pressable>
         </View>
       </View>
     </View>
   );
 }
 
-export function recommendationBadge(recommendation: Recommendation) {
-  const fitScore = recommendation.fitResult?.fitScore ?? recommendation.score;
-  const confidence = recommendation.fitResult?.confidenceScore ?? 0;
-  const issueCount = recommendation.fitResult?.issues?.length ?? 0;
-
-  if ((recommendation.rankingBadges ?? []).includes("Best Fit") || (fitScore >= 90 && confidence >= 0.78 && issueCount === 0)) {
-    return "Best Fit";
-  }
-  if ((recommendation.rankingBadges ?? []).includes("Budget Pick")) {
-    return "Budget Pick";
-  }
-  if ((recommendation.rankingBadges ?? []).includes("Trending")) {
-    return "Trending";
-  }
-  return "Worth Trying";
-}
-
-export function productSubtitle(product?: Product) {
-  const parts = [product?.brand?.name, product?.category, product?.baseColor].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "Fit-aware catalog piece";
-}
-
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: colors.panelStrong,
-    borderWidth: 1,
-    borderColor: colors.line
+  card:      { borderRadius: Radius.lg, overflow: 'hidden' },
+  imageWrap: { aspectRatio: 3/4, position: 'relative' },
+  image:     { width: '100%', height: '100%' },
+  heartBtn: {
+    position: 'absolute', top: 10, right: 10,
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
   },
-  cardDark: {
-    backgroundColor: colors.panelDark,
-    borderColor: colors.lineDark
+  badge: {
+    position: 'absolute', top: 10, left: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full,
   },
-  preview: {
-    minHeight: 152,
-    backgroundColor: colors.pageStrong,
-    padding: 16,
-    justifyContent: "space-between"
-  },
-  previewDark: {
-    backgroundColor: colors.heroStart
-  },
-  previewTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  previewCaption: {
-    gap: 4
-  },
-  previewCaptionLabel: {
-    color: colors.brand,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase"
-  },
-  previewCaptionLabelDark: {
-    color: colors.inkOnDarkSoft
-  },
-  previewCaptionText: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18,
-    maxWidth: "80%"
-  },
-  previewCaptionTextDark: {
-    color: colors.inkOnDarkSoft
-  },
-  previewOrbLarge: {
-    position: "absolute",
-    right: -16,
-    top: -10,
-    width: 124,
-    height: 124,
-    borderRadius: radius.pill,
-    backgroundColor: "#dcdfff"
-  },
-  previewOrbLargeDark: {
-    backgroundColor: "rgba(123,104,255,0.42)"
-  },
-  previewOrbSmall: {
-    position: "absolute",
-    left: 22,
-    bottom: -26,
-    width: 78,
-    height: 78,
-    borderRadius: radius.pill,
-    backgroundColor: "#cfe6ff"
-  },
-  previewOrbSmallDark: {
-    backgroundColor: "rgba(255,255,255,0.12)"
-  },
-  copy: {
-    padding: 16,
-    gap: 12
-  },
-  headerRow: {
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-    alignItems: "flex-start"
-  },
-  headerCopy: {
-    flex: 1,
-    gap: 3
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 22,
-    lineHeight: 26,
-    fontFamily: fonts.display
-  },
-  titleDark: {
-    color: colors.inkOnDark
-  },
-  subtitle: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  subtitleDark: {
-    color: colors.inkOnDarkSoft
-  },
-  metaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.pageStrong,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radius.pill
-  },
-  metaBadgeDark: {
-    backgroundColor: colors.glass
-  },
-  metaText: {
-    color: colors.ink,
-    fontSize: 11,
-    fontWeight: "800"
-  },
-  metaTextDark: {
-    color: colors.inkOnDark
-  },
-  fitSummary: {
-    borderRadius: radius.md,
-    padding: 12,
-    backgroundColor: colors.panelMuted,
-    gap: 8
-  },
-  fitSummaryDark: {
-    backgroundColor: "rgba(255,255,255,0.05)"
-  },
-  fitSummaryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10
-  },
-  fitSummaryTitle: {
-    color: colors.brand,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1
-  },
-  fitSummaryTitleDark: {
-    color: colors.inkOnDarkSoft
-  },
-  fitSummarySize: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  fitSummarySizeDark: {
-    color: colors.inkOnDark
-  },
-  metaRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  warning: {
-    color: colors.warning,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  warningDark: {
-    color: "#ffcf7d"
-  },
-  highlight: {
-    color: colors.ink,
-    fontSize: 13,
-    lineHeight: 19
-  },
-  highlightDark: {
-    color: colors.inkOnDark
-  },
-  issueRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  actions: {
-    gap: 10
-  }
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: FontWeight.bold },
+  info:      { padding: Spacing.md, gap: Spacing.xs },
+  name:      { fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
+  priceRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  price:     { fontSize: FontSize.md, fontWeight: FontWeight.bold },
+  likes:     { fontSize: FontSize.xs },
+  btnRow:    { flexDirection: 'row', gap: Spacing.sm, marginTop: 4 },
+  btn:       { flex: 1, paddingVertical: 8, borderRadius: Radius.md, alignItems: 'center' },
+  btnOutline:{ borderWidth: 1 },
+  btnFill:   {},
+  btnText:   { fontSize: FontSize.xs, fontWeight: FontWeight.semibold },
+  btnFillText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: '#fff' },
 });

@@ -1,11 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Pressable } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Colors } from '../src/utils/theme';
 
 export const ONBOARDED_KEY = 'fitme_onboarded';
 
@@ -23,8 +20,8 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
       const inOnboarding = ONBOARDING_SCREENS.includes(first ?? '');
       if (!value && !inOnboarding) {
         router.replace('/onboarding');
-      } else if (value && (first === 'onboarding' || first === undefined)) {
-        router.replace('/discover');
+      } else if (value && (first === 'onboarding' || first === undefined || first === 'index')) {
+        router.replace('/dashboard');
       }
     });
   }, []);
@@ -33,46 +30,26 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function SettingsButton() {
-  const router = useRouter();
-  return (
-    <Pressable
-      onPress={() => router.push('/settings' as never)}
-      hitSlop={12}
-      style={{ marginRight: 4 }}
-    >
-      <Ionicons name="settings-outline" size={22} color={Colors.textSecondary} />
-    </Pressable>
-  );
-}
-
-const commonHeaderOptions = {
-  headerStyle:        { backgroundColor: Colors.surface2 },
-  headerTintColor:    Colors.textPrimary,
-  headerShadowVisible: false,
-  headerBackTitle:    'Back',
-  headerRight:        () => <SettingsButton />,
-};
-
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
       <NavigationGuard>
-        <Stack screenOptions={commonHeaderOptions}>
-          <Stack.Screen name="index"            options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding"       options={{ headerShown: false }} />
-          <Stack.Screen name="profile"          options={{ title: 'Your Profile' }} />
-          <Stack.Screen name="measurements"     options={{ title: 'Measurements' }} />
-          <Stack.Screen name="style-preferences" options={{ title: 'Style Preferences' }} />
-          <Stack.Screen name="discover"         options={{ title: 'Discover' }} />
-          <Stack.Screen name="tryon-upload"     options={{ title: 'Try On', presentation: 'modal' }} />
-          <Stack.Screen name="tryon-result"     options={{ title: 'Your Look', presentation: 'modal' }} />
-          <Stack.Screen name="recommendations"  options={{ title: 'Recommendations' }} />
-          <Stack.Screen name="shops"            options={{ title: 'Shops' }} />
-          <Stack.Screen name="saved-looks"      options={{ title: 'Saved Looks' }} />
-          <Stack.Screen name="profile-main"     options={{ title: 'Profile' }} />
-          <Stack.Screen name="settings"         options={{ title: 'Settings' }} />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="profile" />
+          <Stack.Screen name="measurements" />
+          <Stack.Screen name="style-preferences" />
+          <Stack.Screen name="dashboard" />
+          <Stack.Screen name="tryme" />
+          <Stack.Screen name="recommendations" />
+          <Stack.Screen name="saved-looks" />
+          <Stack.Screen name="profile-main" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="tryon-upload"    options={{ presentation: 'modal' }} />
+          <Stack.Screen name="tryon-result"    options={{ presentation: 'modal' }} />
+          <Stack.Screen name="shops" />
         </Stack>
       </NavigationGuard>
     </SafeAreaProvider>

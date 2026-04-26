@@ -1,187 +1,88 @@
-import { useRouter } from "expo-router";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from 'expo-router';
+import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { SmartImage } from "../../components/SmartImage";
-import { demoData } from "../../demo/demo-data";
-import { useAsyncResource } from "../../hooks/useAsyncResource";
-import { mobileApi } from "../../services/api";
-import { useAppStore } from "../../store/app-store";
-import { colors, radius } from "../../theme/design";
+import { EmptyState } from '../../components/EmptyState';
+import { PrimaryButton } from '../../components/PrimaryButton';
+import { Screen } from '../../components/Screen';
+import { SectionCard } from '../../components/SectionCard';
+import { useAsyncResource } from '../../hooks/useAsyncResource';
+import { mobileApi } from '../../services/api';
+import { Colors, FontSize, FontWeight, Spacing } from '../../utils/theme';
+import type { Shop } from '../../types';
 
 export function ShopsScreen() {
   const router = useRouter();
-  const userId = useAppStore((state) => state.userId);
-  const { data } = useAsyncResource(async () => {
-    const recommendations = await mobileApi.recommendations(userId);
-    const productId = recommendations[0]?.productId ?? demoData.products[0].id;
-    return mobileApi.shopComparison({ productId });
-  }, [userId]);
 
-  const comparison = data ?? demoData.shopComparison(demoData.products[0].id);
-  const offers = comparison.offers.slice(0, 4);
-  const product = offers[0]?.variant?.product ?? demoData.products[0];
+  const { data, loading, error, refetch } = useAsyncResource(
+    () => mobileApi.shops(),
+    []
+  );
+  const shops: Shop[] = Array.isArray(data) ? data : [];
 
-  const saveProduct = async () => {
-    await mobileApi.saveLook(userId, {
-      name: `${product.name} wishlist`,
-      note: "Saved from Complete the Look.",
-      productIds: [product.id],
-      isWishlist: true
-    });
-    router.push("/saved");
-  };
+  if (error) {
+    return (
+      <Screen>
+        <EmptyState icon="⚠️" title="Couldn't load shops" subtitle={error} action="Retry" onAction={refetch} />
+      </Screen>
+    );
+  }
 
   return (
-    <Screen tone="dark" showProfileStrip={false}>
-      <View style={styles.shell}>
-        <View style={styles.heroCard}>
-          <SmartImage uri={product.imageUrl} label={product.name} containerStyle={styles.heroImageWrap} style={styles.heroImage} fallbackTone="warm" />
-          <View style={styles.heroShade} />
-          <View style={styles.heroContent}>
-            <Text style={styles.heroEyebrow}>Shops</Text>
-            <Text style={styles.heroTitle}>Complete the Look</Text>
-            <Text style={styles.heroBody}>Compare retailers, fit/vibe badges, and a clean external handoff without blank placeholders.</Text>
-          </View>
-        </View>
+    <Screen>
+      <SectionCard
+        title="Shops"
+        subtitle="Availability and offer comparison across retail partners."
+      >
+        {loading ? (
+          <Text style={styles.loadingText}>Loading shops…</Text>
+        ) : shops.length === 0 ? (
+          <EmptyState icon="🏪" title="No shops yet" subtitle="Retail partners coming soon." />
+        ) : (
+          shops.map((shop, i) => (
+            <TouchableOpacity
+              key={shop.id}
+              style={[styles.shopRow, i < shops.length - 1 && styles.shopRowBorder]}
+              onPress={() => shop.websiteUrl && Linking.openURL(shop.websiteUrl)}
+              activeOpacity={0.75}
+            >
+              <View style={styles.shopInfo}>
+                <Text style={styles.shopName}>{shop.name}</Text>
+                <Text style={styles.shopMeta}>
+                  {shop.region}
+                  {(shop.inventoryOffers?.length ?? 0) > 0
+                    ? ` · ${shop.inventoryOffers!.length} offer${shop.inventoryOffers!.length !== 1 ? 's' : ''}`
+                    : ''}
+                </Text>
+              </View>
+              {shop.websiteUrl ? (
+                <Text style={styles.visitLink}>Visit →</Text>
+              ) : null}
+            </TouchableOpacity>
+          ))
+        )}
+      </SectionCard>
 
-        {offers.map((offer, index) => (
-          <View key={offer.id} style={styles.offerCard}>
-            <SmartImage
-              uri={offer.variant?.imageUrl ?? product.imageUrl}
-              label={offer.variant?.product?.name ?? product.name}
-              containerStyle={styles.offerImageWrap}
-              style={styles.offerImage}
-              fallbackTone={index % 2 === 0 ? "accent" : "warm"}
-            />
-            <View style={styles.offerCopy}>
-              <Text style={styles.offerTitle}>{offer.variant?.product?.name ?? product.name}</Text>
-              <Text style={styles.offerMeta}>
-                {offer.shop?.name ?? "Retailer"} · INR {Math.round(offer.price)}
-              </Text>
-              <View style={styles.badgeRow}>
-                <Badge label={comparison.badges[0] ?? "Best Price"} />
-                <Badge label={comparison.badges[1] ?? "Best Fit"} />
-                <Badge label="Vibe Match" />
-              </View>
-              <View style={styles.buttonRow}>
-                <PrimaryButton onPress={() => Linking.openURL(offer.externalUrl)} size="sm">
-                  Open Retailer
-                </PrimaryButton>
-                <PrimaryButton onPress={() => void saveProduct()} size="sm" variant="secondary">
-                  Save Product
-                </PrimaryButton>
-              </View>
-            </View>
-          </View>
-        ))}
-      </View>
+      <PrimaryButton variant="secondary" onPress={() => router.push('/saved-looks')}>
+        Go to saved looks
+      </PrimaryButton>
     </Screen>
   );
 }
 
-function Badge({ label }: { label: string }) {
-  return (
-    <View style={styles.badge}>
-      <Text style={styles.badgeText}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  shell: {
-    gap: 16
+  loadingText: {
+    fontSize: FontSize.sm, color: Colors.textMuted,
+    textAlign: 'center', padding: Spacing.lg,
   },
-  heroCard: {
-    position: "relative",
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    minHeight: 260
+  shopRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: Spacing.md, gap: Spacing.sm,
   },
-  heroImageWrap: {
-    ...StyleSheet.absoluteFillObject
+  shopRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border,
   },
-  heroImage: {
-    width: "100%",
-    height: "100%"
-  },
-  heroShade: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(9,11,20,0.5)"
-  },
-  heroContent: {
-    flex: 1,
-    justifyContent: "flex-end",
-    gap: 8,
-    padding: 20
-  },
-  heroEyebrow: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase"
-  },
-  heroTitle: {
-    color: colors.inkOnDark,
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "800"
-  },
-  heroBody: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14,
-    lineHeight: 21
-  },
-  offerCard: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 12,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.86)",
-    borderWidth: 1,
-    borderColor: colors.lineDark
-  },
-  offerImageWrap: {
-    width: 96,
-    height: 124
-  },
-  offerImage: {
-    width: "100%",
-    height: "100%"
-  },
-  offerCopy: {
-    flex: 1,
-    gap: 8
-  },
-  offerTitle: {
-    color: colors.inkOnDark,
-    fontSize: 16,
-    fontWeight: "700"
-  },
-  offerMeta: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 13
-  },
-  badgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft
-  },
-  badgeText: {
-    color: colors.inkOnDark,
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 8
-  }
+  shopInfo: { flex: 1, gap: 2 },
+  shopName: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.textPrimary },
+  shopMeta: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  visitLink: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.primary },
 });

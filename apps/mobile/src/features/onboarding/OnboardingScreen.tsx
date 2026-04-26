@@ -1,145 +1,89 @@
-import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { useCallback } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { colors, radius } from "../../theme/design";
-
-const setupSteps = [
-  {
-    icon: "user",
-    title: "Measurements",
-    copy: "Height, weight, and body type power size recommendation and fit confidence."
-  },
-  {
-    icon: "heart",
-    title: "Style Preferences",
-    copy: "Occasions, colors, and fit taste shape recommendations and the Feed."
-  },
-  {
-    icon: "dollar-sign",
-    title: "Budget Range",
-    copy: "Stay inside your price comfort zone without flattening the style quality."
-  }
-] as const;
+import { ONBOARDED_KEY } from '../../../app/_layout';
+import { PrimaryButton } from '../../components/PrimaryButton';
+import { Screen } from '../../components/Screen';
+import { Colors, FontSize, FontWeight, Spacing } from '../../utils/theme';
 
 export function OnboardingScreen() {
   const router = useRouter();
 
+  const handleStart = useCallback(async () => {
+    router.push('/profile');
+  }, [router]);
+
+  const handleSkip = useCallback(async () => {
+    // Mark as onboarded so we never show this again
+    await AsyncStorage.setItem(ONBOARDED_KEY, 'true');
+    router.replace('/discover');
+  }, [router]);
+
+  const features = [
+    { icon: '📷', title: 'Snap & try on',     desc: 'Take a photo in-store and instantly see how an outfit looks on you.' },
+    { icon: '📏', title: 'Perfect fit',        desc: 'Save your measurements for size recommendations tailored to your body.' },
+    { icon: '✨', title: 'AI styling',          desc: 'Personalised outfit recommendations based on your style and body shape.' },
+    { icon: '🛍️', title: 'Shop discovery',     desc: 'Find where to buy the looks you love, across all your favourite stores.' },
+  ];
+
   return (
-    <Screen tone="dark" showProfileStrip={false}>
-      <View style={styles.shell}>
-        <View style={styles.heroCard}>
-          <Text style={styles.eyebrow}>Welcome</Text>
-          <Text style={styles.title}>Welcome to Style Studio</Text>
-          <Text style={styles.subtitle}>Let&apos;s set up your fit profile in three quick steps so your recommendations, try-ons, and saved looks feel personal from the start.</Text>
-        </View>
+    <Screen>
+      <View style={styles.hero}>
+        <Text style={styles.logoText}>FitMe</Text>
+        <Text style={styles.tagline}>Your AI personal stylist</Text>
+      </View>
 
-        <View style={styles.stepsCard}>
-          {setupSteps.map((step, index) => (
-            <View key={step.title} style={styles.stepRow}>
-              <View style={styles.stepIndex}>
-                <Text style={styles.stepIndexText}>{index + 1}</Text>
-              </View>
-              <View style={styles.stepIconWrap}>
-                <Feather name={step.icon} size={18} color={colors.inkOnDark} />
-              </View>
-              <View style={styles.stepCopy}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                <Text style={styles.stepBody}>{step.copy}</Text>
-              </View>
+      <View style={styles.featureList}>
+        {features.map((f) => (
+          <View key={f.title} style={styles.featureRow}>
+            <Text style={styles.featureIcon}>{f.icon}</Text>
+            <View style={styles.featureText}>
+              <Text style={styles.featureTitle}>{f.title}</Text>
+              <Text style={styles.featureDesc}>{f.desc}</Text>
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
+      </View>
 
-        <PrimaryButton onPress={() => router.push("/measurements")}>Get Started</PrimaryButton>
+      <View style={styles.actions}>
+        <PrimaryButton onPress={handleStart}>Set up my profile →</PrimaryButton>
+        <PrimaryButton variant="ghost" onPress={handleSkip}>
+          Skip for now
+        </PrimaryButton>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  shell: {
-    gap: 18,
-    minHeight: "100%",
-    justifyContent: "center"
+  hero: { alignItems: 'center', paddingVertical: Spacing.xxl },
+  logoText: {
+    fontSize: 48,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+    letterSpacing: 1,
   },
-  heroCard: {
-    gap: 10,
-    padding: 24,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.84)",
+  tagline: {
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+  featureList: { gap: Spacing.md },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: Spacing.md,
     borderWidth: 1,
-    borderColor: colors.lineDark
+    borderColor: Colors.border,
   },
-  eyebrow: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.3,
-    textTransform: "uppercase"
-  },
-  title: {
-    color: colors.inkOnDark,
-    fontSize: 32,
-    lineHeight: 36,
-    fontWeight: "800"
-  },
-  subtitle: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 15,
-    lineHeight: 24
-  },
-  stepsCard: {
-    gap: 12,
-    padding: 18,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.84)",
-    borderWidth: 1,
-    borderColor: colors.lineDark
-  },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: 12,
-    borderRadius: radius.lg,
-    backgroundColor: "rgba(255,255,255,0.03)"
-  },
-  stepIndex: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentSoft
-  },
-  stepIndexText: {
-    color: colors.inkOnDark,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  stepIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accent
-  },
-  stepCopy: {
-    flex: 1,
-    gap: 4
-  },
-  stepTitle: {
-    color: colors.inkOnDark,
-    fontSize: 16,
-    fontWeight: "700"
-  },
-  stepBody: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14,
-    lineHeight: 21
-  }
+  featureIcon:  { fontSize: 26, marginTop: 2 },
+  featureText:  { flex: 1, gap: 2 },
+  featureTitle: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.textPrimary },
+  featureDesc:  { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 19 },
+  actions:      { gap: Spacing.sm, marginTop: Spacing.md },
 });

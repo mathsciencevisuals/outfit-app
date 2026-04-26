@@ -1,69 +1,51 @@
-import { PropsWithChildren } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { PropsWithChildren } from 'react';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../utils/theme';
 
-import { colors, fonts, radius, shadow } from "../theme/design";
+interface SectionCardProps {
+  title?: string;
+  subtitle?: string;
+  style?: ViewStyle;
+  noPadding?: boolean;
+}
 
 export function SectionCard({
   title,
   subtitle,
-  eyebrow,
   children,
-  tone = "light"
-}: PropsWithChildren<{ title: string; subtitle?: string; eyebrow?: string; tone?: "light" | "dark" }>) {
+  style,
+  noPadding = false,
+}: PropsWithChildren<SectionCardProps>) {
   return (
-    <View style={[styles.card, tone === "dark" && styles.cardDark]}>
-      {eyebrow ? <Text style={[styles.eyebrow, tone === "dark" && styles.eyebrowDark]}>{eyebrow}</Text> : null}
-      <Text style={[styles.title, tone === "dark" && styles.titleDark]}>{title}</Text>
-      {subtitle ? <Text style={[styles.subtitle, tone === "dark" && styles.subtitleDark]}>{subtitle}</Text> : null}
-      <View style={styles.content}>{children}</View>
+    <View style={[styles.card, noPadding && styles.noPadding, Shadow.sm, style]}>
+      {title ? <Text style={styles.title}>{title}</Text> : null}
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      <View style={[styles.content, (title || subtitle) && styles.contentGap]}>
+        {children}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.panel,
-    borderRadius: radius.xl,
-    padding: 20,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.base,
     borderWidth: 1,
-    borderColor: colors.line,
-    gap: 6,
-    overflow: "hidden",
-    ...shadow
+    borderColor: Colors.border,
   },
-  cardDark: {
-    backgroundColor: colors.panelDark,
-    borderColor: colors.lineDark
-  },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: colors.brand
-  },
-  eyebrowDark: {
-    color: colors.inkOnDarkSoft
-  },
+  noPadding: { padding: 0, overflow: 'hidden' },
   title: {
-    fontSize: 24,
-    lineHeight: 28,
-    color: colors.ink,
-    fontFamily: fonts.display
-  },
-  titleDark: {
-    color: colors.inkOnDark
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
     lineHeight: 20,
-    color: colors.inkSoft
   },
-  subtitleDark: {
-    color: colors.inkOnDarkSoft
-  },
-  content: {
-    marginTop: 10,
-    gap: 12
-  }
+  content:    { gap: Spacing.sm },
+  contentGap: { marginTop: Spacing.md },
 });

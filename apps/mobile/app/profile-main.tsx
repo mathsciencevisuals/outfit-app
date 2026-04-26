@@ -1,13 +1,5 @@
-import { View, StyleSheet } from 'react-native';
+import { AppShell } from '../src/components/AppShell';
 import { ProfileScreen } from '../src/features/profile/ProfileScreen';
-import { BottomTabBar } from '../src/components/BottomTabBar';
-
 export default function ProfileMainPage() {
-  return (
-    <View style={styles.container}>
-      <View style={styles.content}><ProfileScreen /></View>
-      <BottomTabBar active="profile" />
-    </View>
-  );
+  return <AppShell active="profile"><ProfileScreen /></AppShell>;
 }
-const styles = StyleSheet.create({ container: { flex: 1 }, content: { flex: 1 } });

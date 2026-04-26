@@ -1,5 +1,1 @@
-import { Redirect } from "expo-router";
-
-export default function LegacyShopsRoute() {
-  return <Redirect href="/retail" />;
-}
+export { ShopsScreen as default } from "../src/features/shops/ShopsScreen";
