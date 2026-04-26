@@ -1,127 +1,80 @@
-import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { Redirect, Stack, useSegments } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { Pressable } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Colors } from '../src/utils/theme';
 
-import { mobileApi } from "../src/services/api";
-import { useAppStore } from "../src/store/app-store";
-import { colors, fonts } from "../src/theme/design";
+export const ONBOARDED_KEY = 'fitme_onboarded';
 
-const publicRoutes = new Set(["onboarding", "auth"]);
+const ONBOARDING_SCREENS = ['onboarding', 'profile', 'measurements', 'style-preferences'];
 
-export default function RootLayout() {
+function NavigationGuard({ children }: { children: React.ReactNode }) {
+  const router   = useRouter();
   const segments = useSegments();
-  const { token, isAuthenticated, authChecked, finishAuthCheck, logout, setSession, setProfile } = useAppStore();
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    const validate = async () => {
-      if (!token) {
-        finishAuthCheck();
-        return;
+    AsyncStorage.getItem(ONBOARDED_KEY).then((value) => {
+      setChecked(true);
+      const first = segments[0] as string | undefined;
+      const inOnboarding = ONBOARDING_SCREENS.includes(first ?? '');
+      if (!value && !inOnboarding) {
+        router.replace('/onboarding');
+      } else if (value && (first === 'onboarding' || first === undefined)) {
+        router.replace('/discover');
       }
+    });
+  }, []);
 
-      try {
-        const session = await mobileApi.session();
-        if (!mounted) {
-          return;
-        }
+  if (!checked) return null;
+  return <>{children}</>;
+}
 
-        setSession({ token, user: session.user });
-        if (session.user.profile) {
-          setProfile(session.user.profile);
-        } else {
-          const profile = await mobileApi.profile(session.user.id);
-          if (mounted) {
-            setProfile(profile);
-          }
-        }
-        finishAuthCheck();
-      } catch {
-        if (!mounted) {
-          return;
-        }
-        await logout();
-      }
-    };
+function SettingsButton() {
+  const router = useRouter();
+  return (
+    <Pressable
+      onPress={() => router.push('/settings' as never)}
+      hitSlop={12}
+      style={{ marginRight: 4 }}
+    >
+      <Ionicons name="settings-outline" size={22} color={Colors.textSecondary} />
+    </Pressable>
+  );
+}
 
-    void validate();
+const commonHeaderOptions = {
+  headerStyle:        { backgroundColor: Colors.surface2 },
+  headerTintColor:    Colors.textPrimary,
+  headerShadowVisible: false,
+  headerBackTitle:    'Back',
+  headerRight:        () => <SettingsButton />,
+};
 
-    return () => {
-      mounted = false;
-    };
-  }, [token, finishAuthCheck, logout, setProfile, setSession]);
-
-  const rootSegment = segments[0];
-  const isPublicRoute = rootSegment == null || publicRoutes.has(rootSegment);
-
-  if (!authChecked) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.page
-          }}
-        >
-          <ActivityIndicator color={colors.ink} />
-        </View>
-      </SafeAreaProvider>
-    );
-  }
-
-  if (!isAuthenticated && !isPublicRoute) {
-    return <Redirect href="/auth" />;
-  }
-
-  if (isAuthenticated && rootSegment === "auth") {
-    return <Redirect href="/feed" />;
-  }
-
+export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: "#f6efe5" },
-          headerTintColor: colors.ink,
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontSize: 24,
-            color: colors.ink,
-            fontFamily: fonts.display
-          },
-          headerBackTitleVisible: false,
-          contentStyle: { backgroundColor: colors.page },
-          animation: "fade"
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="profile" options={{ headerShown: false }} />
-        <Stack.Screen name="discover" options={{ headerShown: false }} />
-        <Stack.Screen name="demo-checklist" options={{ title: "Demo Checklist" }} />
-        <Stack.Screen name="measurements" options={{ title: "Measurements" }} />
-        <Stack.Screen name="style-preferences" options={{ title: "Style Preferences" }} />
-        <Stack.Screen name="budget" options={{ title: "Budget" }} />
-        <Stack.Screen name="recommendations" options={{ title: "Recommendations" }} />
-        <Stack.Screen name="saved-looks" options={{ headerShown: false }} />
-        <Stack.Screen name="shops" options={{ headerShown: false }} />
-        <Stack.Screen name="tryon-upload" options={{ headerShown: false }} />
-        <Stack.Screen name="processing" options={{ headerShown: false }} />
-        <Stack.Screen name="tryon-result" options={{ title: "Try-On Result" }} />
-        <Stack.Screen name="rewards" options={{ title: "Rewards" }} />
-        <Stack.Screen name="referrals" options={{ title: "Referrals" }} />
-        <Stack.Screen name="coupons" options={{ title: "Coupons" }} />
-        <Stack.Screen name="challenges" options={{ title: "Challenges" }} />
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-      </Stack>
+      <NavigationGuard>
+        <Stack screenOptions={commonHeaderOptions}>
+          <Stack.Screen name="index"            options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding"       options={{ headerShown: false }} />
+          <Stack.Screen name="profile"          options={{ title: 'Your Profile' }} />
+          <Stack.Screen name="measurements"     options={{ title: 'Measurements' }} />
+          <Stack.Screen name="style-preferences" options={{ title: 'Style Preferences' }} />
+          <Stack.Screen name="discover"         options={{ title: 'Discover' }} />
+          <Stack.Screen name="tryon-upload"     options={{ title: 'Try On', presentation: 'modal' }} />
+          <Stack.Screen name="tryon-result"     options={{ title: 'Your Look', presentation: 'modal' }} />
+          <Stack.Screen name="recommendations"  options={{ title: 'Recommendations' }} />
+          <Stack.Screen name="shops"            options={{ title: 'Shops' }} />
+          <Stack.Screen name="saved-looks"      options={{ title: 'Saved Looks' }} />
+          <Stack.Screen name="profile-main"     options={{ title: 'Profile' }} />
+          <Stack.Screen name="settings"         options={{ title: 'Settings' }} />
+        </Stack>
+      </NavigationGuard>
     </SafeAreaProvider>
   );
 }

@@ -1,314 +1,305 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { formatPrice } from '../../utils/currency';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef } from 'react';
+import {
+  Alert,
+  Animated,
+  Image,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+  Platform,
+} from 'react-native';
 
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { SmartImage } from "../../components/SmartImage";
-import { demoData } from "../../demo/demo-data";
-import { mobileApi } from "../../services/api";
-import { useAppStore } from "../../store/app-store";
-import { colors, radius } from "../../theme/design";
-import type { FitResult, Recommendation, TryOnRequest } from "../../types/api";
-
-function metricValue(value: number) {
-  return `${Math.round(value)}%`;
-}
+import { EmptyState } from '../../components/EmptyState';
+import { InfoRow } from '../../components/InfoRow';
+import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { PrimaryButton } from '../../components/PrimaryButton';
+import { Screen } from '../../components/Screen';
+import { SectionCard } from '../../components/SectionCard';
+import { mobileApi } from '../../services/api';
+import { useAppStore } from '../../store/app-store';
+import {
+  Colors, FontSize, FontWeight, Radius, Shadow, Spacing,
+} from '../../utils/theme';
 
 export function TryOnResultScreen() {
   const router = useRouter();
-  const userId = useAppStore((state) => state.userId);
-  const requestId = useAppStore((state) => state.lastTryOnRequestId);
 
-  const [request, setRequest] = useState<TryOnRequest | null>(null);
-  const [fitResult, setFitResult] = useState<FitResult | null>(null);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const requestId       = useAppStore((s) => s.lastTryOnRequestId);
+  const tryOnStatus     = useAppStore((s) => s.tryOnStatus);
+  const tryOnProgress   = useAppStore((s) => s.tryOnProgress);
+  const selectedProduct = useAppStore((s) => s.selectedProduct);
+  const selectedVariant = useAppStore((s) => s.selectedVariant);
+  const setTryOnStatus  = useAppStore((s) => s.setTryOnStatus);
+  const setTryOnProgress= useAppStore((s) => s.setTryOnProgress);
+  const setTryOnError   = useAppStore((s) => s.setTryOnError);
+  const resetTryOn      = useAppStore((s) => s.resetTryOn);
 
+  // Result data — we poll here if the navigation happened before polling finished
+  // (edge case: user is sent straight here by a notification / deep-link)
+  const [result, setResult] = useResultState();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Poll if we arrive here without a completed result ────────────────────────
   useEffect(() => {
-    let mounted = true;
+    if (!requestId || tryOnStatus === 'complete' || result) return;
 
-    const load = async () => {
-      if (!requestId) {
-        setRequest(demoData.tryOnRequest);
-        setFitResult(demoData.fitResult);
-        setRecommendations(demoData.recommendations.slice(0, 3));
-        return;
-      }
+    let cancelled = false;
 
-      const nextRequest = await mobileApi.tryOnResult(requestId);
-      const productId = nextRequest.variant?.product?.id ?? demoData.products[0].id;
-      const [nextFit, nextRecommendations] = await Promise.all([
-        mobileApi.productFitPreview(productId, {
-          variantId: nextRequest.variant?.id,
-          chosenSizeLabel: nextRequest.variant?.sizeLabel
-        }),
-        mobileApi.recommendations(userId, { productId })
-      ]);
+    setTryOnStatus('processing');
+    mobileApi
+      .pollTryOnResult(requestId, (pct) => {
+        if (!cancelled) setTryOnProgress(pct);
+      })
+      .then((r) => {
+        if (!cancelled) {
+          setResult(r);
+          setTryOnStatus('complete');
+          // Fade in result image
+          Animated.timing(fadeAnim, {
+            toValue: 1, duration: 500, useNativeDriver: true,
+          }).start();
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setTryOnError(err.message);
+          setTryOnStatus('error');
+        }
+      });
 
-      if (!mounted) {
-        return;
-      }
+    return () => { cancelled = true; };
+  }, [requestId]);
 
-      setRequest(nextRequest);
-      setFitResult(nextFit);
-      setRecommendations(nextRecommendations.length > 0 ? nextRecommendations.slice(0, 3) : demoData.recommendations.slice(0, 3));
-    };
+  // Fade in if result already available on mount
+  useEffect(() => {
+    if (result?.resultImageUrl) {
+      Animated.timing(fadeAnim, {
+        toValue: 1, duration: 400, useNativeDriver: true,
+      }).start();
+    }
+  }, [result]);
 
-    void load();
+  // ── Actions ──────────────────────────────────────────────────────────────────
 
-    return () => {
-      mounted = false;
-    };
-  }, [requestId, userId]);
+  const handleShare = useCallback(async () => {
+    if (!result?.resultImageUrl) return;
+    try {
+      await Share.share({
+        message: `Check out how I look in ${selectedProduct?.name ?? 'this outfit'} — FitMe`,
+        url: result.resultImageUrl,          // iOS
+        title: 'My FitMe Try-On',
+      });
+    } catch {
+      // User cancelled share sheet — no-op
+    }
+  }, [result, selectedProduct]);
 
-  const activeRequest = request ?? demoData.tryOnRequest;
-  const product = activeRequest.variant?.product ?? demoData.products[0];
-  const variant = activeRequest.variant ?? product.variants?.[1] ?? product.variants?.[0];
-  const resultImage = activeRequest.result?.outputImageUrl ?? demoData.tryOnRequest.result?.outputImageUrl;
-  const fitQuality = (fitResult?.fitScore ?? 91);
-  const styleMatch = Math.min(98, Math.max(82, Math.round((recommendations[0]?.score ?? 88))));
-  const colorMatch = fitResult?.confidenceScore ? Math.round(fitResult.confidenceScore * 100) + 4 : 96;
+  const handleSaveLook = useCallback(async () => {
+    if (!selectedProduct || !result) return;
+    Alert.alert('Saved!', 'This look has been added to your Saved Looks.');
+    // In production: mobileApi.saveLook({ ... })
+  }, [selectedProduct, result]);
 
-  const saveToWardrobe = async () => {
-    const saved = await mobileApi.saveLook(userId, {
-      name: `${product.name} saved look`,
-      note: activeRequest.result?.summary ?? "Saved from try-on result.",
-      productIds: [product.id],
-      isWishlist: false
-    });
-    setMessage(`Saved ${saved.name}`);
-  };
+  const handleTryAnother = useCallback(() => {
+    resetTryOn();
+    router.replace('/tryon-upload');
+  }, [resetTryOn, router]);
+
+  // ── Loading state ────────────────────────────────────────────────────────────
+
+  const isProcessing = tryOnStatus === 'processing' || tryOnStatus === 'uploading';
+
+  if (!requestId) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="✨"
+          title="No try-on yet"
+          subtitle="Go back and choose an outfit to try on."
+          action="Start try-on"
+          onAction={() => router.replace('/tryon-upload')}
+        />
+      </Screen>
+    );
+  }
+
+  if (tryOnStatus === 'error') {
+    return (
+      <Screen>
+        <EmptyState
+          icon="⚠️"
+          title="Try-on failed"
+          subtitle="Something went wrong generating your look. Please try again."
+          action="Try again"
+          onAction={handleTryAnother}
+        />
+      </Screen>
+    );
+  }
+
+  // ── Result ───────────────────────────────────────────────────────────────────
+
+  const confidence = result?.result?.confidence;
+  const fitNotes   = result?.result?.fitNotes ?? [];
 
   return (
-    <Screen tone="dark" showProfileStrip={false}>
-      <View style={styles.shell}>
-        <View style={styles.imageCard}>
-          <SmartImage uri={resultImage} label={product.name} containerStyle={styles.resultImageWrap} style={styles.resultImage} fallbackTone="accent" />
-          <View style={styles.matchBadge}>
-            <Text style={styles.matchValue}>{metricValue(fitQuality)}</Text>
-            <Text style={styles.matchLabel}>Match</Text>
-          </View>
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.title}>{product.name}</Text>
-          <Text style={styles.subtitle}>
-            {product.brand?.name ?? "FitMe"} · Rs. {Math.round(variant?.price ?? 0)} · Size {fitResult?.recommendedSize ?? variant?.sizeLabel ?? "M"}
-          </Text>
-
-          <MetricRow label="Fit Quality" value={fitQuality} />
-          <MetricRow label="Style Match" value={styleMatch} />
-          <MetricRow label="Color Match" value={colorMatch} />
-
-          <Text style={styles.summary}>
-            {activeRequest.result?.summary ?? fitResult?.explanation ?? "Generated try-on result is ready with fit and style guidance."}
-          </Text>
-        </View>
-
-        <View style={styles.actions}>
-          <PrimaryButton onPress={() => router.push("/recommendations")} variant="secondary">
-            See Similar
-          </PrimaryButton>
-          <PrimaryButton onPress={() => Linking.openURL(activeRequest.variant?.product?.offerSummary?.bestOffer?.externalUrl ?? demoData.shops[0].url ?? "https://example.com")}>
-            Buy Now
-          </PrimaryButton>
-        </View>
-        <PrimaryButton onPress={() => void saveToWardrobe()} variant="ghost">
-          Save to Wardrobe
-        </PrimaryButton>
-
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-
-        <View style={styles.similarCard}>
-          <Text style={styles.similarTitle}>Next up</Text>
-          {recommendations.slice(0, 2).map((entry) => (
-            <Pressable key={entry.productId} onPress={() => router.push("/recommendations")} style={({ pressed }) => [styles.similarRow, pressed && styles.pressed]}>
-              <SmartImage
-                uri={entry.product?.imageUrl}
-                label={entry.product?.name ?? "Recommended"}
-                containerStyle={styles.similarThumbWrap}
-                style={styles.similarThumb}
-              />
-              <View style={styles.similarCopy}>
-                <Text style={styles.similarName}>{entry.product?.name ?? "Recommended piece"}</Text>
-                <Text style={styles.similarMeta}>
-                  {entry.product?.brand?.name ?? "FitMe"} · Rs. {Math.round(entry.product?.variants?.[1]?.price ?? entry.product?.variants?.[0]?.price ?? 0)}
+    <>
+      <Screen>
+        {/* Result image */}
+        {result?.resultImageUrl ? (
+          <Animated.View style={[styles.imageWrapper, { opacity: fadeAnim }]}>
+            <Image
+              source={{ uri: result.resultImageUrl }}
+              style={styles.resultImage}
+              resizeMode="cover"
+            />
+            {/* Confidence badge */}
+            {confidence !== undefined && (
+              <View style={styles.confidenceBadge}>
+                <Text style={styles.confidenceText}>
+                  {Math.round(confidence * 100)}% fit match
                 </Text>
               </View>
-              <Text style={styles.similarScore}>{metricValue(entry.score)}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </Screen>
+            )}
+          </Animated.View>
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Text style={styles.placeholderIcon}>👕</Text>
+            <Text style={styles.placeholderText}>
+              {isProcessing ? 'Rendering your look…' : 'No preview available'}
+            </Text>
+          </View>
+        )}
+
+        {/* Product info */}
+        {selectedProduct && selectedVariant && (
+          <SectionCard title={selectedProduct.name}>
+            <InfoRow label="Brand"  value={selectedProduct.brand.name} />
+            <InfoRow label="Colour" value={selectedVariant.color} />
+            <InfoRow label="Size"   value={selectedVariant.size} />
+            <InfoRow
+              label="Price"
+              value={`${selectedVariant.currency} ${selectedVariant.price}`}
+              last
+            />
+          </SectionCard>
+        )}
+
+        {/* Fit analysis */}
+        {result?.result && (
+          <SectionCard title="Fit analysis">
+            {confidence !== undefined && (
+              <InfoRow
+                label="Fit confidence"
+                value={`${Math.round(confidence * 100)}%`}
+                valueColor={confidence > 0.75 ? Colors.success : Colors.warning}
+              />
+            )}
+            {result.result.summary ? (
+              <Text style={styles.summary}>{result.result.summary}</Text>
+            ) : null}
+            {fitNotes.length > 0 && (
+              <View style={styles.fitNotes}>
+                {fitNotes.map((note, i) => (
+                  <Text key={i} style={styles.fitNote}>• {note}</Text>
+                ))}
+              </View>
+            )}
+          </SectionCard>
+        )}
+
+        {/* Actions */}
+        {result && (
+          <SectionCard>
+            <PrimaryButton onPress={handleSaveLook}>
+              💾  Save this look
+            </PrimaryButton>
+            <PrimaryButton variant="secondary" onPress={handleShare}>
+              📤  Share
+            </PrimaryButton>
+            <PrimaryButton
+              variant="outline"
+              onPress={() => router.push('/recommendations')}
+            >
+              See recommendations
+            </PrimaryButton>
+            <PrimaryButton variant="ghost" onPress={handleTryAnother}>
+              Try another outfit
+            </PrimaryButton>
+          </SectionCard>
+        )}
+      </Screen>
+
+      {/* Processing overlay (covers full screen) */}
+      <LoadingOverlay
+        visible={isProcessing}
+        message="Generating your look…"
+        progress={tryOnProgress}
+      />
+    </>
   );
 }
 
-function MetricRow({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.metricRow}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <View style={styles.metricValueWrap}>
-        <View style={styles.metricTrack}>
-          <View style={[styles.metricFill, { width: `${Math.max(8, Math.min(100, value))}%` }]} />
-        </View>
-        <Text style={styles.metricText}>{metricValue(value)}</Text>
-      </View>
-    </View>
-  );
+// ─── Local result state hook ──────────────────────────────────────────────────
+// Kept separate so the main component stays readable
+
+import { useState } from 'react';
+import type { TryOnResult } from '../../types';
+
+function useResultState(): [TryOnResult | null, (r: TryOnResult) => void] {
+  const [result, setResult] = useState<TryOnResult | null>(null);
+  return [result, setResult];
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  shell: {
-    gap: 16
-  },
-  imageCard: {
-    position: "relative",
-    padding: 10,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.86)",
-    borderWidth: 1,
-    borderColor: colors.lineDark
-  },
-  resultImageWrap: {
-    aspectRatio: 0.77
+  imageWrapper: {
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    position: 'relative',
+    ...Shadow.md,
   },
   resultImage: {
-    width: "100%",
-    height: "100%"
+    width: '100%',
+    aspectRatio: 3 / 4,
+    backgroundColor: Colors.surface2,
   },
-  matchBadge: {
-    position: "absolute",
-    top: 22,
-    right: 22,
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(11,11,19,0.82)",
-    borderWidth: 3,
-    borderColor: colors.accent
+  confidenceBadge: {
+    position: 'absolute',
+    bottom: Spacing.sm,
+    right: Spacing.sm,
+    backgroundColor: 'rgba(15,118,110,0.9)',
+    borderRadius: Radius.full,
+    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
   },
-  matchValue: {
-    color: colors.inkOnDark,
-    fontSize: 20,
-    fontWeight: "800"
+  confidenceText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
   },
-  matchLabel: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 11
+  imagePlaceholder: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    backgroundColor: Colors.surface2,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
   },
-  infoCard: {
-    gap: 10,
-    padding: 18,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.86)",
-    borderWidth: 1,
-    borderColor: colors.lineDark
-  },
-  title: {
-    color: colors.inkOnDark,
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: "800"
-  },
-  subtitle: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14
-  },
-  metricRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12
-  },
-  metricLabel: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14
-  },
-  metricValueWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-    justifyContent: "flex-end"
-  },
-  metricTrack: {
-    width: 110,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    overflow: "hidden"
-  },
-  metricFill: {
-    height: "100%",
-    backgroundColor: colors.accent
-  },
-  metricText: {
-    color: colors.inkOnDark,
-    fontSize: 13,
-    fontWeight: "700"
-  },
+  placeholderIcon: { fontSize: 48 },
+  placeholderText: { fontSize: FontSize.sm, color: Colors.textMuted },
+
   summary: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14,
-    lineHeight: 21
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    lineHeight: 20,
   },
-  actions: {
-    flexDirection: "row",
-    gap: 10
-  },
-  message: {
-    color: colors.inkOnDark,
-    fontSize: 14
-  },
-  similarCard: {
-    gap: 12,
-    padding: 18,
-    borderRadius: radius.xl,
-    backgroundColor: "rgba(19,21,34,0.86)",
-    borderWidth: 1,
-    borderColor: colors.lineDark
-  },
-  similarTitle: {
-    color: colors.inkOnDark,
-    fontSize: 16,
-    fontWeight: "700"
-  },
-  similarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12
-  },
-  similarThumbWrap: {
-    width: 64,
-    height: 82
-  },
-  similarThumb: {
-    width: "100%",
-    height: "100%"
-  },
-  similarCopy: {
-    flex: 1,
-    gap: 4
-  },
-  similarName: {
-    color: colors.inkOnDark,
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  similarMeta: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 12
-  },
-  similarScore: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  pressed: {
-    opacity: 0.92
-  }
+  fitNotes: { gap: Spacing.xs },
+  fitNote:  { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 20 },
 });

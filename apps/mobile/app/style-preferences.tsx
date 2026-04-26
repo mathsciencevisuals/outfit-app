@@ -1,1 +1,5 @@
-export { StylePreferencesScreen as default } from "../src/features/profile/StylePreferencesScreen";
+import { StylePreferencesScreen } from '../src/features/onboarding/StylePreferencesScreen';
+
+export default function StylePreferencesPage() {
+  return <StylePreferencesScreen />;
+}

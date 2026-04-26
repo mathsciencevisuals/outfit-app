@@ -1,12 +1,12 @@
 import { View, StyleSheet } from 'react-native';
-import { SavedLooksScreen } from '../src/features/saved/SavedLooksScreen';
+import { ProfileScreen } from '../src/features/profile/ProfileScreen';
 import { BottomTabBar } from '../src/components/BottomTabBar';
 
-export default function SavedLooksPage() {
+export default function ProfileMainPage() {
   return (
     <View style={styles.container}>
-      <View style={styles.content}><SavedLooksScreen /></View>
-      <BottomTabBar active="saved" />
+      <View style={styles.content}><ProfileScreen /></View>
+      <BottomTabBar active="profile" />
     </View>
   );
 }
