@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const mobileEnvSchema = z.object({
-  EXPO_PUBLIC_API_URL: z.string().url()
+  EXPO_PUBLIC_API_URL: z.string().url(),
+  EXPO_PUBLIC_DEMO_MODE: z.enum(["true", "false"]).optional().default("false")
 });
 
 export const adminEnvSchema = z.object({

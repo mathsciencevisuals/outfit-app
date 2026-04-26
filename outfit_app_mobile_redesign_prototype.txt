@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>fitcheck.ai – interactive mobile redesign</title>
+  <title>fitme.ai – interactive mobile redesign</title>
   <style>
     :root {
       --bg: #f6f7fb;
@@ -542,7 +542,7 @@
   <div class="page">
     <div class="topbar">
       <div class="headline">
-        <h1>fitcheck.ai next-gen mobile concept</h1>
+        <h1>fitme.ai next-gen mobile concept</h1>
         <p>
           Updated interactive redesign with your added ideas embedded: real camera/upload entry points, vibe-based try-on,
           TikTok-style feed behavior, wardrobe/profile storage, download actions, fun loading language, and a more polished
@@ -588,7 +588,7 @@
             <div class="statusbar"><span>9:41</span><span>5G • 92%</span></div>
             <div class="appbar">
               <div>
-                <div class="eyebrow">fitcheck.ai</div>
+                <div class="eyebrow">fitme.ai</div>
                 <div class="title">For you</div>
                 <div class="subtitle">Swipe through mood-led looks and jump into try-on instantly.</div>
               </div>
@@ -746,7 +746,7 @@
               <div class="panel profile-head">
                 <div class="avatar">AI</div>
                 <div>
-                  <div class="profile-name">fitcheck.ai user</div>
+                  <div class="profile-name">fitme.ai user</div>
                   <div class="profile-mail">student@campus.com</div>
                   <div class="action-row" style="margin-top:8px;">
                     <span class="chip success">6 saved fits</span>
@@ -1007,7 +1007,7 @@
       if (!src) return;
       const link = document.createElement('a');
       link.href = src;
-      link.download = 'fitcheck-look.png';
+      link.download = 'fitme-look.png';
       link.click();
     });
 

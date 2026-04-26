@@ -81,3 +81,44 @@ The Prisma seed script inserts:
 - 3 shops
 - sample size charts and inventory offers
 - demo users, profiles, measurements, provider configs, saved looks, recommendations, and try-on records
+
+## Demo login and screenshot test data
+
+Use this account for the mobile demo and screenshot flows:
+
+- Email: `demo@fitme.dev`
+- Password: `fitme1234`
+
+After running the seed, the demo account includes:
+
+- 20 products with stable visible demo image URLs
+- 6 recommendation records and a profile that drives populated `/recommendations`
+- 4 saved looks for wardrobe and wishlist surfaces
+- 1 completed try-on request with visible source, garment, and result images
+- India-focused shop offers with INR pricing for shopping screenshots
+
+Expected populated screens after login:
+
+- Feed
+- Try-On
+- Saved
+- Shops
+- Profile
+
+## Screenshot mode
+
+For screenshot-only mobile runs without a backend, enable demo mode in the Expo env:
+
+```bash
+EXPO_PUBLIC_DEMO_MODE=true
+```
+
+Then open the mobile app and tap `Try Demo` from onboarding or auth. This creates a local demo session in Zustand and routes straight to the feed with screenshot-ready data for:
+
+- profile and avatar surfaces
+- feed recommendations
+- saved looks
+- shop offers
+- try-on result cards
+
+This mode is mobile-only and does not require a live API session to render the major screens.

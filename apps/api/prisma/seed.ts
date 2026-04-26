@@ -1,7 +1,8 @@
-import { Prisma, PrismaClient, TryOnStatus } from "@prisma/client";
+import { Prisma, PrismaClient, RecommendationReason, TryOnStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
+const demoImageBaseUrl = "https://placehold.co";
 
 const brands = [
   { name: "Northline", slug: "northline", countryCode: "US", sizingNotes: "Relaxed outerwear sizing." },
@@ -10,11 +11,9 @@ const brands = [
 ];
 
 const shops = [
-  { name: "City Threads", slug: "city-threads", url: "https://citythreads.example.com", region: "US" },
-  { name: "Mode Collective", slug: "mode-collective", url: "https://modecollective.example.com", region: "EU" },
-  { name: "Sprint Supply", slug: "sprint-supply", url: "https://sprintsupply.example.com", region: "APAC" },
-  { name: "Campus Edit", slug: "campus-edit", url: "https://campusedit.example.com", region: "US" },
-  { name: "Night Market", slug: "night-market", url: "https://nightmarket.example.com", region: "IN" }
+  { name: "Myntra Demo", slug: "myntra-demo", url: "https://demo.myntra.example", region: "IN" },
+  { name: "Ajio Demo", slug: "ajio-demo", url: "https://demo.ajio.example", region: "IN" },
+  { name: "Nykaa Fashion Demo", slug: "nykaa-fashion-demo", url: "https://demo.nykaafashion.example", region: "IN" }
 ];
 
 const productDefinitions: Array<[string, string, string, string, string[], string[]]> = [
@@ -39,6 +38,53 @@ const productDefinitions: Array<[string, string, string, string, string[], strin
   ["Atelier Mono", "Merino Crew", "tops", "forest", ["black"], ["elevated", "minimal", "date"]],
   ["Northline", "Canvas Sneaker", "footwear", "white", ["tan"], ["casual", "street", "college"]]
 ];
+
+function slugLabel(value: string) {
+  return value
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function demoImageUrl(label: string, options?: { width?: number; height?: number; background?: string; foreground?: string }) {
+  const width = options?.width ?? 720;
+  const height = options?.height ?? 960;
+  const background = (options?.background ?? "1f2937").replace("#", "");
+  const foreground = (options?.foreground ?? "f8fafc").replace("#", "");
+
+  return `${demoImageBaseUrl}/${width}x${height}/${background}/${foreground}.png?text=${encodeURIComponent(label)}`;
+}
+
+function productImageUrl(name: string, color: string, variant?: string) {
+  return demoImageUrl(variant ? `${name} ${variant}` : name, {
+    background:
+      color === "black"
+        ? "1f2937"
+        : color === "white"
+          ? "e5e7eb"
+          : color === "olive"
+            ? "556b2f"
+            : color === "camel"
+              ? "c19a6b"
+              : color === "navy"
+                ? "1e3a8a"
+                : color === "gray"
+                  ? "6b7280"
+                  : color === "blue" || color === "indigo"
+                    ? "2563eb"
+                    : color === "cream" || color === "stone"
+                      ? "f1e7d0"
+                      : color === "forest"
+                        ? "166534"
+                        : "7c3aed",
+    foreground: color === "white" || color === "cream" || color === "stone" ? "111827" : "f8fafc"
+  });
+}
+
+function lifestyleImageUrl(label: string, background: string) {
+  return demoImageUrl(label, { width: 960, height: 1280, background, foreground: "f8fafc" });
+}
 
 function brandAdjustment(brandName: string) {
   if (brandName === "Atelier Mono") {
@@ -138,8 +184,9 @@ async function main() {
       sku: `${slug}-${size.toLowerCase()}`,
       sizeLabel: size,
       color: baseColor,
-      price: new Prisma.Decimal(basePrice + index * 18 + (category === "footwear" ? 24 : category === "outerwear" ? 36 : 0)),
-      imageUrl: `https://images.example.com/${slug}-${size.toLowerCase()}.jpg`
+      price: new Prisma.Decimal((basePrice + index * 18 + (category === "footwear" ? 24 : category === "outerwear" ? 36 : 0)) * 20),
+      currency: "INR",
+      imageUrl: productImageUrl(name, baseColor, size)
     }));
 
     const product = await prisma.product.create({
@@ -153,7 +200,7 @@ async function main() {
         secondaryColors,
         materials: category === "outerwear" ? ["nylon", "cotton"] : ["cotton", "elastane"],
         styleTags,
-        imageUrl: `https://images.example.com/${slug}.jpg`,
+        imageUrl: productImageUrl(name, baseColor),
         variants: { create: variants }
       },
       include: { variants: true }
@@ -177,7 +224,7 @@ async function main() {
     });
 
     for (const [index, variant] of product.variants.entries()) {
-      const partnerShops = shopRecords.slice(index % shopRecords.length, (index % shopRecords.length) + 2);
+      const partnerShops = [shopRecords[index % shopRecords.length], shopRecords[(index + 1) % shopRecords.length]];
       for (const [offerIndex, shop] of partnerShops.entries()) {
         if (!shop) {
           continue;
@@ -187,9 +234,9 @@ async function main() {
             shopId: shop.id,
             variantId: variant.id,
             externalUrl: `${shop.url}/products/${product.slug}?sku=${variant.sku}`,
-            stock: 5 + index * 4 + offerIndex * 2,
-            price: new Prisma.Decimal(variant.price.toNumber() + 3 + offerIndex * 7),
-            currency: "USD"
+            stock: 8 + index * 5 + offerIndex * 3,
+            price: new Prisma.Decimal(variant.price.toNumber() + 99 + offerIndex * 149),
+            currency: "INR"
           }
         });
       }
@@ -215,10 +262,10 @@ async function main() {
           weightKg: 61,
           bodyShape: "athletic",
           fitPreference: "regular",
-          budgetMin: 90,
-          budgetMax: 180,
-          budgetLabel: "Smart spend",
-          stylePreference: { preferredStyles: ["minimal", "smart", "sport", "streetwear"] },
+          budgetMin: 1200,
+          budgetMax: 2800,
+          budgetLabel: "Under Rs. 2.8k",
+          stylePreference: { preferredStyles: ["streetwear", "minimal", "smart", "sport"] },
           preferredColors: ["black", "white", "olive", "blue"],
           avoidedColors: ["orange"]
         } as any
@@ -238,8 +285,8 @@ async function main() {
           firstName: "Admin",
           lastName: "User",
           fitPreference: "regular",
-          budgetMin: 120,
-          budgetMax: 220,
+          budgetMin: 1800,
+          budgetMax: 4200,
           preferredColors: ["black"],
           avoidedColors: []
         } as any
@@ -258,8 +305,8 @@ async function main() {
           firstName: "Operator",
           lastName: "User",
           fitPreference: "relaxed",
-          budgetMin: 80,
-          budgetMax: 150,
+          budgetMin: 1400,
+          budgetMax: 2600,
           preferredColors: ["olive"],
           avoidedColors: []
         } as any
@@ -328,7 +375,7 @@ async function main() {
       key: "uploads/demo/source-image.jpg",
       mimeType: "image/jpeg",
       bucket: "fitme-assets",
-      publicUrl: "http://localhost:9000/fitme-assets/uploads/demo/source-image.jpg"
+      publicUrl: lifestyleImageUrl("Demo Portrait", "312e81")
     }
   });
 
@@ -338,7 +385,7 @@ async function main() {
       key: "uploads/demo/avatar-image.jpg",
       mimeType: "image/jpeg",
       bucket: "fitme-assets",
-      publicUrl: "http://localhost:9000/fitme-assets/uploads/demo/avatar-image.jpg"
+      publicUrl: lifestyleImageUrl("Demo Avatar", "7c3aed")
     }
   });
 
@@ -348,7 +395,7 @@ async function main() {
       key: "uploads/demo/garment-image.jpg",
       mimeType: "image/jpeg",
       bucket: "fitme-assets",
-      publicUrl: "http://localhost:9000/fitme-assets/uploads/demo/garment-image.jpg"
+      publicUrl: lifestyleImageUrl("Demo Garment", "0f766e")
     }
   });
 
@@ -381,8 +428,8 @@ async function main() {
   await prisma.tryOnResult.create({
     data: {
       requestId: tryOnRequest.id,
-      outputImageUrl: `${upload.publicUrl}?rendered=1`,
-      overlayImageUrl: `${firstProduct.imageUrl}?overlay=1`,
+      outputImageUrl: lifestyleImageUrl("Demo Try-On Result", "be185d"),
+      overlayImageUrl: lifestyleImageUrl("Demo Overlay", "1d4ed8"),
       confidence: 0.88,
       summary: "Mock try-on generated successfully with a balanced drape estimate.",
       metadata: {
@@ -400,8 +447,16 @@ async function main() {
       productId: product.id,
       rank: index + 1,
       score: 92 - index * 4,
-      reason: index < 2 ? "FIT" : index < 4 ? "STYLE" : "COLOR",
-      explanation: `Seeded recommendation ${index + 1} for demo flows`
+      reason: ([RecommendationReason.FIT, RecommendationReason.STYLE, RecommendationReason.COLOR, RecommendationReason.TREND, RecommendationReason.FIT, RecommendationReason.STYLE][index] ??
+        RecommendationReason.STYLE) as RecommendationReason,
+      explanation: [
+        `${product.name} is the best fit for your saved measurements and relaxed streetwear profile.`,
+        `${product.name} aligns with your saved style DNA and campus-smart preferences.`,
+        `${product.name} complements your preferred color palette and layered outfits.`,
+        `${product.name} is trending in the feed and pairs well with your current saved looks.`,
+        `${product.name} keeps size confidence high while staying inside your stated budget.`,
+        `${product.name} extends your minimal-street wardrobe without repeating categories too closely.`
+      ][index] ?? `${product.name} is seeded for demo recommendation flows.`
     }))
   });
 
@@ -431,6 +486,15 @@ async function main() {
       note: "Wishlist-backed pieces for campus and creator-style outfits.",
       isWishlist: true,
       items: { create: products.slice(6, 9).map((product) => ({ productId: product.id })) }
+    }
+  });
+
+  await prisma.savedLook.create({
+    data: {
+      userId: demoUser.id,
+      name: "Interview Ready Board",
+      note: "Structured pieces saved for sharper formal and placement day looks.",
+      items: { create: products.slice(9, 12).map((product) => ({ productId: product.id })) }
     }
   });
 

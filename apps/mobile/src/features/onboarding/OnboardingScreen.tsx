@@ -9,8 +9,11 @@ import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
 import { LoadingState } from "../../components/StateCard";
+import { demoData } from "../../demo/demo-data";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
+import { useAppStore } from "../../store/app-store";
+import { demoModeEnabled } from "../../utils/env";
 
 const onboardingSignals = [
   {
@@ -32,6 +35,7 @@ const onboardingSignals = [
 
 export function OnboardingScreen() {
   const router = useRouter();
+  const startDemoSession = useAppStore((state) => state.startDemoSession);
   const { data, loading } = useAsyncResource(() => mobileApi.onboarding(), []);
 
   useFocusEffect(
@@ -53,6 +57,16 @@ export function OnboardingScreen() {
     );
   }
 
+  const tryDemo = () => {
+    startDemoSession({
+      token: demoData.demoToken,
+      user: demoData.session.user,
+      profile: demoData.profile,
+      tryOnRequestId: demoData.tryOnRequest.id
+    });
+    router.replace("/feed");
+  };
+
   return (
     <Screen>
       <SectionCard
@@ -70,6 +84,7 @@ export function OnboardingScreen() {
           <MetricTile label="Signal" value="Fit-first" caption="Recommendations stay grounded in measurements" />
         </View>
         <PrimaryButton onPress={() => router.push("/auth")}>Start setup</PrimaryButton>
+        {demoModeEnabled ? <PrimaryButton onPress={tryDemo} variant="secondary">Try Demo</PrimaryButton> : null}
       </SectionCard>
 
       <SectionCard eyebrow="What You Unlock" title="A wardrobe workflow, not just a catalog">

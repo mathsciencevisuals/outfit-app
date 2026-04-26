@@ -1,35 +1,40 @@
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { MetricTile } from "../../components/MetricTile";
-import { Pill } from "../../components/Pill";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { SectionCard } from "../../components/SectionCard";
-import { SegmentedControl } from "../../components/SegmentedControl";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import { colors, radius } from "../../theme/design";
+import { colors, radius, shadow } from "../../theme/design";
 import type { Product, SavedLook } from "../../types/api";
+import { Screen } from "../../components/Screen";
+import { demoData } from "../../demo/demo-data";
 
-function formatPrice(value?: number | null) {
-  return value != null ? `$${Math.round(value)}` : "--";
+function formatPriceRange(lowest?: number | null, highest?: number | null) {
+  if (lowest != null && highest != null && lowest !== highest) {
+    return `Rs. ${Math.round(lowest)} - Rs. ${Math.round(highest)}`;
+  }
+  if (lowest != null) {
+    return `Rs. ${Math.round(lowest)}`;
+  }
+  return "Price pending";
+}
+
+function vibeTag(look: SavedLook) {
+  return look.occasionTags?.[0] ?? (look.isWishlist ? "Liked" : "Saved fit");
 }
 
 export function SavedLooksScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
-  const [scope, setScope] = useState("Wardrobe");
   const { data, loading, error } = useAsyncResource(() => mobileApi.savedLooks(userId), [userId]);
-  const looks = data ?? [];
 
-  const wardrobe = useMemo(() => looks.filter((look) => !look.isWishlist), [looks]);
+  const looks = data ?? [];
+  const savedFits = useMemo(() => looks.filter((look) => !look.isWishlist), [looks]);
   const likedLooks = useMemo(() => looks.filter((look) => Boolean(look.isWishlist)), [looks]);
 
-  const likedItems = useMemo(() => {
+  const likedProducts = useMemo(() => {
     const collection = new Map<string, Product>();
     likedLooks.forEach((look) => {
       (look.items ?? []).forEach((item) => {
@@ -37,182 +42,389 @@ export function SavedLooksScreen() {
           collection.set(item.product.id, item.product);
         }
       });
-      (look.recommendedProducts ?? []).forEach((product) => collection.set(product.id, product));
+      (look.recommendedProducts ?? []).forEach((product) => {
+        collection.set(product.id, product);
+      });
     });
     return Array.from(collection.values());
   }, [likedLooks]);
 
-  const activeLooks = scope === "Liked" ? likedLooks : wardrobe;
+  function lookImage(look: SavedLook, index: number) {
+    return (
+      look.items?.[0]?.product?.imageUrl ??
+      look.recommendedProducts?.[0]?.imageUrl ??
+      demoData.savedLooks[index]?.items?.[0]?.product?.imageUrl ??
+      demoData.products[index % demoData.products.length]?.imageUrl ??
+      null
+    );
+  }
 
   if (loading) {
     return (
-      <Screen>
-        <LoadingState title="Saved" subtitle="Loading your wardrobe and wishlist memory." />
+      <Screen showProfileStrip={false}>
+        <LoadingState title="Saved" subtitle="Loading your wardrobe and liked garment memory." />
       </Screen>
     );
   }
 
   if (error) {
     return (
-      <Screen>
-        <ErrorState title="Saved" message="Saved looks could not be loaded." actionLabel="Shops" onRetry={() => router.push("/retail")} />
+      <Screen showProfileStrip={false}>
+        <ErrorState title="Saved" message="Saved looks could not be loaded." actionLabel="Feed" onRetry={() => router.push("/feed")} />
       </Screen>
     );
   }
 
   if (looks.length === 0) {
     return (
-      <Screen>
-        <EmptyState title="No looks saved yet" message="Save outfits after try-on or shopping to build your wardrobe memory." actionLabel="Try-On" onAction={() => router.push("/try-on")} />
+      <Screen showProfileStrip={false}>
+        <EmptyState
+          title="No looks saved yet"
+          message="Save outfits after try-on or shopping to build your wardrobe memory."
+          actionLabel="Try-On"
+          onAction={() => router.push("/try-on")}
+        />
       </Screen>
     );
   }
 
   return (
-    <Screen>
-      <SectionCard
-        eyebrow="Saved"
-        title="Wardrobe"
-        subtitle="Saved fits, liked garments, and shopping intent all stay in one wardrobe surface."
-      >
-        <View style={styles.metrics}>
-          <MetricTile label="Saved fits" value={`${wardrobe.length}`} caption="Wardrobe entries" />
-          <MetricTile label="Liked looks" value={`${likedLooks.length}`} caption="Wishlist collections" />
-          <MetricTile label="Liked items" value={`${likedItems.length}`} caption="Product-level intent" />
+    <Screen showProfileStrip={false}>
+      <View style={styles.shell}>
+        <View style={styles.headerCard}>
+          <Text style={styles.eyebrow}>Saved</Text>
+          <Text style={styles.title}>Your wardrobe</Text>
+          <Text style={styles.subtitle}>
+            Saved fits and liked garments stay grouped as a visual wardrobe so screenshots feel like a real account.
+          </Text>
+          <View style={styles.buttonRow}>
+            <ActionButton label="Try another look" onPress={() => router.push("/try-on")} />
+            <ActionButton label="Compare offers" variant="secondary" onPress={() => router.push("/retail")} />
+          </View>
         </View>
 
-        <SegmentedControl options={["Wardrobe", "Liked"]} selected={scope} onSelect={setScope} />
+        <SectionBlock
+          title="Saved Fits"
+          subtitle="Generated looks and wardrobe boards you can reopen or shop from."
+          emptyTitle="No saved fits yet"
+          emptyBody="Generate a try-on result or save a recommendation to populate your wardrobe."
+        >
+          <View style={styles.grid}>
+            {savedFits.map((look, index) => (
+              <WardrobeCard
+                key={look.id}
+                imageUri={lookImage(look, index)}
+                name={look.name}
+                itemCount={look.items?.length ?? 0}
+                priceLabel={formatPriceRange(look.offerSummary?.lowestPrice, look.offerSummary?.highestPrice)}
+                tag={vibeTag(look)}
+                note={look.note ?? "Saved fit"}
+                onPress={() => router.push("/retail")}
+              />
+            ))}
+          </View>
+        </SectionBlock>
 
-        <View style={styles.grid}>
-          {activeLooks.map((look: SavedLook, index) => (
-            <Pressable key={look.id} onPress={() => router.push("/retail")} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-              <View style={[styles.thumb, index % 2 === 1 && styles.thumbAlt]}>
-                <Pill label={look.isWishlist ? "Liked" : "Saved"} tone={look.isWishlist ? "warning" : "success"} />
-              </View>
-              <View style={styles.meta}>
-                <Text style={styles.title}>{look.name}</Text>
-                <Text style={styles.detail}>{look.note ?? (look.isWishlist ? "Liked garment" : "Saved look")}</Text>
-                <View style={styles.row}>
-                  <Pill label={`${look.items?.length ?? 0} items`} tone="accent" />
-                  <Pill label={formatPrice(look.offerSummary?.lowestPrice)} tone="warning" />
-                </View>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-
-        {activeLooks.length === 0 ? (
-          <EmptyState title={scope === "Liked" ? "No liked looks yet" : "No saved outfits yet"} message="Save a try-on result or product collection to populate this wardrobe view." actionLabel="Feed" onAction={() => router.push("/feed")} />
-        ) : null}
-      </SectionCard>
-
-      <SectionCard eyebrow="Products" title="Liked garments" subtitle="Wishlist-backed products remain accessible even when you save them through different flows.">
-        {likedItems.length > 0 ? (
-          likedItems.slice(0, 6).map((product) => (
-            <View key={product.id} style={styles.productRow}>
-              <View>
-                <Text style={styles.productTitle}>{product.name}</Text>
-                <Text style={styles.productSubtitle}>
-                  {[product.brand?.name, product.category, product.baseColor].filter(Boolean).join(" • ") || "Saved product"}
-                </Text>
-              </View>
-              <View style={styles.productActions}>
-                <Pill label={formatPrice(product.offerSummary?.lowestPrice)} tone="warning" />
-                <PrimaryButton onPress={() => router.push("/retail")} variant="secondary" fullWidth={false}>
-                  Shop
-                </PrimaryButton>
-              </View>
+        <SectionBlock
+          title="Liked Garments"
+          subtitle="Wishlist-backed pieces separated from complete looks, but still visual and shoppable."
+          emptyTitle="No liked garments yet"
+          emptyBody="Use the shopping screen to save products into your wishlist."
+        >
+          {likedProducts.length > 0 ? (
+            <View style={styles.grid}>
+              {likedProducts.map((product, index) => (
+                <WardrobeCard
+                  key={product.id}
+                  imageUri={product.imageUrl ?? demoData.products[index % demoData.products.length]?.imageUrl ?? null}
+                  name={product.name}
+                  itemCount={1}
+                  priceLabel={formatPriceRange(product.offerSummary?.lowestPrice, product.offerSummary?.highestPrice)}
+                  tag={product.occasionTags?.[0] ?? product.styleTags?.[0] ?? "Liked"}
+                  note={[product.brand?.name, product.category].filter(Boolean).join(" • ") || "Wishlist piece"}
+                  onPress={() => router.push("/retail")}
+                />
+              ))}
             </View>
-          ))
-        ) : (
-          <EmptyState title="No liked garments yet" message="Use the shopping screen to save product picks into your wishlist." actionLabel="Shop now" onAction={() => router.push("/retail")} />
-        )}
-
-        <View style={styles.buttonRow}>
-          <PrimaryButton onPress={() => router.push("/try-on")}>Try another look</PrimaryButton>
-          <PrimaryButton onPress={() => router.push("/retail")} variant="secondary">
-            Compare offers
-          </PrimaryButton>
-        </View>
-      </SectionCard>
+          ) : (
+            <EmptyCopy title="No liked garments yet" body="Use the shopping screen to save products into your wishlist." />
+          )}
+        </SectionBlock>
+      </View>
     </Screen>
   );
 }
 
+function SectionBlock({
+  title,
+  subtitle,
+  emptyTitle,
+  emptyBody,
+  children
+}: {
+  title: string;
+  subtitle: string;
+  emptyTitle: string;
+  emptyBody: string;
+  children: React.ReactNode;
+}) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
+
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+      {hasChildren ? children : <EmptyCopy title={emptyTitle} body={emptyBody} />}
+    </View>
+  );
+}
+
+function WardrobeCard({
+  imageUri,
+  name,
+  itemCount,
+  priceLabel,
+  tag,
+  note,
+  onPress
+}: {
+  imageUri: string | null;
+  name: string;
+  itemCount: number;
+  priceLabel: string;
+  tag: string;
+  note: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.wardrobeCard, pressed && styles.pressed]}>
+      <View style={styles.wardrobeThumb}>
+        {imageUri ? <Image source={{ uri: imageUri }} style={styles.wardrobeImage} /> : null}
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{tag}</Text>
+        </View>
+      </View>
+      <View style={styles.wardrobeMeta}>
+        <Text style={styles.wardrobeTitle}>{name}</Text>
+        <Text style={styles.wardrobeNote}>{note}</Text>
+        <View style={styles.metaRow}>
+          <MetaChip label={`${itemCount} items`} />
+          <MetaChip label={priceLabel} tone="warning" />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function MetaChip({ label, tone = "default" }: { label: string; tone?: "default" | "warning" }) {
+  return (
+    <View style={[styles.metaChip, tone === "warning" && styles.metaChipWarning]}>
+      <Text style={[styles.metaChipText, tone === "warning" && styles.metaChipTextWarning]}>{label}</Text>
+    </View>
+  );
+}
+
+function ActionButton({
+  label,
+  onPress,
+  variant = "primary"
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: "primary" | "secondary";
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        variant === "primary" ? styles.actionButtonPrimary : styles.actionButtonSecondary,
+        pressed && styles.pressed
+      ]}
+    >
+      <Text style={[styles.actionButtonText, variant === "secondary" && styles.actionButtonTextSecondary]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function EmptyCopy({ title, body }: { title: string; body: string }) {
+  return (
+    <View style={styles.emptyCard}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyBody}>{body}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  metrics: {
+  shell: {
+    gap: 16
+  },
+  headerCard: {
+    gap: 10,
+    borderRadius: radius.xl,
+    padding: 18,
+    backgroundColor: colors.panelStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow
+  },
+  eyebrow: {
+    color: colors.brand,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  title: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: "800"
+  },
+  subtitle: {
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 21
+  },
+  buttonRow: {
     flexDirection: "row",
     gap: 10
+  },
+  actionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  actionButtonPrimary: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accentStrong
+  },
+  actionButtonSecondary: {
+    backgroundColor: colors.panelMuted,
+    borderColor: colors.lineStrong
+  },
+  actionButtonText: {
+    color: colors.inkOnDark,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  actionButtonTextSecondary: {
+    color: colors.ink
+  },
+  sectionCard: {
+    gap: 12,
+    borderRadius: radius.xl,
+    padding: 18,
+    backgroundColor: colors.panelStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow
+  },
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "800"
+  },
+  sectionSubtitle: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    lineHeight: 19
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10
   },
-  card: {
-    width: "48%",
-    borderRadius: 18,
+  wardrobeCard: {
+    width: "47.8%",
+    borderRadius: radius.lg,
     overflow: "hidden",
+    backgroundColor: colors.panelMuted,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.panelStrong
+    borderColor: colors.line
   },
-  thumb: {
-    height: 108,
-    padding: 10,
-    backgroundColor: "#eadfd6"
+  wardrobeThumb: {
+    height: 132,
+    overflow: "hidden",
+    backgroundColor: colors.pageStrong
   },
-  thumbAlt: {
-    backgroundColor: "#d9e2ff"
+  wardrobeImage: {
+    width: "100%",
+    height: "100%"
   },
-  meta: {
-    padding: 10,
-    gap: 6
+  badge: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(18,23,40,0.78)"
   },
-  title: {
-    color: colors.ink,
-    fontSize: 13,
+  badgeText: {
+    color: colors.inkOnDark,
+    fontSize: 11,
     fontWeight: "800"
   },
-  detail: {
-    color: colors.inkSoft,
-    fontSize: 11.5,
-    lineHeight: 16
+  wardrobeMeta: {
+    gap: 6,
+    padding: 12
   },
-  row: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  productRow: {
-    borderRadius: radius.lg,
-    padding: 14,
-    backgroundColor: colors.panelStrong,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 10
-  },
-  productTitle: {
+  wardrobeTitle: {
     color: colors.ink,
     fontSize: 14,
     fontWeight: "800"
   },
-  productSubtitle: {
+  wardrobeNote: {
     color: colors.inkSoft,
     fontSize: 12,
-    lineHeight: 18
+    lineHeight: 17
   },
-  productActions: {
+  metaRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8
+    gap: 8,
+    flexWrap: "wrap"
   },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10
+  metaChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft
+  },
+  metaChipWarning: {
+    backgroundColor: colors.warningSoft
+  },
+  metaChipText: {
+    color: colors.accentStrong,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  metaChipTextWarning: {
+    color: colors.warning
+  },
+  emptyCard: {
+    borderRadius: radius.lg,
+    padding: 16,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  emptyBody: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4
   },
   pressed: {
-    opacity: 0.9
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }]
   }
 });

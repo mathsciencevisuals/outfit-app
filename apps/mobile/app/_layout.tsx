@@ -104,6 +104,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="discover" options={{ headerShown: false }} />
+        <Stack.Screen name="demo-checklist" options={{ title: "Demo Checklist" }} />
         <Stack.Screen name="measurements" options={{ title: "Measurements" }} />
         <Stack.Screen name="recommendations" options={{ title: "Recommendations" }} />
         <Stack.Screen name="saved-looks" options={{ headerShown: false }} />

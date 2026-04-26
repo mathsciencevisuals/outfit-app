@@ -3,16 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 
-import { MetricTile } from "../../components/MetricTile";
-import { Pill } from "../../components/Pill";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import { colors, radius } from "../../theme/design";
+import { colors, radius, shadow } from "../../theme/design";
 import type { UserProfile } from "../../types/api";
+import { Screen } from "../../components/Screen";
 
 type AvatarDraft = {
   uploadId: string;
@@ -21,7 +17,7 @@ type AvatarDraft = {
 } | null;
 
 function parsePreferredStyles(value: unknown) {
-  return Array.isArray(value) ? value.map(String) : [];
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
 function buildProfilePayload(profile: UserProfile, budgetLabel: string) {
@@ -53,6 +49,7 @@ export function ProfileScreen() {
   const userRole = useAppStore((state) => state.userRole);
   const profile = useAppStore((state) => state.profile);
   const logout = useAppStore((state) => state.logout);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -94,10 +91,23 @@ export function ProfileScreen() {
   }, [profile]);
 
   const latestMeasurement = profile?.measurements?.[0] ?? null;
-  const avatarSource = avatarDraft?.localUri ?? avatarDraft?.publicUrl ?? profile?.avatarUrl ?? null;
   const savedLooks = profile?.savedLooks ?? [];
-  const displayName = `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() || "fitcheck.ai user";
-  const styleSummary = parsePreferredStyles(profile?.stylePreference?.preferredStyles).slice(0, 2).join(" • ") || "Style profile";
+  const avatarSource = avatarDraft?.localUri ?? avatarDraft?.publicUrl ?? profile?.avatarUrl ?? null;
+  const styleTags = parsePreferredStyles(profile?.stylePreference?.preferredStyles);
+  const displayName = `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() || "fitme.ai user";
+  const roleVisible = userRole === "ADMIN" || userRole === "OPERATOR";
+  const measurementSummary = latestMeasurement
+    ? `${latestMeasurement.chestCm ?? "--"} chest · ${latestMeasurement.waistCm ?? "--"} waist · ${latestMeasurement.hipsCm ?? "--"} hips`
+    : "No measurements saved yet";
+  const budgetSummary =
+    budgetLabel || profile?.budgetLabel || (profile?.budgetMin != null && profile?.budgetMax != null
+      ? `Rs. ${profile.budgetMin} - Rs. ${profile.budgetMax}`
+      : "Budget preference pending");
+
+  const lookImage = (index: number) =>
+    savedLooks[index]?.items?.[0]?.product?.imageUrl ??
+    savedLooks[index]?.recommendedProducts?.[0]?.imageUrl ??
+    null;
 
   const pickAvatar = async () => {
     if (!profile || !userId) {
@@ -124,6 +134,7 @@ export function ProfileScreen() {
     const asset = result.assets[0];
     setUploadingAvatar(true);
     setMessage(null);
+
     try {
       const upload = await mobileApi.uploadProfileImage(userId, {
         uri: asset.uri,
@@ -175,7 +186,7 @@ export function ProfileScreen() {
 
   if (loading && !profile) {
     return (
-      <Screen>
+      <Screen showProfileStrip={false}>
         <LoadingState title="Profile" subtitle="Loading your wardrobe and account controls." />
       </Screen>
     );
@@ -183,7 +194,7 @@ export function ProfileScreen() {
 
   if (error && !profile) {
     return (
-      <Screen>
+      <Screen showProfileStrip={false}>
         <ErrorState title="Profile" message="The profile hub could not be loaded." actionLabel="Retry" onRetry={() => void refreshProfile()} />
       </Screen>
     );
@@ -191,135 +202,245 @@ export function ProfileScreen() {
 
   if (!profile) {
     return (
-      <Screen>
-        <EmptyState title="Profile missing" message="There is no profile data loaded for this account yet." actionLabel="Onboarding" onAction={() => router.push("/onboarding")} />
+      <Screen showProfileStrip={false}>
+        <EmptyState
+          title="Profile missing"
+          message="There is no profile data loaded for this account yet."
+          actionLabel="Onboarding"
+          onAction={() => router.push("/onboarding")}
+        />
       </Screen>
     );
   }
 
   return (
-    <Screen>
-      <SectionCard eyebrow="Profile" title="Wardrobe" subtitle="Saved fits, account controls, measurements, and style identity all live here.">
-        <View style={styles.appbar}>
-          <Pressable onPress={() => router.push("/saved")} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-            <Text style={styles.iconText}>☰</Text>
-          </Pressable>
-          <View style={styles.appbarCopy}>
-            <Text style={styles.appbarTitle}>Wardrobe</Text>
-            <Text style={styles.appbarSub}>Saved fits and account.</Text>
+    <Screen showProfileStrip={false}>
+      <View style={styles.shell}>
+        <View style={styles.headerCard}>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.eyebrow}>Profile</Text>
+            <Pressable onPress={() => void handleLogout()} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </Pressable>
           </View>
-          <Pressable onPress={() => void handleLogout()} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-            <Text style={styles.iconText}>⎋</Text>
-          </Pressable>
-        </View>
 
-        <View style={styles.profileHead}>
-          <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}>
-            {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatarImage} /> : <Text style={styles.avatarFallback}>AI</Text>}
-          </Pressable>
-          <View style={styles.profileCopy}>
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.mail}>{userEmail || "student@campus.com"}</Text>
-            <View style={styles.row}>
-              <Pill label={`${savedLooks.length} saved fits`} tone="success" />
-              <Pill label={styleSummary} tone="neutral" />
-              {uploadingAvatar ? <Pill label="Uploading..." tone="info" /> : null}
-              {userRole === "ADMIN" || userRole === "OPERATOR" ? <Pill label="Admin tools" tone="accent" /> : null}
-            </View>
-          </View>
-        </View>
+          <View style={styles.identityRow}>
+            <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}>
+              {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatarImage} /> : <Text style={styles.avatarFallback}>AI</Text>}
+            </Pressable>
 
-        <View style={styles.metrics}>
-          <MetricTile label="Fit" value={latestMeasurement ? "92%" : "--"} caption="Current confidence" />
-          <MetricTile label="Looks" value={`${savedLooks.length}`} caption="Saved wardrobe entries" />
-          <MetricTile label="Budget" value={budgetLabel || "Open"} caption="Current spend label" />
-        </View>
-
-        <View style={styles.grid}>
-          {savedLooks.slice(0, 4).map((look, index) => (
-            <View key={look.id} style={styles.wardCard}>
-              <View style={[styles.thumb, index % 2 === 1 && styles.thumbAlt]} />
-              <View style={styles.meta}>
-                <Text style={styles.metaTitle}>{look.name}</Text>
-                <Text style={styles.metaText}>{look.note ?? (look.isWishlist ? "Liked garment" : "Saved just now")}</Text>
+            <View style={styles.identityCopy}>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.mail}>{userEmail || "demo@fitme.dev"}</Text>
+              <View style={styles.chipRow}>
+                <InfoChip label={`${savedLooks.length} saved fits`} tone="success" />
+                {styleTags.slice(0, 2).map((tag) => (
+                  <InfoChip key={tag} label={tag} />
+                ))}
+                {roleVisible ? <InfoChip label={userRole ?? "ADMIN"} tone="accent" /> : null}
+                {uploadingAvatar ? <InfoChip label="Uploading..." tone="accent" /> : null}
               </View>
             </View>
-          ))}
+          </View>
+
+          <View style={styles.headerActions}>
+            <ActionLink label="Change photo" icon="image" onPress={pickAvatar} />
+            <ActionLink label="Saved wardrobe" icon="heart" onPress={() => router.push("/saved")} />
+            <ActionLink label="Try-On history" icon="clock" onPress={() => router.push("/tryon-result")} />
+            <ActionLink label="Preferences" icon="sliders" onPress={() => router.push("/account")} />
+          </View>
         </View>
 
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Profile controls</Text>
-          <Text style={styles.panelBody}>
-            Change photo, logout, measurements, privacy, notifications, and style presets from this hub.
-          </Text>
+        <View style={styles.summaryGrid}>
+          <InfoCard
+            title="Measurements summary"
+            body={measurementSummary}
+            actionLabel="Edit measurements"
+            onAction={() => router.push("/measurements")}
+          />
+          <InfoCard
+            title="Style preferences"
+            body={styleTags.length > 0 ? styleTags.join(" • ") : "Streetwear, minimal, and smart tags are not set yet."}
+            actionLabel="Preferences"
+            onAction={() => router.push("/account")}
+          />
+          <InfoCard
+            title="Budget preference"
+            body={budgetSummary}
+            actionLabel="Save budget"
+            onAction={() => void saveBudgetLabel()}
+          >
+            <TextInput
+              style={styles.input}
+              value={budgetLabel}
+              onChangeText={setBudgetLabel}
+              placeholder="Budget label"
+              placeholderTextColor={colors.inkMuted}
+            />
+          </InfoCard>
+          <InfoCard
+            title="Theme preference"
+            body="Theme switching can live here once account-level appearance preferences are persisted."
+            actionLabel="Coming soon"
+          />
+          {roleVisible ? (
+            <InfoCard
+              title="Admin tools"
+              body="Provider controls, moderation, and partner operations should stay visible here for privileged roles."
+              actionLabel="Open tools"
+              onAction={() => router.push("/account")}
+              tone="accent"
+            />
+          ) : null}
         </View>
 
-        <TextInput
-          style={styles.input}
-          value={budgetLabel}
-          onChangeText={setBudgetLabel}
-          placeholder="Budget label"
-          placeholderTextColor={colors.inkMuted}
-        />
+        <View style={styles.wardrobeCard}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Wardrobe preview</Text>
+              <Text style={styles.sectionBody}>Saved looks, liked fits, and wardrobe memory all live here.</Text>
+            </View>
+            <Pressable onPress={() => router.push("/saved")} style={({ pressed }) => [styles.inlineAction, pressed && styles.pressed]}>
+              <Text style={styles.inlineActionText}>Open wardrobe</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.wardrobeGrid}>
+            {savedLooks.slice(0, 4).map((look, index) => (
+              <View key={look.id} style={styles.wardCard}>
+                <View style={[styles.thumb, index % 2 === 1 && styles.thumbAlt]}>
+                  {lookImage(index) ? <Image source={{ uri: lookImage(index)! }} style={styles.thumbImage} /> : null}
+                </View>
+                <View style={styles.meta}>
+                  <Text style={styles.metaTitle}>{look.name}</Text>
+                  <Text style={styles.metaText}>
+                    {look.note ?? (look.isWishlist ? "Liked garment" : "Saved just now")}
+                  </Text>
+                </View>
+              </View>
+            ))}
+            {savedLooks.length === 0 ? (
+              <View style={styles.emptyWardrobe}>
+                <Text style={styles.emptyWardrobeTitle}>No saved looks yet</Text>
+                <Text style={styles.emptyWardrobeBody}>Generate a try-on or save a recommendation to populate your wardrobe preview.</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
-
-        <View style={styles.buttonRow}>
-          <PrimaryButton onPress={() => void saveBudgetLabel()}>Save profile</PrimaryButton>
-          <PrimaryButton onPress={() => router.push("/measurements")} variant="secondary">
-            Measurements
-          </PrimaryButton>
-        </View>
-      </SectionCard>
+      </View>
     </Screen>
   );
 }
 
+function InfoCard({
+  title,
+  body,
+  actionLabel,
+  onAction,
+  tone = "default",
+  children
+}: {
+  title: string;
+  body: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  tone?: "default" | "accent";
+  children?: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.infoCard, tone === "accent" && styles.infoCardAccent]}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={styles.cardBody}>{body}</Text>
+      {children}
+      {actionLabel ? (
+        <Pressable onPress={onAction} disabled={!onAction} style={({ pressed }) => [styles.cardAction, pressed && onAction && styles.pressed]}>
+          <Text style={[styles.cardActionText, !onAction && styles.cardActionTextMuted]}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function InfoChip({
+  label,
+  tone = "default"
+}: {
+  label: string;
+  tone?: "default" | "success" | "accent";
+}) {
+  return (
+    <View style={[styles.chip, tone === "success" && styles.chipSuccess, tone === "accent" && styles.chipAccent]}>
+      <Text style={[styles.chipText, tone === "success" && styles.chipTextSuccess, tone === "accent" && styles.chipTextAccent]}>{label}</Text>
+    </View>
+  );
+}
+
+function ActionLink({
+  label,
+  icon,
+  onPress
+}: {
+  label: string;
+  icon: string;
+  onPress: () => void | Promise<void>;
+}) {
+  return (
+    <Pressable onPress={() => void onPress()} style={({ pressed }) => [styles.actionLink, pressed && styles.pressed]}>
+      <Text style={styles.actionIcon}>{icon === "image" ? "◌" : icon === "heart" ? "♡" : icon === "clock" ? "◷" : "☰"}</Text>
+      <Text style={styles.actionLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  appbar: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12
+  shell: {
+    gap: 16
   },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
+  headerCard: {
+    gap: 16,
+    borderRadius: radius.xl,
+    padding: 18,
+    backgroundColor: colors.panelStrong,
     borderWidth: 1,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.panelStrong
+    borderColor: colors.line,
+    ...shadow
   },
-  iconText: {
-    color: colors.ink,
-    fontSize: 16
+  headerTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
   },
-  appbarCopy: {
-    flex: 1,
-    alignItems: "center",
-    gap: 3
+  eyebrow: {
+    color: colors.brand,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
   },
-  appbarTitle: {
-    color: colors.ink,
-    fontSize: 21,
-    lineHeight: 24,
+  logoutButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: "rgba(213,91,103,0.16)"
+  },
+  logoutText: {
+    color: colors.danger,
+    fontSize: 12,
     fontWeight: "800"
   },
-  appbarSub: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 17
-  },
-  profileHead: {
+  identityRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 14,
     alignItems: "center"
   },
   avatar: {
-    width: 66,
-    height: 66,
-    borderRadius: 22,
+    width: 78,
+    height: 78,
+    borderRadius: 24,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
@@ -331,50 +452,195 @@ const styles = StyleSheet.create({
   },
   avatarFallback: {
     color: colors.accent,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "900"
   },
-  profileCopy: {
+  identityCopy: {
     flex: 1,
-    gap: 4
+    gap: 5
   },
   name: {
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "800"
   },
   mail: {
     color: colors.inkSoft,
-    fontSize: 12
+    fontSize: 13
   },
-  row: {
+  chipRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    flexWrap: "wrap"
+    marginTop: 4
   },
-  metrics: {
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  chipSuccess: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.successSoft
+  },
+  chipAccent: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentSoft
+  },
+  chipText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  chipTextSuccess: {
+    color: colors.success
+  },
+  chipTextAccent: {
+    color: colors.accentStrong
+  },
+  headerActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10
   },
-  grid: {
+  actionLink: {
+    minWidth: "47%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  actionIcon: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  actionLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  summaryGrid: {
+    gap: 12
+  },
+  infoCard: {
+    gap: 10,
+    borderRadius: radius.lg,
+    padding: 16,
+    backgroundColor: colors.panelStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow
+  },
+  infoCardAccent: {
+    backgroundColor: colors.accentSoft
+  },
+  cardTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  cardBody: {
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 21
+  },
+  cardAction: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.lineStrong
+  },
+  cardActionText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  cardActionTextMuted: {
+    color: colors.inkMuted
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.ink
+  },
+  wardrobeCard: {
+    gap: 14,
+    borderRadius: radius.xl,
+    padding: 18,
+    backgroundColor: colors.panelStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start"
+  },
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "800"
+  },
+  sectionBody: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+    maxWidth: 260
+  },
+  inlineAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft
+  },
+  inlineActionText: {
+    color: colors.accentStrong,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  wardrobeGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10
   },
   wardCard: {
-    width: "48%",
-    borderRadius: 18,
+    width: "47.8%",
+    borderRadius: radius.lg,
     overflow: "hidden",
+    backgroundColor: colors.panelMuted,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.panelStrong
+    borderColor: colors.line
   },
   thumb: {
-    height: 108,
+    height: 116,
     backgroundColor: "#eadfd6"
   },
   thumbAlt: {
     backgroundColor: "#d9e2ff"
+  },
+  thumbImage: {
+    width: "100%",
+    height: "100%"
   },
   meta: {
     padding: 10,
@@ -387,46 +653,35 @@ const styles = StyleSheet.create({
   },
   metaText: {
     color: colors.inkSoft,
-    fontSize: 11.5
+    fontSize: 12,
+    lineHeight: 17
   },
-  panel: {
-    borderRadius: 20,
-    padding: 14,
+  emptyWardrobe: {
+    width: "100%",
+    borderRadius: radius.lg,
+    padding: 16,
     backgroundColor: colors.panelMuted,
     borderWidth: 1,
-    borderColor: colors.line,
-    gap: 6
+    borderColor: colors.line
   },
-  panelTitle: {
+  emptyWardrobeTitle: {
     color: colors.ink,
-    fontSize: 14.5,
+    fontSize: 14,
     fontWeight: "800"
   },
-  panelBody: {
+  emptyWardrobeBody: {
     color: colors.inkSoft,
-    fontSize: 12.5,
-    lineHeight: 18
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: colors.panelStrong,
-    color: colors.ink,
-    fontSize: 14
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4
   },
   message: {
-    color: colors.brand,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: "700"
   },
   pressed: {
-    opacity: 0.9
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }]
   }
 });

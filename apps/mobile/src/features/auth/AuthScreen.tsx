@@ -7,12 +7,15 @@ import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { SectionCard } from "../../components/SectionCard";
 import { SegmentedControl } from "../../components/SegmentedControl";
+import { demoData } from "../../demo/demo-data";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
+import { demoModeEnabled } from "../../utils/env";
 
 export function AuthScreen() {
   const router = useRouter();
   const setSession = useAppStore((state) => state.setSession);
+  const startDemoSession = useAppStore((state) => state.startDemoSession);
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -45,6 +48,17 @@ export function AuthScreen() {
     !email.trim() ||
     !password.trim() ||
     (mode === "register" && (!firstName.trim() || !lastName.trim()));
+
+  const tryDemo = () => {
+    setError(null);
+    startDemoSession({
+      token: demoData.demoToken,
+      user: demoData.session.user,
+      profile: demoData.profile,
+      tryOnRequestId: demoData.tryOnRequest.id
+    });
+    router.replace("/feed");
+  };
 
   return (
     <Screen>
@@ -103,6 +117,11 @@ export function AuthScreen() {
         <PrimaryButton onPress={submit} disabled={disabled}>
           {loading ? "Saving session..." : mode === "login" ? "Enter FitMe" : "Create account"}
         </PrimaryButton>
+        {demoModeEnabled ? (
+          <PrimaryButton onPress={tryDemo} variant="secondary">
+            Try Demo
+          </PrimaryButton>
+        ) : null}
         <Pressable onPress={() => setMode(mode === "login" ? "register" : "login")}>
           <Text style={styles.toggle}>
             {mode === "login" ? "Need an account? Create one" : "Already registered? Sign in"}

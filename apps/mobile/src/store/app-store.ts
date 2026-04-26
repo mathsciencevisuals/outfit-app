@@ -17,6 +17,7 @@ type AppState = {
   authChecked: boolean;
   lastTryOnRequestId?: string;
   setSession: (input: { token: string; user: SessionUser }) => void;
+  startDemoSession: (input: { token: string; user: SessionUser; profile?: UserProfile | null; tryOnRequestId?: string }) => void;
   setProfile: (profile: UserProfile | null) => void;
   finishAuthCheck: () => void;
   setLastTryOnRequestId: (requestId?: string) => void;
@@ -68,6 +69,18 @@ export const useAppStore = create<AppState>()(
           profileVersion: state.profileVersion + 1,
           isAuthenticated: true,
           authChecked: true
+        })),
+      startDemoSession: ({ token, user, profile, tryOnRequestId }) =>
+        set((state) => ({
+          token,
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          profile: mergeProfile(state.profile, profile ?? user.profile ?? null),
+          profileVersion: state.profileVersion + 1,
+          isAuthenticated: true,
+          authChecked: true,
+          lastTryOnRequestId: tryOnRequestId ?? state.lastTryOnRequestId
         })),
       setProfile: (profile) =>
         set((state) => ({
