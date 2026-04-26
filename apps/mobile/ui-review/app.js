@@ -5,31 +5,31 @@ const screens = [
     tag: "Core",
     route: "/onboarding",
     title: "Onboarding",
-    subtitle: "Entry into profile setup, fit intelligence, try-on, and retail comparison.",
-    focus: "Check the premium first impression, value hierarchy, and whether the setup CTA is strong enough.",
+    subtitle: "First-run entry that explains what the app does before asking for profile inputs.",
+    focus: "Check whether the value prop is legible fast and whether the first CTA clearly moves users toward setup.",
     primaryCta: "Start setup",
     nextRoutes: ["/auth", "/profile", "/discover"],
     tabs: [],
     render: () => `
       <div class="screen-stack">
-        <div class="screen-card">
-          <div class="eyebrow">Fashion Tech</div>
-          <h3>Find your best fit faster</h3>
-          <p>Profile, measurements, try-on, and recommendations in one premium setup path.</p>
+        <div class="screen-card hero-surface">
+          <div class="eyebrow">Premium Fashion Tech</div>
+          <h3>Find your best fit before you shop</h3>
+          <p>Measurements, AI try-on, and price comparison stay connected so users do not have to guess their next step.</p>
           <div class="pill-row">
-            <span class="pill accent">Profile + fit + try-on + shopping</span>
+            <span class="pill accent">Profile + fit + try-on + shops</span>
+            <span class="pill success">4 minute setup</span>
           </div>
-          <p>Outfit planning, fit confidence, and retail visibility are already connected. This screen should make the product feel like a complete wardrobe workflow from the first tap.</p>
           <div class="metric-row">
             <div class="metric">
-              <div class="metric-label">Journey</div>
-              <div class="metric-value">4 steps</div>
-              <div class="metric-copy">Onboard, profile, measure, discover</div>
+              <div class="metric-label">Outcome</div>
+              <div class="metric-value">Size clarity</div>
+              <div class="metric-copy">Explain match scores instead of dropping users into raw catalog cards.</div>
             </div>
             <div class="metric">
-              <div class="metric-label">Signal</div>
-              <div class="metric-value">Fit-first</div>
-              <div class="metric-copy">Recommendations stay grounded in profile data</div>
+              <div class="metric-label">Trust</div>
+              <div class="metric-value">Visible status</div>
+              <div class="metric-copy">Every loading, error, and success step gets explicit feedback.</div>
             </div>
           </div>
           <div class="cta-row">
@@ -38,19 +38,19 @@ const screens = [
         </div>
 
         <div class="screen-card">
-          <div class="eyebrow">What You Unlock</div>
-          <h3>A wardrobe workflow, not just a catalog</h3>
+          <div class="eyebrow">What Changed</div>
+          <h3>User-testing fixes now embedded</h3>
           <div class="feature-row">
-            <strong>Profile intelligence</strong>
-            <p>Build a fit-aware identity with measurements, preferences, and body-shape context.</p>
+            <strong>One obvious action per screen</strong>
+            <p>Primary actions are singular and the route notes explain why that action is next.</p>
           </div>
           <div class="feature-row">
-            <strong>Try-on preview</strong>
-            <p>Upload a clean look, queue generation, and review confidence before you shop.</p>
+            <strong>Progress and recovery states</strong>
+            <p>Try-on shows processing time, auth shows recovery help, and empty states point to the next meaningful action.</p>
           </div>
           <div class="feature-row">
-            <strong>Retail comparison</strong>
-            <p>Compare ready-to-buy offers across connected partners without breaking the flow.</p>
+            <strong>Profile becomes the real hub</strong>
+            <p>Identity, measurements, style profile, and logout are visible without hiding them in a menu.</p>
           </div>
         </div>
       </div>
@@ -62,20 +62,20 @@ const screens = [
     tag: "Core",
     route: "/auth",
     title: "Auth",
-    subtitle: "Login and registration route with the current premium visual language.",
-    focus: "Review form spacing, trust signals, mode switching, and whether account creation feels lightweight.",
-    primaryCta: "Enter FitMe",
-    nextRoutes: ["/profile"],
+    subtitle: "Sign-in screen with a clear failure state and recovery guidance.",
+    focus: "Review whether the error state reduces confusion and whether the single primary CTA stays obvious.",
+    primaryCta: "Try again",
+    nextRoutes: ["/profile", "/onboarding"],
     tabs: [],
     render: () => `
       <div class="screen-stack">
         <div class="screen-card">
           <div class="eyebrow">Member Access</div>
           <h3>Return to your fit profile</h3>
-          <p>Keep measurements, recommendations, and try-on progress connected across sessions.</p>
+          <p>Measurements, recommendations, and saved looks stay synced once the user gets back into the app.</p>
           <div class="pill-row">
-            <span class="pill accent">Secure sign in</span>
-            <span class="pill neutral">JWT session</span>
+            <span class="pill accent">Sign in</span>
+            <span class="pill neutral">Password reset available</span>
           </div>
           <div class="toggle-bar">
             <div class="toggle-pill active">Sign in</div>
@@ -83,10 +83,21 @@ const screens = [
           </div>
           <div class="input">Email</div>
           <div class="input">Password</div>
-          <div class="cta-row">
-            <button class="button primary" data-route="/profile">Enter FitMe</button>
+          <div class="status-card error">
+            <div class="section-title">Could not sign you in</div>
+            <p>Check your password or reset it. Your profile and saved looks are still safe.</p>
           </div>
-          <p>Need an account? Create one</p>
+          <div class="helper-list">
+            <div class="helper-row"><strong>Why this is better</strong><p>Replaces a generic internal server error with guidance the user can act on immediately.</p></div>
+            <div class="helper-row"><strong>Recovery</strong><p>Reset password, retry sign in, or return to onboarding for first-time setup.</p></div>
+          </div>
+          <div class="cta-row">
+            <button class="button primary" data-route="/profile">Try again</button>
+          </div>
+          <div class="text-link-row">
+            <button class="text-link">Forgot password?</button>
+            <button class="text-link" data-route="/onboarding">Back to setup</button>
+          </div>
         </div>
       </div>
     `
@@ -96,59 +107,56 @@ const screens = [
     group: "core",
     tag: "Core",
     route: "/profile",
-    title: "Profile",
-    subtitle: "Profile-management surface that powers fit, recommendations, and growth incentives.",
-    focus: "Review whether identity, style preference, and profile completion feel clear and high-value.",
-    primaryCta: "Measurements",
-    nextRoutes: ["/measurements", "/discover", "/rewards"],
+    title: "Profile Hub",
+    subtitle: "Visible identity, measurement shortcuts, style preferences, and logout in one place.",
+    focus: "Check whether the account surface behaves like a navigation hub rather than a dead-end details screen.",
+    primaryCta: "Edit measurements",
+    nextRoutes: ["/measurements", "/discover", "/saved-looks"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Profile",
     render: () => `
       <div class="screen-stack">
-        <div class="screen-card">
-          <div class="eyebrow">Profile Management</div>
-          <h3>Demo User</h3>
-          <p>Control the personal signals that feed fit scoring, discovery ranking, and try-on context.</p>
+        <div class="screen-card hero-surface">
+          <div class="profile-summary">
+            <div class="avatar-badge">DU</div>
+            <div>
+              <div class="eyebrow">Profile Hub</div>
+              <h3>Demo User</h3>
+              <p>Identity, fit inputs, upload assets, and account actions stay visible from the top of the profile route.</p>
+            </div>
+            <button class="button secondary compact">Logout</button>
+          </div>
           <div class="pill-row">
-            <span class="pill success">4/4 profile signals set</span>
-            <span class="pill neutral">Athletic</span>
+            <span class="pill success">Remote photo synced</span>
+            <span class="pill neutral">Regular fit</span>
+            <span class="pill accent">Premium budget</span>
           </div>
           <div class="metric-row">
             <div class="metric">
-              <div class="metric-label">Height</div>
-              <div class="metric-value">168 cm</div>
-              <div class="metric-copy">Used in fit calibration</div>
+              <div class="metric-label">Measurements</div>
+              <div class="metric-value">5/6</div>
+              <div class="metric-copy">Enough data for fit guidance, with confidence reduced where missing.</div>
             </div>
             <div class="metric">
-              <div class="metric-label">Palette</div>
-              <div class="metric-value">4</div>
-              <div class="metric-copy">Preferred color anchors</div>
-            </div>
-          </div>
-          <div class="metric-row">
-            <div class="metric">
-              <div class="metric-label">Avoided</div>
-              <div class="metric-value">1</div>
-              <div class="metric-copy">Colors to de-prioritize</div>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Styles</div>
-              <div class="metric-value">3</div>
-              <div class="metric-copy">Saved preference tags</div>
+              <div class="metric-label">Saved Looks</div>
+              <div class="metric-value">0</div>
+              <div class="metric-copy">Empty state routes the user back into generation instead of stopping here.</div>
             </div>
           </div>
         </div>
 
         <div class="screen-card">
-          <div class="eyebrow">Next Actions</div>
-          <h3>Complete your fit profile</h3>
-          <div class="feature-row">
-            <strong>Update measurements</strong>
-            <p>Turn the profile into a usable sizing signal before discovery.</p>
+          <div class="eyebrow">Your Style Profile</div>
+          <h3>Clean language instead of jargon</h3>
+          <div class="pill-row">
+            <span class="pill neutral">Street minimal</span>
+            <span class="pill neutral">Black + sand</span>
+            <span class="pill neutral">Campus formal</span>
           </div>
-          <div class="cta-row">
-            <button class="button primary" data-route="/measurements">Measurements</button>
-            <button class="button secondary" data-route="/discover">Go to discover</button>
+          <div class="nav-tile-list">
+            <button class="nav-tile" data-route="/measurements"><strong>Edit measurements</strong><span>Update chest, waist, hips, and inseam.</span></button>
+            <button class="nav-tile" data-route="/discover"><strong>Browse fit-aware picks</strong><span>See why sizes and colors match your current profile.</span></button>
+            <button class="nav-tile" data-route="/saved-looks"><strong>Open saved looks</strong><span>Review wardrobe items and any empty-state guidance.</span></button>
           </div>
         </div>
       </div>
@@ -160,21 +168,21 @@ const screens = [
     tag: "Core",
     route: "/measurements",
     title: "Measurements",
-    subtitle: "Fit calibration input screen used for scoring and product confidence.",
-    focus: "Review scanability of measurement coverage and whether next actions are obvious.",
-    primaryCta: "Go to discover",
-    nextRoutes: ["/discover", "/tryon-upload"],
+    subtitle: "Fit data input screen with confidence context and a clear save path.",
+    focus: "Review whether the coverage and confidence framing explain why these inputs matter before users continue.",
+    primaryCta: "Save measurements",
+    nextRoutes: ["/discover", "/profile"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Profile",
     render: () => `
       <div class="screen-stack">
         <div class="screen-card">
-          <div class="eyebrow">Profile Management</div>
+          <div class="eyebrow">Fit Calibration</div>
           <h3>Body measurements</h3>
-          <p>These values drive fit scoring, recommendation confidence, and sizing decisions across the experience.</p>
+          <p>These values drive recommended size, fit label, confidence score, issue flags, and explanation text.</p>
           <div class="pill-row">
             <span class="pill success">Coverage 5/6</span>
-            <span class="pill neutral">seed</span>
+            <span class="pill warning">Confidence reduced until sleeve is added</span>
           </div>
           <div class="metric-row">
             <div class="metric">
@@ -196,14 +204,11 @@ const screens = [
               <div class="metric-value">79 cm</div>
             </div>
           </div>
-        </div>
-
-        <div class="screen-card">
-          <div class="eyebrow">Next Actions</div>
-          <h3>Use this data</h3>
+          <div class="helper-list">
+            <div class="helper-row"><strong>Cross-screen behavior</strong><p>Saving here should update profile, discover, recommendations, and try-on without stale data on back navigation.</p></div>
+          </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/discover">Go to discover</button>
-            <button class="button secondary" data-route="/tryon-upload">Run try-on with current profile</button>
+            <button class="button primary" data-route="/discover">Save measurements</button>
           </div>
         </div>
       </div>
@@ -215,51 +220,41 @@ const screens = [
     tag: "Core",
     route: "/discover",
     title: "Discover",
-    subtitle: "Fit-aware catalog entry point connected to try-on and recommendation flows.",
-    focus: "Check hero hierarchy, card density, and how directly this screen moves a user into try-on.",
-    primaryCta: "Start try-on",
-    nextRoutes: ["/tryon-upload", "/recommendations"],
+    subtitle: "Catalog entry with one primary action and clearer fit reasons on product cards.",
+    focus: "Check whether the match explanation, price format, and CTA hierarchy reduce browsing confusion.",
+    primaryCta: "Try this look",
+    nextRoutes: ["/tryon-upload", "/recommendations", "/shops"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Discover",
     render: () => `
       <div class="screen-stack">
-        <div class="screen-card">
+        <div class="screen-card hero-surface">
           <div class="eyebrow">Discover</div>
           <h3>Fit-aware picks for your next look</h3>
-          <p>The catalog is already connected to sizing, style, and try-on flows, so you can move straight from browsing to confidence.</p>
+          <p>Each card now explains why the score exists instead of showing a raw percentage with no context.</p>
           <div class="pill-row">
-            <span class="pill accent">Live catalog</span>
-            <span class="pill neutral">5 featured pieces</span>
-          </div>
-          <div class="metric-row">
-            <div class="metric">
-              <div class="metric-label">Featured brand</div>
-              <div class="metric-value">Northline</div>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Category</div>
-              <div class="metric-value">outerwear</div>
-            </div>
-          </div>
-          <div class="cta-row">
-            <button class="button primary" data-route="/tryon-upload">Start try-on</button>
+            <span class="pill accent">INR pricing only</span>
+            <span class="pill success">Primary CTA reduced to one</span>
           </div>
         </div>
 
         <div class="screen-card">
-          <div class="eyebrow">Featured Feed</div>
-          <h3>Curated right now</h3>
-          <div class="feed-card">
-            <strong>Commuter Jacket</strong>
-            <p>Northline • outerwear • black. Hero piece for fit-aware discovery and retail comparison.</p>
+          <div class="eyebrow">Featured Match</div>
+          <h3>Commuter Jacket</h3>
+          <div class="score-banner">
+            <strong>98% size match</strong>
+            <p>Based on your 168 cm height, regular fit preference, and premium budget range.</p>
           </div>
           <div class="feed-card">
-            <strong>Trail Overshirt</strong>
-            <p>Northline • tops • olive. Ready for try-on and recommendation routing.</p>
+            <strong>Why it ranks well</strong>
+            <p>Recommended size M. Regular drape. No major chest or sleeve flags from the current chart.</p>
           </div>
           <div class="feed-card">
-            <strong>Wool Blend Blazer</strong>
-            <p>Atelier Mono • outerwear • charcoal. Strong interview-ready candidate.</p>
+            <strong>Price</strong>
+            <p>₹2,499 on connected partners. Currency stays consistent across the prototype.</p>
+          </div>
+          <div class="cta-row">
+            <button class="button primary" data-route="/tryon-upload">Try this look</button>
           </div>
         </div>
       </div>
@@ -271,29 +266,89 @@ const screens = [
     tag: "Core",
     route: "/tryon-upload",
     title: "Try-On Upload",
-    subtitle: "Upload gateway into the queued try-on pipeline.",
-    focus: "Review the upload affordance, trust language, and whether the system state feels production-safe.",
-    primaryCta: "Upload and queue try-on",
-    nextRoutes: ["/tryon-result"],
+    subtitle: "Entry screen with camera fallback, profile photo reuse, and link import.",
+    focus: "Review whether the upload choices cover the common failure cases from user testing without overloading the layout.",
+    primaryCta: "Generate try-on",
+    nextRoutes: ["/processing", "/discover"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Discover",
     render: () => `
       <div class="screen-stack">
         <div class="screen-card">
           <div class="eyebrow">Try-On Input</div>
-          <h3>Upload a clean front-facing photo</h3>
-          <p>The current flow uses the real upload pipeline, then creates a queued try-on request from the uploaded asset.</p>
-          <div class="hero-panel">
-            <div class="section-title">Upload zone</div>
-            <p>Drag a photo or choose from device library. Image is linked to upload record before request creation.</p>
+          <h3>Choose how you want to start</h3>
+          <p>Camera access can fail, so the route offers multiple paths before users get blocked.</p>
+          <div class="toggle-bar">
+            <div class="toggle-pill active">Photo</div>
+            <div class="toggle-pill">From link</div>
           </div>
-          <div class="pill-row">
-            <span class="pill accent">Real upload pipeline</span>
-            <span class="pill neutral">Mock provider still supported</span>
+          <div class="upload-grid">
+            <div class="upload-card">
+              <strong>Use camera</strong>
+              <p>Take a new photo if permissions are available.</p>
+            </div>
+            <div class="upload-card">
+              <strong>Upload photo</strong>
+              <p>Pick from library and keep the local preview until the remote upload finishes.</p>
+            </div>
+            <div class="upload-card">
+              <strong>Use profile photo</strong>
+              <p>Reuse the synced portrait already saved to the account.</p>
+            </div>
+          </div>
+          <div class="status-card neutral">
+            <div class="section-title">From Link</div>
+            <p>Paste a Myntra or other retailer URL to fetch the product instead of searching again manually.</p>
+          </div>
+          <div class="input">Paste retailer link</div>
+          <div class="helper-list">
+            <div class="helper-row"><strong>Why this is better</strong><p>Solves camera failure, hidden import flow, and stale local-only image handling in one route.</p></div>
           </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/tryon-result">Upload and queue try-on</button>
-            <button class="button secondary" data-route="/discover">Back to discover</button>
+            <button class="button primary" data-route="/processing">Generate try-on</button>
+          </div>
+        </div>
+      </div>
+    `
+  },
+  {
+    id: "processing",
+    group: "core",
+    tag: "Core",
+    route: "/processing",
+    title: "Processing",
+    subtitle: "Visible in-between state for try-on generation with time expectation and recovery path.",
+    focus: "Check whether loading is explicit enough and whether users know what to do if generation fails.",
+    primaryCta: "View result",
+    nextRoutes: ["/tryon-result", "/discover"],
+    tabs: ["Profile", "Discover", "Saved", "Rewards"],
+    activeTab: "Discover",
+    render: () => `
+      <div class="screen-stack">
+        <div class="screen-card hero-panel processing-panel">
+          <div class="section-title">Generating your look</div>
+          <h3>10-15 seconds</h3>
+          <p>Your photo, garment, and fit profile are being blended into a try-on preview with saved progress.</p>
+          <div class="loader-line"><span></span></div>
+          <div class="pill-row">
+            <span class="pill accent">Upload saved</span>
+            <span class="pill neutral">You can safely leave and return</span>
+          </div>
+        </div>
+
+        <div class="screen-card">
+          <div class="eyebrow">If Something Fails</div>
+          <h3>Recovery is visible</h3>
+          <div class="status-card warning">
+            <div class="section-title">Generation taking longer than expected</div>
+            <p>Keep waiting, retry with the same uploaded image, or return to discover without losing the upload record.</p>
+          </div>
+          <div class="cta-row">
+            <button class="button primary" data-route="/tryon-result">View result</button>
+          </div>
+          <div class="text-link-row">
+            <button class="text-link" data-route="/tryon-upload">Retry upload</button>
+            <button class="text-link" data-route="/discover">Back to feed</button>
           </div>
         </div>
       </div>
@@ -305,10 +360,10 @@ const screens = [
     tag: "Commerce",
     route: "/tryon-result",
     title: "Try-On Result",
-    subtitle: "Result review surface with fit, confidence, issues, alternatives, and commerce handoff.",
-    focus: "Review information density and whether confidence, issues, and next actions are clear enough for decision-making.",
+    subtitle: "Result route with clear fit guidance, explanation text, and a friendlier error fallback.",
+    focus: "Review whether success and failure states preserve trust and whether the next buy action is obvious.",
     primaryCta: "Compare buy options",
-    nextRoutes: ["/recommendations", "/shops", "/tryon-upload"],
+    nextRoutes: ["/shops", "/recommendations", "/tryon-upload"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Discover",
     render: () => `
@@ -316,46 +371,42 @@ const screens = [
         <div class="screen-card">
           <div class="eyebrow">Try-On Review</div>
           <h3>Commuter Jacket</h3>
-          <p>Review the generated look, fit confidence, open issues, next alternatives, and retail follow-through before you buy.</p>
+          <p>The result route now explains the fit signal instead of just reporting a completed status.</p>
           <div class="pill-row">
-            <span class="pill success">Completed</span>
-            <span class="pill neutral">mock</span>
-            <span class="pill accent">88% confidence</span>
+            <span class="pill success">Result ready</span>
+            <span class="pill accent">Recommended size M</span>
+            <span class="pill neutral">Regular fit</span>
           </div>
-          <div class="hero-panel">
-            <div class="section-title">Look preview</div>
-            <p>Mock try-on generated successfully with a balanced drape estimate.</p>
-          </div>
-        </div>
-
-        <div class="screen-card">
-          <div class="eyebrow">Fit Review</div>
-          <h3>Fit and confidence</h3>
           <div class="metric-row">
             <div class="metric">
               <div class="metric-label">Confidence</div>
-              <div class="metric-value">88%</div>
-              <div class="metric-copy">Provider-reported confidence</div>
+              <div class="metric-value">92%</div>
+              <div class="metric-copy">Lowered automatically if measurement or chart coverage is weak.</div>
             </div>
             <div class="metric">
-              <div class="metric-label">Status</div>
-              <div class="metric-value">Completed</div>
-              <div class="metric-copy">Try-on completed</div>
+              <div class="metric-label">Issue Flags</div>
+              <div class="metric-value">1</div>
+              <div class="metric-copy">Sleeve slightly long. Chest and waist remain clear.</div>
             </div>
           </div>
-          <div class="info-row"><strong>Product</strong><p>Commuter Jacket</p></div>
-          <div class="info-row"><strong>Variant</strong><p>M</p></div>
-          <div class="info-row"><strong>Source image</strong><p>uploads/demo/source-image.jpg</p></div>
+          <div class="helper-list">
+            <div class="helper-row"><strong>Explanation</strong><p>Best fit for your measurements, matches your style profile, and stays inside your premium budget target.</p></div>
+          </div>
+          <div class="cta-row">
+            <button class="button primary" data-route="/shops">Compare buy options</button>
+          </div>
         </div>
 
         <div class="screen-card">
-          <div class="eyebrow">Issues</div>
-          <h3>What to watch</h3>
-          <div class="issue-row"><p>This run may still reflect mock provider behavior rather than a production rendering pipeline.</p></div>
-          <div class="cta-row">
-            <button class="button secondary" data-route="/recommendations">See alternatives</button>
-            <button class="button ghost" data-route="/tryon-upload">Upload another photo</button>
-            <button class="button primary" data-route="/shops">Compare buy options</button>
+          <div class="eyebrow">Friendly Failure State</div>
+          <h3>Fallback when generation breaks</h3>
+          <div class="status-card error">
+            <div class="section-title">We could not finish this try-on</div>
+            <p>Your uploaded photo is still saved. Retry the same request or go back to feed without starting over.</p>
+          </div>
+          <div class="text-link-row">
+            <button class="text-link" data-route="/tryon-upload">Retry</button>
+            <button class="text-link" data-route="/discover">Back to feed</button>
           </div>
         </div>
       </div>
@@ -367,10 +418,10 @@ const screens = [
     tag: "Commerce",
     route: "/recommendations",
     title: "Recommendations",
-    subtitle: "Shortlist of fit-ranked products with filters and commerce actions.",
-    focus: "Review product-card depth, filter readability, and how well the shortlist supports comparison and try-on loops.",
+    subtitle: "Shortlist that spells out fit, budget, color, and occasion reasons.",
+    focus: "Check whether the ranking reasons make the recommendation engine feel credible and action-oriented.",
     primaryCta: "Compare shops",
-    nextRoutes: ["/shops", "/tryon-upload", "/saved-looks"],
+    nextRoutes: ["/shops", "/saved-looks", "/tryon-upload"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Discover",
     render: () => `
@@ -378,41 +429,31 @@ const screens = [
         <div class="screen-card">
           <div class="eyebrow">Recommendations</div>
           <h3>What fits your profile best</h3>
-          <p>These picks are already ranked by the recommendation engine and shaped into a shopping-ready shortlist.</p>
+          <p>Cards now surface the reasons directly: fit, style, color, budget, and occasion.</p>
           <div class="pill-row">
-            <span class="pill success">Top scored</span>
-            <span class="pill neutral">6 ranked pieces</span>
-          </div>
-          <div class="metric-row">
-            <div class="metric">
-              <div class="metric-label">Top score</div>
-              <div class="metric-value">92</div>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Best pick</div>
-              <div class="metric-value">Northline</div>
-            </div>
-          </div>
-          <div class="toggle-bar">
-            <div class="toggle-pill active">All</div>
-            <div class="toggle-pill">High score</div>
+            <span class="pill success">Best fit</span>
+            <span class="pill neutral">Interview ready</span>
+            <span class="pill accent">Within budget</span>
           </div>
         </div>
 
         <div class="screen-card">
-          <div class="eyebrow">Curated Cards</div>
-          <h3>Recommendation shortlist</h3>
+          <div class="eyebrow">Top Pick</div>
+          <h3>Wool Blend Blazer</h3>
           <div class="feed-card">
-            <strong>Commuter Jacket</strong>
-            <p>Score 92. Routed here through fit-aware ranking with strong outerwear match.</p>
+            <strong>Why it ranks</strong>
+            <p>Best fit for your measurements, works with your black-and-sand palette, and matches formal campus use.</p>
           </div>
           <div class="feed-card">
-            <strong>Wool Blend Blazer</strong>
-            <p>Interview-ready styling with better confidence for structured looks.</p>
+            <strong>Confidence</strong>
+            <p>Recommended size M. Regular fit. 90% confidence because all torso measurements are available.</p>
+          </div>
+          <div class="feed-card">
+            <strong>Price</strong>
+            <p>₹3,299 across connected shops.</p>
           </div>
           <div class="cta-row">
             <button class="button primary" data-route="/shops">Compare shops</button>
-            <button class="button secondary" data-route="/tryon-upload">Try on now</button>
           </div>
         </div>
       </div>
@@ -424,48 +465,45 @@ const screens = [
     tag: "Commerce",
     route: "/shops",
     title: "Shops",
-    subtitle: "Retail comparison surface for actual offers and regional context.",
-    focus: "Check whether pricing, location context, and partner differentiation are clear enough for purchase decisions.",
-    primaryCta: "Go to saved looks",
-    nextRoutes: ["/saved-looks", "/coupons"],
+    subtitle: "Commerce comparison with INR pricing, retailer badges, and outbound handoff language.",
+    focus: "Review whether the commerce route answers price, fit, and retailer questions before the user leaves the app.",
+    primaryCta: "Open best offer",
+    nextRoutes: ["/saved-looks", "/coupons", "/recommendations"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Discover",
     render: () => `
       <div class="screen-stack">
         <div class="screen-card">
           <div class="eyebrow">Retail Comparison</div>
-          <h3>Buy options across connected partners</h3>
-          <p>Use this layer to translate your recommendation shortlist into actual availability, region context, and offer depth.</p>
+          <h3>Compare offers before retailer handoff</h3>
+          <p>The route is now region-consistent and highlights why an offer is recommended, not just who sells it.</p>
           <div class="pill-row">
-            <span class="pill accent">3 shops</span>
-            <span class="pill neutral">9 total offers</span>
-          </div>
-          <div class="metric-row">
-            <div class="metric">
-              <div class="metric-label">Regions</div>
-              <div class="metric-value">3</div>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Offers</div>
-              <div class="metric-value">9</div>
-            </div>
+            <span class="pill accent">INR only</span>
+            <span class="pill success">Best price + best fit badges</span>
           </div>
         </div>
 
         <div class="screen-card">
-          <div class="eyebrow">Partner Cards</div>
-          <h3>Shop comparison</h3>
+          <div class="eyebrow">Offers</div>
+          <h3>Commuter Jacket</h3>
           <div class="shop-card">
-            <strong>City Threads</strong>
-            <p>US region • 3 offers • from $84</p>
+            <strong>Myntra</strong>
+            <p>₹2,399 • Best price • Recommended size M in stock.</p>
           </div>
           <div class="shop-card">
-            <strong>Mode Collective</strong>
-            <p>EU region • 3 offers • from $89</p>
+            <strong>Ajio</strong>
+            <p>₹2,549 • Best fit badge • Better return window.</p>
+          </div>
+          <div class="shop-card">
+            <strong>Nykaa Fashion</strong>
+            <p>₹2,699 • Cheaper alternative accessories bundled below.</p>
           </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/saved-looks">Go to saved looks</button>
-            <button class="button secondary" data-route="/coupons">See coupons</button>
+            <button class="button primary" data-route="/saved-looks">Open best offer</button>
+          </div>
+          <div class="text-link-row">
+            <button class="text-link" data-route="/coupons">Apply coupon</button>
+            <button class="text-link" data-route="/recommendations">See alternatives</button>
           </div>
         </div>
       </div>
@@ -477,46 +515,28 @@ const screens = [
     tag: "Commerce",
     route: "/saved-looks",
     title: "Saved Looks",
-    subtitle: "Reusable shortlist for outfit ideas between discovery and buying.",
-    focus: "Review grid/list behavior, empty-state readiness, and whether actions feel reusable rather than dead-end.",
-    primaryCta: "Compare offers",
-    nextRoutes: ["/shops", "/discover", "/rewards"],
+    subtitle: "Wardrobe route with an empty state that pushes users back into creation.",
+    focus: "Review whether the empty state feels motivating and whether saved looks stay connected to commerce and generation.",
+    primaryCta: "Generate first look",
+    nextRoutes: ["/tryon-upload", "/shops", "/profile"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Saved",
     render: () => `
       <div class="screen-stack">
         <div class="screen-card">
           <div class="eyebrow">Saved Looks</div>
-          <h3>Your reusable outfit shortlist</h3>
-          <p>Saved looks capture the bridge between inspiration, try-on confidence, and buy-ready comparison.</p>
-          <div class="pill-row">
-            <span class="pill success">1 look saved</span>
-            <span class="pill neutral">Private shortlist</span>
-          </div>
-          <div class="toggle-bar">
-            <div class="toggle-pill active">Grid</div>
-            <div class="toggle-pill">List</div>
-          </div>
-        </div>
-
-        <div class="screen-card">
-          <div class="eyebrow">Collection</div>
-          <h3>Grid view</h3>
-          <div class="mini-grid">
-            <div class="look-card">
-              <div class="art-board"></div>
-              <strong>Commute Layers</strong>
-              <p>Balanced smart-casual stack for weekday rotation.</p>
-            </div>
-            <div class="look-card">
-              <div class="art-board"></div>
-              <strong>Interview Ready</strong>
-              <p>Structured blazer, trouser, and polished shoe shortlist.</p>
-            </div>
+          <h3>Your wardrobe is empty</h3>
+          <p>Instead of a dead-end blank grid, the route explains what users gain by generating and saving a first look.</p>
+          <div class="status-card neutral">
+            <div class="section-title">Next best action</div>
+            <p>Generate your first try-on, then save the result here for future shopping and outfit planning.</p>
           </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/shops">Compare offers</button>
-            <button class="button secondary" data-route="/discover">Find similar</button>
+            <button class="button primary" data-route="/tryon-upload">Generate first look</button>
+          </div>
+          <div class="text-link-row">
+            <button class="text-link" data-route="/profile">Back to profile</button>
+            <button class="text-link" data-route="/shops">Browse buy options</button>
           </div>
         </div>
       </div>
@@ -528,9 +548,9 @@ const screens = [
     tag: "Growth",
     route: "/rewards",
     title: "Rewards Wallet",
-    subtitle: "Student growth hub for points, campaigns, and unlockable benefits.",
-    focus: "Review whether the reward system feels motivating and legible without looking like a generic loyalty dashboard.",
-    primaryCta: "Browse unlockable coupons",
+    subtitle: "Student rewards route kept practical and tied to core app behavior.",
+    focus: "Check whether growth feels connected to product use instead of looking bolted on.",
+    primaryCta: "Browse coupons",
     nextRoutes: ["/coupons", "/referrals", "/challenges"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Rewards",
@@ -539,38 +559,21 @@ const screens = [
         <div class="screen-card">
           <div class="eyebrow">Student Rewards</div>
           <h3>Campus wallet and growth perks</h3>
-          <p>Points accumulate across try-ons, shares, referrals, profile completion, and challenge activity.</p>
-          <div class="pill-row">
-            <span class="pill success">Insider tier</span>
-            <span class="pill neutral">5 transactions</span>
-          </div>
+          <p>Rewards continue to be triggered by profile completion, try-ons, and campaign participation.</p>
           <div class="metric-row">
             <div class="metric">
               <div class="metric-label">Balance</div>
               <div class="metric-value">320</div>
-              <div class="metric-copy">Available points to unlock coupons</div>
+              <div class="metric-copy">Available points to unlock student-focused benefits.</div>
             </div>
             <div class="metric">
-              <div class="metric-label">Earned</div>
-              <div class="metric-value">420</div>
-              <div class="metric-copy">Total points earned so far</div>
+              <div class="metric-label">Tier</div>
+              <div class="metric-value">Insider</div>
+              <div class="metric-copy">Higher status after try-on and challenge activity.</div>
             </div>
           </div>
-        </div>
-
-        <div class="screen-card">
-          <div class="eyebrow">Reward Triggers</div>
-          <h3>How points are moving</h3>
-          <div class="activity-card">
-            <strong>First Try On</strong>
-            <p>+120 pts. First try-on reward.</p>
-          </div>
-          <div class="activity-card">
-            <strong>Challenge Participation</strong>
-            <p>+100 pts. Completed campus challenge.</p>
-          </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/coupons">Browse unlockable coupons</button>
+            <button class="button primary" data-route="/coupons">Browse coupons</button>
           </div>
         </div>
       </div>
@@ -582,9 +585,9 @@ const screens = [
     tag: "Growth",
     route: "/referrals",
     title: "Referrals",
-    subtitle: "Invite and conversion layer for student growth.",
-    focus: "Check if the referral code, invite prompt, and event history feel actionable without overcomplicating the screen.",
-    primaryCta: "Log invite sent",
+    subtitle: "Invite surface for peer growth and points.",
+    focus: "Check whether the code and conversion value are obvious enough without adding clutter.",
+    primaryCta: "Share code",
     nextRoutes: ["/rewards", "/challenges"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Rewards",
@@ -593,24 +596,23 @@ const screens = [
         <div class="screen-card">
           <div class="eyebrow">Referral Engine</div>
           <h3>Invite friends and earn campus points</h3>
-          <p>The referral flow tracks code creation, sends, conversions, and the reward value attached to each event.</p>
           <div class="hero-panel">
             <div class="section-title">Your code</div>
             <h3 style="margin-top:10px;font-size:34px">FIT-CAMPUS21</h3>
-            <p>Use this code for student invite campaigns, creator shares, and peer recommendations.</p>
+            <p>One tap to share the code, then track which invites converted into signups.</p>
           </div>
           <div class="metric-row">
             <div class="metric">
               <div class="metric-label">Invites</div>
-              <div class="metric-value">1</div>
+              <div class="metric-value">12</div>
             </div>
             <div class="metric">
               <div class="metric-label">Converted</div>
-              <div class="metric-value">1</div>
+              <div class="metric-value">4</div>
             </div>
           </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/referrals">Log invite sent</button>
+            <button class="button primary" data-route="/rewards">Share code</button>
           </div>
         </div>
       </div>
@@ -622,10 +624,10 @@ const screens = [
     tag: "Growth",
     route: "/coupons",
     title: "Coupons",
-    subtitle: "Unlock and redeem promotional benefits through reward thresholds and campaign linkage.",
-    focus: "Review whether thresholds, status, and reward cost are easy to scan at a glance.",
-    primaryCta: "Unlock coupon",
-    nextRoutes: ["/challenges", "/shops", "/rewards"],
+    subtitle: "Offer wallet linked back to saved points and commerce routes.",
+    focus: "Review whether unlock cost and current status are easy to scan.",
+    primaryCta: "Redeem best coupon",
+    nextRoutes: ["/shops", "/challenges", "/rewards"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
     activeTab: "Rewards",
     render: () => `
@@ -633,35 +635,16 @@ const screens = [
         <div class="screen-card">
           <div class="eyebrow">Coupon Wallet</div>
           <h3>Unlock offers with rewards</h3>
-          <p>Coupons can unlock through points or thresholds and are tied back to student-focused campaigns.</p>
-          <div class="metric-row">
-            <div class="metric">
-              <div class="metric-label">Points</div>
-              <div class="metric-value">320</div>
-              <div class="metric-copy">Available for unlocks</div>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Unlocked</div>
-              <div class="metric-value">2</div>
-              <div class="metric-copy">Coupons already in your wallet</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="screen-card">
-          <div class="eyebrow">Offer Grid</div>
-          <h3>Available coupons</h3>
           <div class="coupon-card">
             <strong>Budget Under 999</strong>
-            <p>UNDER999 • threshold 200 • cost 100 pts • status UNLOCKED</p>
+            <p>UNDER999 • unlock at 200 pts • cost 100 pts • status unlocked.</p>
           </div>
           <div class="coupon-card">
             <strong>Interview Edit 10% Off</strong>
-            <p>INTERVIEW10 • threshold 300 • cost 0 pts • status REDEEMED</p>
+            <p>INTERVIEW10 • threshold 300 • status ready to apply in shops.</p>
           </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/shops">Redeem path</button>
-            <button class="button secondary" data-route="/challenges">Go to challenges</button>
+            <button class="button primary" data-route="/shops">Redeem best coupon</button>
           </div>
         </div>
       </div>
@@ -673,8 +656,8 @@ const screens = [
     tag: "Growth",
     route: "/challenges",
     title: "Challenges",
-    subtitle: "Student challenge participation tied to campaigns and reward grants.",
-    focus: "Check whether campaign participation feels like a natural extension of the product rather than a bolted-on gamification layer.",
+    subtitle: "Campaign route tied to points and repeat engagement.",
+    focus: "Check whether the challenge feed feels product-adjacent rather than generic gamification.",
     primaryCta: "Join challenge",
     nextRoutes: ["/rewards", "/coupons"],
     tabs: ["Profile", "Discover", "Saved", "Rewards"],
@@ -683,34 +666,17 @@ const screens = [
       <div class="screen-stack">
         <div class="screen-card">
           <div class="eyebrow">Campus Challenges</div>
-          <h3>Earn points through campaign participation</h3>
-          <p>Join themed student campaigns like campus casual, interview ready, fest looks, and budget edits.</p>
-          <div class="metric-row">
-            <div class="metric">
-              <div class="metric-label">Live</div>
-              <div class="metric-value">3</div>
-            </div>
-            <div class="metric">
-              <div class="metric-label">Claimed</div>
-              <div class="metric-value">1</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="screen-card">
-          <div class="eyebrow">Challenge Feed</div>
-          <h3>Student campaign lineup</h3>
+          <h3>Earn points through themed participation</h3>
           <div class="list-card">
             <strong>Campus Casual Week</strong>
-            <p>OPEN / CLAIMED state with campaign-backed challenge and wallet impact.</p>
+            <p>Generate a look, save it, and share it to claim reward points.</p>
           </div>
           <div class="list-card">
-            <strong>Fest Look Push</strong>
-            <p>JOINED state with social-share angle and reward conversion.</p>
+            <strong>Interview Ready Push</strong>
+            <p>Try on a formal edit and unlock coupon eligibility.</p>
           </div>
           <div class="cta-row">
-            <button class="button primary" data-route="/rewards">Claim reward path</button>
-            <button class="button secondary" data-route="/coupons">See coupon tie-in</button>
+            <button class="button primary" data-route="/rewards">Join challenge</button>
           </div>
         </div>
       </div>
@@ -759,6 +725,12 @@ function renderTabs(screen) {
   });
 }
 
+function bindRouteActions(root) {
+  root.querySelectorAll("[data-route]").forEach((node) => {
+    node.addEventListener("click", () => renderByRoute(node.dataset.route));
+  });
+}
+
 function renderScreen(id) {
   const screen = screens.find((item) => item.id === id) || screens[0];
 
@@ -778,10 +750,7 @@ function renderScreen(id) {
 
   phoneScreen.innerHTML = screen.render();
   renderTabs(screen);
-
-  phoneScreen.querySelectorAll("[data-route]").forEach((node) => {
-    node.addEventListener("click", () => renderByRoute(node.dataset.route));
-  });
+  bindRouteActions(phoneScreen);
 
   window.location.hash = screen.id;
 }
