@@ -61,7 +61,7 @@ type UploadRow = {
 };
 
 @Injectable()
-class UploadsService {
+export class UploadsService {
   private readonly storageProvider: "gcs" | "minio";
   private readonly bucket: string;
   private readonly gcs?: Storage;

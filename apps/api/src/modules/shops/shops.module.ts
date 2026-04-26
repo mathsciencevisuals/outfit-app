@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Injectable, Module, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
+import { randomUUID } from "crypto";
 import { Type } from "class-transformer";
 
 import { CurrentUser } from "../../common/auth/current-user.decorator";
@@ -264,9 +265,51 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter(Boolean))) as string[];
 }
 
+class InstantCheckoutDto {
+  @IsString()
+  userId!: string;
+
+  @IsString()
+  variantId!: string;
+
+  @IsOptional()
+  @IsString()
+  shopId?: string;
+}
+
+@ApiBearerAuth()
+@ApiTags("checkout")
+@Controller("checkout")
+class CheckoutController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  @Post("instant")
+  async instantCheckout(@Body() dto: InstantCheckoutDto) {
+    const offer = await this.prisma.inventoryOffer.findFirst({
+      where: {
+        variantId: dto.variantId,
+        ...(dto.shopId ? { shopId: dto.shopId } : {}),
+        stock: { gt: 0 }
+      },
+      orderBy: { price: "asc" }
+    });
+
+    if (!offer) {
+      throw new NotFoundException("No available offer for this variant");
+    }
+
+    return {
+      orderId: randomUUID(),
+      checkoutUrl: offer.externalUrl,
+      price: Number(offer.price),
+      currency: offer.currency
+    };
+  }
+}
+
 @Module({
   imports: [FitModule],
-  controllers: [ShopsController],
+  controllers: [ShopsController, CheckoutController],
   providers: [ShopsService, PrismaService],
   exports: [ShopsService]
 })

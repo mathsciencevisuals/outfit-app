@@ -1,15 +1,19 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, Param, Put } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Post, Put, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { IsArray, IsIn, IsNumber, IsOptional, IsString } from "class-validator";
 
+import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 import { RewardsModule, RewardsService } from "../rewards/rewards.module";
+import { UploadsModule, UploadsService } from "../uploads/uploads.module";
+
+const { memoryStorage } = require("multer") as { memoryStorage: () => unknown };
 
 class UpdateProfileDto {
   @IsString()
@@ -105,7 +109,8 @@ class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
-    private readonly rewardsService: RewardsService
+    private readonly rewardsService: RewardsService,
+    private readonly uploadsService: UploadsService
   ) {}
 
   listUsers() {
@@ -294,6 +299,95 @@ class UsersService {
     };
   }
 
+  async getStats(user: AuthenticatedUser, userId: string) {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot access these stats");
+
+    const [userData, tryOnCount, savedLooksCount, recs] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } }),
+      this.prisma.tryOnRequest.count({ where: { userId } }),
+      this.prisma.savedLook.count({ where: { userId, isWishlist: false } }),
+      this.prisma.recommendation.findMany({ where: { userId }, select: { score: true } })
+    ]);
+
+    const styleMatchPct =
+      recs.length > 0
+        ? Math.round(recs.reduce((sum, r) => sum + (r.score ?? 0), 0) / recs.length * 100)
+        : 0;
+
+    return {
+      tryOnCount,
+      savedCount: savedLooksCount,
+      styleMatchPct: Math.min(styleMatchPct, 100),
+      totalOrders: 0,
+      memberSince: userData?.createdAt ?? null
+    };
+  }
+
+  async getSavedProducts(user: AuthenticatedUser, userId: string): Promise<string[]> {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot access these saved products");
+
+    const wishlist = await this.prisma.savedLook.findFirst({
+      where: { userId, isWishlist: true },
+      include: { items: { select: { productId: true } } }
+    });
+
+    return (wishlist?.items ?? []).map((item) => item.productId);
+  }
+
+  async saveSavedProduct(user: AuthenticatedUser, userId: string, productId: string) {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot save products for this user");
+
+    const wishlist = await this.prisma.savedLook.upsert({
+      where: { id: (await this.prisma.savedLook.findFirst({ where: { userId, isWishlist: true }, select: { id: true } }))?.id ?? "" },
+      create: { userId, name: "Wishlist", isWishlist: true, items: { create: { productId } } },
+      update: {},
+      include: { items: { select: { productId: true } } }
+    });
+
+    const alreadySaved = wishlist.items.some((item) => item.productId === productId);
+    if (!alreadySaved) {
+      await this.prisma.savedLookItem.create({ data: { savedLookId: wishlist.id, productId } });
+    }
+
+    return { saved: true, productId };
+  }
+
+  async removeSavedProduct(user: AuthenticatedUser, userId: string, productId: string) {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot modify saved products for this user");
+
+    const wishlist = await this.prisma.savedLook.findFirst({ where: { userId, isWishlist: true }, select: { id: true } });
+    if (!wishlist) {
+      throw new NotFoundException("No wishlist found for this user");
+    }
+
+    await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: wishlist.id, productId } });
+    return { saved: false, productId };
+  }
+
+  async uploadProfilePhoto(
+    user: AuthenticatedUser,
+    userId: string,
+    file: { buffer?: Buffer; mimetype?: string; size?: number; originalname?: string }
+  ) {
+    this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot upload a photo for this user");
+
+    const uploadSession = await this.uploadsService.create(user, {
+      userId,
+      mimeType: file.mimetype ?? "image/jpeg",
+      purpose: "avatar"
+    });
+
+    const uploaded = await this.uploadsService.uploadFile(user, uploadSession.upload.id, { userId }, file);
+    const avatarUrl = uploaded.publicUrl;
+
+    await this.prisma.$executeRaw`
+      UPDATE "Profile" SET "avatarUrl" = ${avatarUrl}, "updatedAt" = NOW()
+      WHERE "userId" = ${userId}
+    `;
+
+    return { avatarUrl };
+  }
+
   private async getSafeProfile(userId: string) {
     const rows = await this.prisma.$queryRaw<Array<SafeProfileRow>>(Prisma.sql`
       SELECT
@@ -409,6 +503,11 @@ class ProfileController {
     return this.usersService.getProfile(user, userId);
   }
 
+  @Get(":userId/stats")
+  getStats(@CurrentUser() user: AuthenticatedUser, @Param("userId") userId: string) {
+    return this.usersService.getStats(user, userId);
+  }
+
   @Put(":userId")
   updateProfile(
     @CurrentUser() user: AuthenticatedUser,
@@ -417,11 +516,56 @@ class ProfileController {
   ) {
     return this.usersService.updateProfile(user, userId, dto);
   }
+
+  @Post(":userId/photo")
+  @UseInterceptors(FileInterceptor("photo", { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }))
+  uploadPhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("userId") userId: string,
+    @UploadedFile() file: { buffer?: Buffer; mimetype?: string; size?: number; originalname?: string }
+  ) {
+    return this.usersService.uploadProfilePhoto(user, userId, file);
+  }
+}
+
+class SaveProductDto {
+  @IsString()
+  productId!: string;
+}
+
+@ApiBearerAuth()
+@ApiTags("users")
+@Controller("users")
+class SavedProductsController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get(":userId/saved-products")
+  getSavedProducts(@CurrentUser() user: AuthenticatedUser, @Param("userId") userId: string) {
+    return this.usersService.getSavedProducts(user, userId);
+  }
+
+  @Post(":userId/saved-products")
+  saveSavedProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("userId") userId: string,
+    @Body() dto: SaveProductDto
+  ) {
+    return this.usersService.saveSavedProduct(user, userId, dto.productId);
+  }
+
+  @Delete(":userId/saved-products/:productId")
+  removeSavedProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("userId") userId: string,
+    @Param("productId") productId: string
+  ) {
+    return this.usersService.removeSavedProduct(user, userId, productId);
+  }
 }
 
 @Module({
-  imports: [RewardsModule],
-  controllers: [UsersController, ProfileController],
+  imports: [RewardsModule, UploadsModule],
+  controllers: [UsersController, ProfileController, SavedProductsController],
   providers: [UsersService, PrismaService],
   exports: [UsersService]
 })

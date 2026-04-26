@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Injectable, Module, Param, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
 
 import {
   BrandSizeChartOption,
@@ -263,8 +263,40 @@ class FitProfileController {
   }
 }
 
+class CompareDto {
+  @IsString()
+  userId!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  productIds!: string[];
+}
+
+@ApiBearerAuth()
+@ApiTags("compare")
+@Controller("compare")
+class CompareController {
+  constructor(private readonly service: FitService) {}
+
+  @Post()
+  async compare(@Body() dto: CompareDto) {
+    const previews = await Promise.all(
+      dto.productIds.slice(0, 3).map((productId) =>
+        this.service.previewForUserId(dto.userId, productId)
+      )
+    );
+    return previews
+      .filter((p) => p !== null)
+      .map((p) => ({
+        productId: p!.productId,
+        fitNote: p!.explanation ?? "No fit data available",
+        recommended: (p!.fitScore ?? 0) >= 60
+      }));
+  }
+}
+
 @Module({
-  controllers: [FitController, FitProfileController],
+  controllers: [FitController, FitProfileController, CompareController],
   providers: [FitService, PrismaService],
   exports: [FitService]
 })

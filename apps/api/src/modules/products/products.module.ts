@@ -90,6 +90,22 @@ class ProductsService {
     });
   }
 
+  trending(limit: number) {
+    return this.prisma.product.findMany({
+      orderBy: [{ lookRatings: { _count: "desc" } }, { createdAt: "desc" }],
+      include: {
+        brand: true,
+        variants: {
+          include: {
+            inventoryOffers: { include: { shop: true } },
+            sizeChartEntries: true
+          }
+        }
+      },
+      take: limit
+    });
+  }
+
   get(id: string) {
     return this.prisma.product.findUnique({
       where: { id },
@@ -157,6 +173,12 @@ class ProductsController {
   @Get()
   async list(@Query("category") category?: string) {
     const products = await this.service.list(category);
+    return products.map((product) => serializeProductCard(product));
+  }
+
+  @Get("trending")
+  async trending(@Query("limit") limit = "4") {
+    const products = await this.service.trending(Number(limit));
     return products.map((product) => serializeProductCard(product));
   }
 
