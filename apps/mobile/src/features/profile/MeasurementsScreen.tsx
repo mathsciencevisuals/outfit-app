@@ -1,325 +1,239 @@
-import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { MetricTile } from "../../components/MetricTile";
-import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
+import { RangeSlider } from "../../components/RangeSlider";
 import { Screen } from "../../components/Screen";
-import { SectionCard } from "../../components/SectionCard";
-import { SegmentedControl } from "../../components/SegmentedControl";
-import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import type { FitPreference, FitProfileResponse, UserProfile } from "../../types/api";
+import { colors, radius } from "../../theme/design";
 
-const fitPreferenceOptions: FitPreference[] = ["slim", "regular", "relaxed"];
+const bodyTypes = ["Slim", "Average", "Athletic"] as const;
 
 export function MeasurementsScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
   const profile = useAppStore((state) => state.profile);
-  const [fitProfile, setFitProfile] = useState<FitProfileResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const [height, setHeight] = useState(170);
+  const [weight, setWeight] = useState(65);
+  const [bodyType, setBodyType] = useState<(typeof bodyTypes)[number]>("Average");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const [heightCm, setHeightCm] = useState("");
-  const [weightKg, setWeightKg] = useState("");
-  const [fitPreference, setFitPreference] = useState<FitPreference>("regular");
-  const [chestCm, setChestCm] = useState("");
-  const [waistCm, setWaistCm] = useState("");
-  const [hipsCm, setHipsCm] = useState("");
-  const [inseamCm, setInseamCm] = useState("");
-  const [shoulderCm, setShoulderCm] = useState("");
-  const [footLengthCm, setFootLengthCm] = useState("");
-
-  const latest = fitProfile?.latestMeasurement ?? profile?.measurements?.[0] ?? null;
-  const effectiveProfile: UserProfile | null = fitProfile?.profile ?? profile ?? null;
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [nextFitProfile, fullProfile] = await Promise.all([mobileApi.fitProfile(), mobileApi.refreshProfile(userId)]);
-      setFitProfile({
-        ...nextFitProfile,
-        profile: fullProfile,
-        latestMeasurement: fullProfile.measurements?.[0] ?? nextFitProfile.latestMeasurement ?? null
-      });
-      setError(null);
-    } catch (nextError: unknown) {
-      setError(nextError instanceof Error ? nextError.message : "Measurements could not be loaded");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!profile) {
+      return;
     }
-  }, [userId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+    setHeight(profile.heightCm ?? 170);
+    setWeight(profile.weightKg ?? 65);
+    setBodyType((bodyTypes.find((entry) => entry.toLowerCase() === String(profile.bodyShape ?? "").toLowerCase()) ?? "Average"));
+  }, [profile]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
-
-  useEffect(() => {
-    setHeightCm(effectiveProfile?.heightCm != null ? `${effectiveProfile.heightCm}` : "");
-    setWeightKg(effectiveProfile?.weightKg != null ? `${effectiveProfile.weightKg}` : "");
-    setFitPreference((effectiveProfile?.fitPreference as FitPreference | null) ?? "regular");
-    setChestCm(latest?.chestCm != null ? `${latest.chestCm}` : "");
-    setWaistCm(latest?.waistCm != null ? `${latest.waistCm}` : "");
-    setHipsCm(latest?.hipsCm != null ? `${latest.hipsCm}` : "");
-    setInseamCm(latest?.inseamCm != null ? `${latest.inseamCm}` : "");
-    setShoulderCm(latest?.shoulderCm != null ? `${latest.shoulderCm}` : "");
-    setFootLengthCm(latest?.footLengthCm != null ? `${latest.footLengthCm}` : "");
-  }, [effectiveProfile, latest]);
-
-  const coverage = useMemo(
-    () =>
-      [chestCm, waistCm, hipsCm, inseamCm, shoulderCm, footLengthCm, heightCm].filter((value) => value != null && value !== "").length,
-    [chestCm, footLengthCm, heightCm, hipsCm, inseamCm, shoulderCm, waistCm]
-  );
-
-  const saveMeasurements = async () => {
-    if (!effectiveProfile) {
+  const save = async () => {
+    if (!profile) {
       return;
     }
 
     setSaving(true);
     setMessage(null);
+
     try {
       await Promise.all([
-        mobileApi.saveMeasurement(userId, {
-          id: latest?.id,
-          chestCm: chestCm ? Number(chestCm) : null,
-          waistCm: waistCm ? Number(waistCm) : null,
-          hipsCm: hipsCm ? Number(hipsCm) : null,
-          inseamCm: inseamCm ? Number(inseamCm) : null,
-          shoulderCm: shoulderCm ? Number(shoulderCm) : null,
-          footLengthCm: footLengthCm ? Number(footLengthCm) : null,
-          source: latest?.source ?? "manual"
-        }),
         mobileApi.updateProfile(userId, {
-          firstName: effectiveProfile.firstName,
-          lastName: effectiveProfile.lastName,
-          avatarUploadId: effectiveProfile.avatarUploadId ?? null,
-          avatarUrl: effectiveProfile.avatarUrl ?? null,
-          gender: effectiveProfile.gender ?? null,
-          age: effectiveProfile.age ?? null,
-          heightCm: heightCm ? Number(heightCm) : null,
-          weightKg: weightKg ? Number(weightKg) : null,
-          bodyShape: effectiveProfile.bodyShape ?? null,
-          fitPreference,
-          budgetMin: effectiveProfile.budgetMin ?? null,
-          budgetMax: effectiveProfile.budgetMax ?? null,
-          budgetLabel: effectiveProfile.budgetLabel ?? null,
-          closetStatus: effectiveProfile.closetStatus ?? "COMING_SOON",
-          stylePreference: effectiveProfile.stylePreference ?? null,
-          preferredColors: effectiveProfile.preferredColors ?? [],
-          avoidedColors: effectiveProfile.avoidedColors ?? []
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          avatarUploadId: profile.avatarUploadId ?? null,
+          avatarUrl: profile.avatarUrl ?? null,
+          gender: profile.gender ?? null,
+          age: profile.age ?? null,
+          heightCm: height,
+          weightKg: weight,
+          bodyShape: bodyType,
+          fitPreference: profile.fitPreference ?? "regular",
+          budgetMin: profile.budgetMin ?? null,
+          budgetMax: profile.budgetMax ?? null,
+          budgetLabel: profile.budgetLabel ?? null,
+          closetStatus: profile.closetStatus ?? "ACTIVE",
+          stylePreference: profile.stylePreference ?? null,
+          preferredColors: profile.preferredColors ?? [],
+          avoidedColors: profile.avoidedColors ?? []
+        }),
+        mobileApi.saveMeasurement(userId, {
+          id: profile.measurements?.[0]?.id,
+          chestCm: profile.measurements?.[0]?.chestCm ?? null,
+          waistCm: profile.measurements?.[0]?.waistCm ?? null,
+          hipsCm: profile.measurements?.[0]?.hipsCm ?? null,
+          inseamCm: profile.measurements?.[0]?.inseamCm ?? null,
+          shoulderCm: profile.measurements?.[0]?.shoulderCm ?? null,
+          footLengthCm: profile.measurements?.[0]?.footLengthCm ?? null,
+          source: profile.measurements?.[0]?.source ?? "manual"
         })
       ]);
 
-      await load();
-      setMessage("Fit profile saved and synced");
+      router.push("/style-preferences" as never);
     } catch (nextError: unknown) {
-      setMessage(nextError instanceof Error ? nextError.message : "Measurements could not be saved");
+      setMessage(nextError instanceof Error ? nextError.message : "Could not save measurements.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading && !effectiveProfile) {
-    return (
-      <Screen>
-        <LoadingState title="Measurements" subtitle="Loading fit calibration inputs." />
-      </Screen>
-    );
-  }
-
-  if (error && !effectiveProfile) {
-    return (
-      <Screen>
-        <ErrorState
-          title="Measurements"
-          message="Measurements could not be loaded from the API."
-          actionLabel="Back to profile"
-          onRetry={() => router.push("/profile")}
-        />
-      </Screen>
-    );
-  }
-
   return (
-    <Screen>
-      <SectionCard
-        eyebrow="Fit Profile"
-        title="Measurements"
-        subtitle="These values drive size recommendation, confidence, issue detection, and recommendation ranking."
-      >
-        <View style={styles.topRow}>
-          <View style={styles.headingBlock}>
-            <Text style={styles.headingLabel}>Calibration status</Text>
-            <Text style={styles.headingCopy}>Keep this layer current so fit and recommendation quality stay stable.</Text>
+    <Screen tone="dark" showProfileStrip={false}>
+      <View style={styles.shell}>
+        <Header title="Your Measurements" step="Step 1 of 3" />
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Height</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              value={`${height}`}
+              onChangeText={(value) => setHeight(Number(value.replace(/[^0-9]/g, "")) || 0)}
+              keyboardType="numeric"
+              style={styles.numericInput}
+              placeholderTextColor={colors.inkMuted}
+            />
+            <Text style={styles.unit}>cm</Text>
           </View>
-          <Pressable onPress={() => router.push("/profile")} style={({ pressed }) => [styles.backChip, pressed && styles.pressed]}>
-            <Feather name="user" size={14} color="#182033" />
-            <Text style={styles.backChipText}>Profile</Text>
-          </Pressable>
+          <RangeSlider min={140} max={220} value={height} onChange={setHeight} leftLabel="140 cm" rightLabel="220 cm" />
         </View>
 
-        <View style={styles.row}>
-          <Pill label={`Coverage ${coverage}/7`} tone={coverage >= 5 ? "success" : "warning"} />
-          <Pill label={`Preference ${fitPreference}`} tone="neutral" />
-          <Pill label={fitProfile?.guidance ?? "Add more measurements for better confidence"} tone="accent" />
+        <View style={styles.card}>
+          <Text style={styles.label}>Weight</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              value={`${weight}`}
+              onChangeText={(value) => setWeight(Number(value.replace(/[^0-9]/g, "")) || 0)}
+              keyboardType="numeric"
+              style={styles.numericInput}
+              placeholderTextColor={colors.inkMuted}
+            />
+            <Text style={styles.unit}>kg</Text>
+          </View>
+          <RangeSlider min={40} max={150} value={weight} onChange={setWeight} leftLabel="40 kg" rightLabel="150 kg" />
         </View>
 
-        <View style={styles.metricRow}>
-          <MetricTile label="Height" value={heightCm || "--"} caption="cm" />
-          <MetricTile label="Chest" value={chestCm || "--"} caption="cm" />
-        </View>
-        <View style={styles.metricRow}>
-          <MetricTile label="Waist" value={waistCm || "--"} caption="cm" />
-          <MetricTile label="Hips" value={hipsCm || "--"} caption="cm" />
-        </View>
-        <View style={styles.metricRow}>
-          <MetricTile label="Shoulder" value={shoulderCm || "--"} caption="cm" />
-          <MetricTile label="Inseam" value={inseamCm || "--"} caption="cm" />
-        </View>
-      </SectionCard>
-
-      <SectionCard
-        eyebrow="Preference"
-        title="How should garments wear?"
-        subtitle="Slim accepts slightly tighter recommendations, regular stays balanced, and relaxed tolerates more room."
-      >
-        <SegmentedControl options={fitPreferenceOptions} selected={fitPreference} onSelect={(value) => setFitPreference(value as FitPreference)} />
-      </SectionCard>
-
-      <SectionCard
-        eyebrow="Manual Entry"
-        title="Update your values"
-        subtitle="Add or refine measurements to strengthen size recommendations and fit warnings."
-      >
-        <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={heightCm} onChangeText={setHeightCm} placeholder="Height" keyboardType="numeric" placeholderTextColor="#8f816f" />
-          <TextInput style={[styles.input, styles.half]} value={weightKg} onChangeText={setWeightKg} placeholder="Weight" keyboardType="numeric" placeholderTextColor="#8f816f" />
-        </View>
-        <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={chestCm} onChangeText={setChestCm} placeholder="Chest" keyboardType="numeric" placeholderTextColor="#8f816f" />
-          <TextInput style={[styles.input, styles.half]} value={waistCm} onChangeText={setWaistCm} placeholder="Waist" keyboardType="numeric" placeholderTextColor="#8f816f" />
-        </View>
-        <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={hipsCm} onChangeText={setHipsCm} placeholder="Hips" keyboardType="numeric" placeholderTextColor="#8f816f" />
-          <TextInput style={[styles.input, styles.half]} value={inseamCm} onChangeText={setInseamCm} placeholder="Inseam" keyboardType="numeric" placeholderTextColor="#8f816f" />
-        </View>
-        <View style={styles.inlineRow}>
-          <TextInput style={[styles.input, styles.half]} value={shoulderCm} onChangeText={setShoulderCm} placeholder="Shoulder" keyboardType="numeric" placeholderTextColor="#8f816f" />
-          <TextInput style={[styles.input, styles.half]} value={footLengthCm} onChangeText={setFootLengthCm} placeholder="Foot length" keyboardType="numeric" placeholderTextColor="#8f816f" />
+        <View style={styles.card}>
+          <Text style={styles.label}>Body Type</Text>
+          <View style={styles.chipRow}>
+            {bodyTypes.map((entry) => (
+              <Chip key={entry} label={entry} selected={bodyType === entry} onPress={() => setBodyType(entry)} />
+            ))}
+          </View>
         </View>
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
-
-        <View style={styles.ctaRow}>
-          <PrimaryButton onPress={saveMeasurements} disabled={saving || !effectiveProfile}>
-            {saving ? "Saving fit profile..." : "Save fit profile"}
-          </PrimaryButton>
-          <PrimaryButton onPress={() => router.push("/recommendations")} variant="secondary">
-            See recommendations
-          </PrimaryButton>
-        </View>
-      </SectionCard>
-
-      {!latest && !loading ? (
-        <EmptyState
-          title="No measurements saved yet"
-          message="Add chest, waist, hips, shoulders, and inseam to unlock stronger fit guidance."
-          actionLabel="Go to discover"
-          onAction={() => router.push("/discover")}
-        />
-      ) : null}
+        <PrimaryButton onPress={save} disabled={saving || !profile}>
+          {saving ? "Saving..." : "Continue"}
+        </PrimaryButton>
+      </View>
     </Screen>
   );
 }
 
+function Header({ title, step }: { title: string; step: string }) {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.step}>{step}</Text>
+    </View>
+  );
+}
+
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.chip, selected && styles.chipSelected, pressed && styles.pressed]}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12
+  shell: {
+    gap: 16
   },
-  headingBlock: {
-    flex: 1,
+  header: {
     gap: 4
   },
-  headingLabel: {
-    color: "#846746",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
+  title: {
+    color: colors.inkOnDark,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "800"
   },
-  headingCopy: {
-    color: "#647183",
-    fontSize: 14,
-    lineHeight: 21
+  step: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 14
   },
-  backChip: {
+  card: {
+    gap: 14,
+    padding: 18,
+    borderRadius: radius.xl,
+    backgroundColor: "rgba(19,21,34,0.86)",
+    borderWidth: 1,
+    borderColor: colors.lineDark
+  },
+  label: {
+    color: colors.inkOnDark,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: "#efe3cf",
-    borderWidth: 1,
-    borderColor: "#dcc8ab"
+    gap: 10
   },
-  backChipText: {
-    color: "#182033",
-    fontSize: 13,
+  numericInput: {
+    flex: 1,
+    minHeight: 56,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.lineDark,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 16,
+    color: colors.inkOnDark,
+    fontSize: 24,
+    fontWeight: "800"
+  },
+  unit: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 16,
     fontWeight: "700"
+  },
+  chipRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  chip: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.lineDark,
+    backgroundColor: "rgba(255,255,255,0.04)"
+  },
+  chipSelected: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accentStrong
+  },
+  chipText: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 14,
+    fontWeight: "700"
+  },
+  chipTextSelected: {
+    color: colors.inkOnDark
+  },
+  message: {
+    color: "#fda4af",
+    fontSize: 14
   },
   pressed: {
     opacity: 0.92
-  },
-  row: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  metricRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  inlineRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  half: {
-    flex: 1
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#e2d3bd",
-    backgroundColor: "#fcf8f2",
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    fontSize: 16,
-    color: "#182033"
-  },
-  message: {
-    color: "#5f697d",
-    fontSize: 14,
-    lineHeight: 20
-  },
-  ctaRow: {
-    gap: 10
   }
 });

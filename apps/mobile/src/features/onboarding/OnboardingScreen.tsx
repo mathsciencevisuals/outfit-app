@@ -1,143 +1,144 @@
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback } from "react";
-import { BackHandler, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { StyleSheet, Text, View } from "react-native";
 
-import { MetricTile } from "../../components/MetricTile";
-import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
-import { SectionCard } from "../../components/SectionCard";
-import { LoadingState } from "../../components/StateCard";
-import { demoData } from "../../demo/demo-data";
-import { useAsyncResource } from "../../hooks/useAsyncResource";
-import { mobileApi } from "../../services/api";
-import { useAppStore } from "../../store/app-store";
-import { demoModeEnabled } from "../../utils/env";
+import { colors, radius } from "../../theme/design";
 
-const onboardingSignals = [
+const setupSteps = [
   {
     icon: "user",
-    title: "Profile intelligence",
-    copy: "Build a fit-aware identity with measurements, preferences, and body-shape context."
+    title: "Measurements",
+    copy: "Height, weight, and body type power size recommendation and fit confidence."
   },
   {
-    icon: "camera",
-    title: "Try-on preview",
-    copy: "Upload a clean look, queue generation, and review confidence before you shop."
+    icon: "heart",
+    title: "Style Preferences",
+    copy: "Occasions, colors, and fit taste shape recommendations and the Feed."
   },
   {
-    icon: "shopping-bag",
-    title: "Retail comparison",
-    copy: "Compare ready-to-buy offers across connected partners without leaving the flow."
+    icon: "dollar-sign",
+    title: "Budget Range",
+    copy: "Stay inside your price comfort zone without flattening the style quality."
   }
 ] as const;
 
 export function OnboardingScreen() {
   const router = useRouter();
-  const startDemoSession = useAppStore((state) => state.startDemoSession);
-  const { data, loading } = useAsyncResource(() => mobileApi.onboarding(), []);
-
-  useFocusEffect(
-    useCallback(() => {
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        BackHandler.exitApp();
-        return true;
-      });
-
-      return () => subscription.remove();
-    }, [])
-  );
-
-  if (loading) {
-    return (
-      <Screen>
-        <LoadingState title="FitMe" subtitle="Preparing your premium fit journey." />
-      </Screen>
-    );
-  }
-
-  const tryDemo = () => {
-    startDemoSession({
-      token: demoData.demoToken,
-      user: demoData.session.user,
-      profile: demoData.profile,
-      tryOnRequestId: demoData.tryOnRequest.id
-    });
-    router.replace("/feed");
-  };
 
   return (
-    <Screen>
-      <SectionCard
-        eyebrow="Fashion Tech"
-        title={data?.title ?? "FitMe"}
-        subtitle={data?.subtitle ?? "Build your profile and start discovering better fits."}
-      >
-        <Pill label="Profile + fit + try-on + shopping" tone="accent" />
-        <Text style={styles.heroText}>
-          Outfit planning, fit confidence, and retail visibility are already connected. This setup flow
-          gets you from first sign-in to try-on preview without breaking momentum.
-        </Text>
-        <View style={styles.metricRow}>
-          <MetricTile label="Journey" value="4 steps" caption="Onboard, profile, measure, discover" />
-          <MetricTile label="Signal" value="Fit-first" caption="Recommendations stay grounded in measurements" />
+    <Screen tone="dark" showProfileStrip={false}>
+      <View style={styles.shell}>
+        <View style={styles.heroCard}>
+          <Text style={styles.eyebrow}>Welcome</Text>
+          <Text style={styles.title}>Welcome to Style Studio</Text>
+          <Text style={styles.subtitle}>Let&apos;s set up your fit profile in three quick steps so your recommendations, try-ons, and saved looks feel personal from the start.</Text>
         </View>
-        <PrimaryButton onPress={() => router.push("/auth")}>Start setup</PrimaryButton>
-        {demoModeEnabled ? <PrimaryButton onPress={tryDemo} variant="secondary">Try Demo</PrimaryButton> : null}
-      </SectionCard>
 
-      <SectionCard eyebrow="What You Unlock" title="A wardrobe workflow, not just a catalog">
-        {onboardingSignals.map((signal) => (
-          <View key={signal.title} style={styles.featureRow}>
-            <View style={styles.iconWrap}>
-              <Feather name={signal.icon} size={18} color="#172033" />
+        <View style={styles.stepsCard}>
+          {setupSteps.map((step, index) => (
+            <View key={step.title} style={styles.stepRow}>
+              <View style={styles.stepIndex}>
+                <Text style={styles.stepIndexText}>{index + 1}</Text>
+              </View>
+              <View style={styles.stepIconWrap}>
+                <Feather name={step.icon} size={18} color={colors.inkOnDark} />
+              </View>
+              <View style={styles.stepCopy}>
+                <Text style={styles.stepTitle}>{step.title}</Text>
+                <Text style={styles.stepBody}>{step.copy}</Text>
+              </View>
             </View>
-            <View style={styles.featureCopy}>
-              <Text style={styles.featureTitle}>{signal.title}</Text>
-              <Text style={styles.featureText}>{signal.copy}</Text>
-            </View>
-          </View>
-        ))}
-      </SectionCard>
+          ))}
+        </View>
+
+        <PrimaryButton onPress={() => router.push("/measurements")}>Get Started</PrimaryButton>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  heroText: {
-    color: "#4e586c",
-    fontSize: 15,
-    lineHeight: 23
-  },
-  metricRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  featureRow: {
-    flexDirection: "row",
-    gap: 14,
-    alignItems: "flex-start"
-  },
-  iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    backgroundColor: "#f0e6d8",
-    alignItems: "center",
+  shell: {
+    gap: 18,
+    minHeight: "100%",
     justifyContent: "center"
   },
-  featureCopy: {
+  heroCard: {
+    gap: 10,
+    padding: 24,
+    borderRadius: radius.xl,
+    backgroundColor: "rgba(19,21,34,0.84)",
+    borderWidth: 1,
+    borderColor: colors.lineDark
+  },
+  eyebrow: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.3,
+    textTransform: "uppercase"
+  },
+  title: {
+    color: colors.inkOnDark,
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: "800"
+  },
+  subtitle: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 15,
+    lineHeight: 24
+  },
+  stepsCard: {
+    gap: 12,
+    padding: 18,
+    borderRadius: radius.xl,
+    backgroundColor: "rgba(19,21,34,0.84)",
+    borderWidth: 1,
+    borderColor: colors.lineDark
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 12,
+    borderRadius: radius.lg,
+    backgroundColor: "rgba(255,255,255,0.03)"
+  },
+  stepIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentSoft
+  },
+  stepIndexText: {
+    color: colors.inkOnDark,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  stepIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent
+  },
+  stepCopy: {
     flex: 1,
     gap: 4
   },
-  featureTitle: {
-    color: "#172033",
+  stepTitle: {
+    color: colors.inkOnDark,
     fontSize: 16,
     fontWeight: "700"
   },
-  featureText: {
-    color: "#667085",
+  stepBody: {
+    color: colors.inkOnDarkSoft,
     fontSize: 14,
     lineHeight: 21
   }

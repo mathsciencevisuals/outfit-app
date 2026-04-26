@@ -1,443 +1,193 @@
 import { Feather } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
+import { PrimaryButton } from "../../components/PrimaryButton";
+import { Screen } from "../../components/Screen";
+import { SmartImage } from "../../components/SmartImage";
+import { demoData } from "../../demo/demo-data";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import { colors, radius, shadow } from "../../theme/design";
-import type { Recommendation } from "../../types/api";
-import { Screen } from "../../components/Screen";
-
-function formatPrice(value?: number | null) {
-  return value != null ? `Rs. ${Math.round(value)}` : "Price pending";
-}
-
-function formatStyleLabel(preferredStyles: unknown) {
-  const styles = Array.isArray(preferredStyles) ? preferredStyles.filter((item): item is string => typeof item === "string") : [];
-  return styles.slice(0, 2).join(" • ") || "Streetwear • Smart";
-}
-
-function readinessItems(input: { avatarReady: boolean; measurementReady: boolean; savedLooksCount: number }) {
-  return [
-    {
-      id: "avatar",
-      title: input.avatarReady ? "Profile image ready" : "Profile photo missing",
-      detail: input.avatarReady
-        ? "Your saved image can power try-on and profile surfaces."
-        : "Upload a clean portrait so try-on starts without manual selection.",
-      tone: input.avatarReady ? colors.successSoft : colors.warningSoft,
-      iconColor: input.avatarReady ? colors.success : colors.warning
-    },
-    {
-      id: "measurements",
-      title: input.measurementReady ? "Measurements synced" : "Measurements need refresh",
-      detail: input.measurementReady
-        ? "Fit confidence has enough data for size and issue ranking."
-        : "Add chest, waist, hips, shoulder, and inseam to improve fit guidance.",
-      tone: input.measurementReady ? colors.successSoft : colors.warningSoft,
-      iconColor: input.measurementReady ? colors.success : colors.warning
-    },
-    {
-      id: "saved",
-      title: input.savedLooksCount > 0 ? "Wardrobe memory active" : "No saved looks yet",
-      detail:
-        input.savedLooksCount > 0
-          ? "Saved looks are already shaping your recommendation stack."
-          : "Save one look or wishlist item to strengthen the feed.",
-      tone: input.savedLooksCount > 0 ? colors.accentSoft : colors.infoSoft,
-      iconColor: input.savedLooksCount > 0 ? colors.accent : colors.info
-    }
-  ] as const;
-}
-
-function closeMenus(setDrawerOpen: (value: boolean) => void, setProfileMenuOpen: (value: boolean) => void, setQuickMenuOpen: (value: boolean) => void) {
-  setDrawerOpen(false);
-  setProfileMenuOpen(false);
-  setQuickMenuOpen(false);
-}
+import { colors, radius } from "../../theme/design";
 
 export function DiscoverScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
-  const userRole = useAppStore((state) => state.userRole);
   const profile = useAppStore((state) => state.profile);
   const logout = useAppStore((state) => state.logout);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
-  const { data, loading, error } = useAsyncResource(
-    async () => {
-      const [recommendations, wallet, campaigns] = await Promise.all([
-        mobileApi.recommendations(userId),
-        mobileApi.rewardWallet().catch(() => null),
-        mobileApi.campaigns().catch(() => [])
-      ]);
+  const { data } = useAsyncResource(async () => {
+    const [recommendations, wallet] = await Promise.all([
+      mobileApi.recommendations(userId),
+      mobileApi.rewardWallet().catch(() => demoData.rewardWallet)
+    ]);
+    return { recommendations, wallet };
+  }, [userId]);
 
-      return { recommendations, wallet, campaigns };
-    },
-    [userId]
-  );
+  const recommendations = data?.recommendations?.length ? data.recommendations.slice(0, 8) : demoData.recommendations.slice(0, 8);
+  const wallet = data?.wallet ?? demoData.rewardWallet;
+  const heroProduct = recommendations[0]?.product ?? demoData.products[0];
+  const styleDNA = useMemo(() => {
+    const occasions = Array.isArray(profile?.stylePreference?.occasions) ? profile?.stylePreference?.occasions.join(" • ") : "Casual • Formal";
+    return `${occasions} • ${profile?.fitPreference ?? "regular"} fit • ${profile?.budgetLabel ?? "Mid-Range"}`;
+  }, [profile?.budgetLabel, profile?.fitPreference, profile?.stylePreference]);
 
-  const featured = data?.recommendations?.[0] ?? null;
-  const wallet = data?.wallet ?? null;
-  const campaign = data?.campaigns?.[0] ?? null;
-  const adminVisible = userRole === "ADMIN" || userRole === "OPERATOR";
-  const styleLabel = useMemo(
-    () => formatStyleLabel(profile?.stylePreference?.preferredStyles),
-    [profile?.stylePreference]
-  );
-  const readiness = readinessItems({
-    avatarReady: Boolean(profile?.avatarUrl),
-    measurementReady: Boolean(profile?.measurements?.[0]),
-    savedLooksCount: profile?.savedLooks?.length ?? 0
-  });
+  const menuItems = [
+    { label: "Measurements", route: "/measurements" },
+    { label: "Style Preferences", route: "/style-preferences" },
+    { label: "Budget", route: "/budget" },
+    { label: "Try-On Result", route: "/tryon-result" }
+  ];
+
+  const profileItems = [
+    { label: "Open Profile", route: "/account" },
+    { label: "Settings / Theme", route: "/account" }
+  ];
 
   const navigate = (route: string) => {
-    closeMenus(setDrawerOpen, setProfileMenuOpen, setQuickMenuOpen);
+    setMenuOpen(false);
+    setProfileOpen(false);
     router.push(route as never);
   };
 
-  const toggleDrawer = () => {
-    setDrawerOpen((current) => {
-      const next = !current;
-      if (next) {
-        setProfileMenuOpen(false);
-        setQuickMenuOpen(false);
-      }
-      return next;
-    });
-  };
-
-  const toggleProfileMenu = () => {
-    setProfileMenuOpen((current) => {
-      const next = !current;
-      if (next) {
-        setDrawerOpen(false);
-        setQuickMenuOpen(false);
-      }
-      return next;
-    });
-  };
-
-  const toggleQuickMenu = () => {
-    setQuickMenuOpen((current) => {
-      const next = !current;
-      if (next) {
-        setDrawerOpen(false);
-        setProfileMenuOpen(false);
-      }
-      return next;
-    });
-  };
-
-  const handleLogout = async () => {
-    closeMenus(setDrawerOpen, setProfileMenuOpen, setQuickMenuOpen);
+  const signOut = async () => {
     await logout();
-    (router as { dismissAll?: () => void }).dismissAll?.();
-    router.replace("/onboarding");
+    router.replace("/auth");
   };
-
-  if (loading) {
-    return (
-      <Screen tone="dark" showProfileStrip={false}>
-        <LoadingState title="Feed" subtitle="Loading recommendations, reward context, and profile signals." />
-      </Screen>
-    );
-  }
-
-  if (error) {
-    return (
-      <Screen tone="dark" showProfileStrip={false}>
-        <ErrorState
-          title="Feed unavailable"
-          message="The home feed could not load its recommendation and profile context."
-          actionLabel="Profile"
-          onRetry={() => router.push("/account")}
-        />
-      </Screen>
-    );
-  }
-
-  if (!featured) {
-    return (
-      <Screen tone="dark" showProfileStrip={false}>
-        <EmptyState
-          title="No recommendations yet"
-          message="Complete your profile and fit data to unlock the personalized feed."
-          actionLabel="Measurements"
-          onAction={() => router.push("/measurements")}
-        />
-      </Screen>
-    );
-  }
-
-  const drawerItems = [
-    { label: "Measurements", icon: "sliders", route: "/measurements" },
-    { label: "Style Preferences", icon: "star", route: "/account" },
-    { label: "Try-On History", icon: "clock", route: "/tryon-result" },
-    { label: "Rewards", icon: "gift", route: "/rewards" },
-    ...(adminVisible ? [{ label: "Admin Tools", icon: "shield", route: "/account" }] : [])
-  ];
-
-  const profileMenuItems = [
-    { label: "Change photo", icon: "image", route: "/account" },
-    { label: "Preferences", icon: "sliders", route: "/account" },
-    { label: "Theme", icon: "droplet", route: "/account" }
-  ];
-
-  const quickActionItems = [
-    { label: "Try outfit", icon: "star", route: "/try-on" },
-    { label: "Upload photo", icon: "upload", route: "/tryon-upload" },
-    { label: "Scan product", icon: "search", route: "/retail" },
-    { label: "Save look", icon: "heart", route: "/saved" }
-  ];
 
   return (
     <Screen tone="dark" showProfileStrip={false}>
       <View style={styles.shell}>
-        <View style={styles.appBar}>
-          <Pressable onPress={toggleDrawer} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+        <View style={styles.topBar}>
+          <Pressable onPress={() => setMenuOpen((value) => !value)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
             <Feather name="menu" size={18} color={colors.inkOnDark} />
           </Pressable>
-          <View style={styles.appBarCenter}>
-            <Text style={styles.appBarEyebrow}>fitme.ai</Text>
-            <Text style={styles.appBarTitle}>Today's style</Text>
-            <Text style={styles.appBarSubtitle}>Fit-first picks for your profile.</Text>
+          <View style={styles.topBarCopy}>
+            <Text style={styles.topBarEyebrow}>fitme.ai</Text>
+            <Text style={styles.topBarTitle}>Feed</Text>
           </View>
-          <Pressable onPress={toggleProfileMenu} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-            <Feather name="user" size={18} color={colors.inkOnDark} />
+          <Pressable onPress={() => setProfileOpen((value) => !value)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <Feather name="settings" size={18} color={colors.inkOnDark} />
           </Pressable>
         </View>
 
-        {drawerOpen ? (
+        {menuOpen ? (
           <View style={styles.overlayCard}>
-            <Text style={styles.overlayTitle}>Menu</Text>
-            {drawerItems.map((item) => (
+            {menuItems.map((item) => (
               <Pressable key={item.label} onPress={() => navigate(item.route)} style={({ pressed }) => [styles.overlayRow, pressed && styles.pressed]}>
-                <View style={styles.overlayIconWrap}>
-                  <Feather name={item.icon as keyof typeof Feather.glyphMap} size={16} color={colors.accent} />
-                </View>
-                <Text style={styles.overlayLabel}>{item.label}</Text>
+                <Text style={styles.overlayText}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={colors.inkOnDarkSoft} />
               </Pressable>
             ))}
           </View>
         ) : null}
 
-        {profileMenuOpen ? (
-          <View style={styles.profileMenu}>
-            {profileMenuItems.map((item) => (
-              <Pressable key={item.label} onPress={() => navigate(item.route)} style={({ pressed }) => [styles.menuActionRow, pressed && styles.pressed]}>
-                <View style={styles.menuActionCopy}>
-                  <Text style={styles.menuActionLabel}>{item.label}</Text>
-                </View>
-                <Feather name={item.icon as keyof typeof Feather.glyphMap} size={15} color={colors.inkSoft} />
+        {profileOpen ? (
+          <View style={styles.overlayCard}>
+            {profileItems.map((item) => (
+              <Pressable key={item.label} onPress={() => navigate(item.route)} style={({ pressed }) => [styles.overlayRow, pressed && styles.pressed]}>
+                <Text style={styles.overlayText}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={colors.inkOnDarkSoft} />
               </Pressable>
             ))}
-            <Pressable onPress={() => void handleLogout()} style={({ pressed }) => [styles.menuActionRow, pressed && styles.pressed]}>
-              <View style={styles.menuActionCopy}>
-                <Text style={[styles.menuActionLabel, styles.logoutLabel]}>Logout</Text>
-              </View>
-              <Feather name="log-out" size={15} color={colors.danger} />
+            <Pressable onPress={() => void signOut()} style={({ pressed }) => [styles.overlayRow, pressed && styles.pressed]}>
+              <Text style={[styles.overlayText, { color: "#fda4af" }]}>Logout</Text>
+              <Feather name="log-out" size={16} color="#fda4af" />
             </Pressable>
           </View>
         ) : null}
 
         <View style={styles.heroCard}>
-          {featured.product?.imageUrl ? <Image source={{ uri: featured.product.imageUrl }} style={styles.heroImage} /> : null}
+          <SmartImage uri={heroProduct.imageUrl} label={heroProduct.name} containerStyle={styles.heroImageWrap} style={styles.heroImage} fallbackTone="accent" />
           <View style={styles.heroShade} />
           <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Your AI Style DNA</Text>
-            <Text style={styles.heroBody}>
-              {campaign?.description ??
-                "Campus-smart, budget-aware, fit-first recommendations tuned to your measurements and saved looks."}
-            </Text>
-            <View style={styles.chipRow}>
-              <InfoChip label={styleLabel} tone="dark" />
-              <InfoChip
-                label={wallet ? `${wallet.balancePoints} pts` : "Rewards active"}
-                tone="success"
-              />
-              {campaign ? <InfoChip label={campaign.title} tone="accent" /> : null}
+            <Text style={styles.heroEyebrow}>AI Style DNA</Text>
+            <Text style={styles.heroTitle}>{styleDNA}</Text>
+            <Text style={styles.heroBody}>Your feed is blending measurements, fit preference, color taste, and budget signals into a single fashion-tech shortlist.</Text>
+            <View style={styles.heroBadgeRow}>
+              <InfoBadge label={`${wallet.balancePoints} pts`} />
+              <InfoBadge label={`${recommendations.length} picks`} />
+              <InfoBadge label={profile?.budgetLabel ?? "Mid-Range"} />
             </View>
           </View>
         </View>
 
-        <View style={styles.quickGrid}>
-          {quickActionItems.map((item) => (
-            <Pressable key={item.label} onPress={() => navigate(item.route)} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
-              <View style={styles.quickIcon}>
-                <Feather name={item.icon as keyof typeof Feather.glyphMap} size={17} color={colors.accent} />
-              </View>
-              <Text style={styles.quickTitle}>{item.label}</Text>
-              <Text style={styles.quickSubtitle}>
-                {item.label === "Try outfit"
-                  ? "Camera or gallery"
-                  : item.label === "Upload photo"
-                    ? "Prepare try-on input"
-                    : item.label === "Scan product"
-                      ? "Jump into shopping"
-                      : "Add to wardrobe memory"}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.quickRow}>
+          <QuickAction icon="camera" label="Try-On" onPress={() => navigate("/try-on")} />
+          <QuickAction icon="bookmark" label="Saved" onPress={() => navigate("/saved")} />
+          <QuickAction icon="shopping-bag" label="Shops" onPress={() => navigate("/retail")} />
         </View>
 
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <View>
-              <Text style={styles.panelEyebrow}>AI Recommendation</Text>
-              <Text style={styles.panelTitle}>Top pick for your profile</Text>
-            </View>
-            {wallet ? <InfoChip label={`Tier ${wallet.tierLabel}`} tone="success" /> : null}
+        <View style={styles.recommendationSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>For You</Text>
+            <Text style={styles.sectionSubtitle}>Real cards, visible product imagery, and screenshot-ready metrics.</Text>
           </View>
 
-          <View style={styles.recommendationCard}>
-            {featured.product?.imageUrl ? <Image source={{ uri: featured.product.imageUrl }} style={styles.recommendationImage} /> : null}
-            <View style={styles.recommendationCopy}>
-              <Text style={styles.recommendationTitle}>{featured.product?.name ?? "Top recommendation"}</Text>
-              <Text style={styles.recommendationBody}>
-                {featured.explanation ??
-                  `${featured.product?.name ?? "This look"} is a strong fit for your saved profile and styling signals.`}
-              </Text>
-              <View style={styles.chipRow}>
-                <InfoChip label={`Fit ${featured.fitResult?.fitScore ?? 91}%`} tone="success" />
-                <InfoChip label={formatPrice(featured.offerSummary?.lowestPrice)} tone="warning" />
-                {(featured.reasonTags ?? []).slice(0, 2).map((tag) => (
-                  <InfoChip key={tag} label={tag} tone="accent" />
-                ))}
-              </View>
-              <View style={styles.buttonRow}>
-                <ActionButton label="Try this" onPress={() => navigate("/try-on")} />
-                <ActionButton label="Shop now" onPress={() => navigate("/retail")} variant="secondary" />
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.panel}>
-          <Text style={styles.panelEyebrow}>Profile readiness</Text>
-          <Text style={styles.panelTitle}>Today&apos;s checklist</Text>
-          <View style={styles.checklist}>
-            {readiness.map((item) => (
-              <View key={item.id} style={styles.checkCard}>
-                <View style={[styles.checkIcon, { backgroundColor: item.tone }]}>
-                  <Feather name="check" size={14} color={item.iconColor} />
-                </View>
-                <View style={styles.checkCopy}>
-                  <Text style={styles.checkTitle}>{item.title}</Text>
-                  <Text style={styles.checkDetail}>{item.detail}</Text>
+          {recommendations.map((entry) => {
+            const price = Math.round(entry.product?.variants?.[1]?.price ?? entry.product?.variants?.[0]?.price ?? 0);
+            return (
+              <View key={entry.productId} style={styles.recommendationCard}>
+                <SmartImage
+                  uri={entry.product?.imageUrl}
+                  label={entry.product?.name ?? "Recommended"}
+                  containerStyle={styles.recommendationThumbWrap}
+                  style={styles.recommendationThumb}
+                />
+                <View style={styles.recommendationCopy}>
+                  <View style={styles.recommendationTopRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.recommendationName}>{entry.product?.name ?? "Recommended product"}</Text>
+                      <Text style={styles.recommendationMeta}>
+                        {entry.product?.brand?.name ?? "FitMe"} · INR {price}
+                      </Text>
+                    </View>
+                    <View style={styles.matchPill}>
+                      <Text style={styles.matchPillText}>{Math.round(entry.score)}%</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.recommendationReason} numberOfLines={2}>
+                    {entry.explanation ?? "Built from fit, style, and budget signals."}
+                  </Text>
+                  <View style={styles.recommendationActions}>
+                    <PrimaryButton onPress={() => navigate("/try-on")} size="sm" variant="secondary">
+                      Try-On
+                    </PrimaryButton>
+                    <PrimaryButton onPress={() => navigate("/retail")} size="sm">
+                      Buy
+                    </PrimaryButton>
+                  </View>
                 </View>
               </View>
-            ))}
-          </View>
+            );
+          })}
         </View>
-
-        <View style={styles.panel}>
-          <Text style={styles.panelEyebrow}>For you</Text>
-          <Text style={styles.panelTitle}>Feed-first discovery</Text>
-          <View style={styles.feedCard}>
-            {featured.product?.imageUrl ? <Image source={{ uri: featured.product.imageUrl }} style={styles.feedImage} /> : null}
-            <View style={styles.feedShade} />
-            <View style={styles.feedCopy}>
-              <View style={styles.chipRow}>
-                <InfoChip label={(featured.product?.styleTags ?? [])[0] ?? "Trending"} tone="dark" />
-                <InfoChip label={formatPrice(featured.offerSummary?.lowestPrice)} tone="dark" />
-              </View>
-              <Text style={styles.feedTitle}>{featured.product?.name ?? "Mesh-layer street look"}</Text>
-              <Text style={styles.feedBody}>
-                {featured.product?.description ??
-                  "Trend-led outfit discovery that drops directly into try-on and shopping without changing context."}
-              </Text>
-            </View>
-            <View style={styles.feedActions}>
-              <Pressable onPress={() => navigate("/saved")} style={({ pressed }) => [styles.feedFab, pressed && styles.pressed]}>
-                <Feather name="heart" size={16} color={colors.inkOnDark} />
-              </Pressable>
-              <Pressable onPress={() => navigate("/retail")} style={({ pressed }) => [styles.feedFab, pressed && styles.pressed]}>
-                <Feather name="share-2" size={16} color={colors.inkOnDark} />
-              </Pressable>
-              <Pressable onPress={() => navigate("/try-on")} style={({ pressed }) => [styles.feedFab, styles.feedFabAccent, pressed && styles.pressed]}>
-                <Feather name="star" size={16} color={colors.inkOnDark} />
-              </Pressable>
-            </View>
-          </View>
-        </View>
-
-        <Pressable onPress={toggleQuickMenu} style={({ pressed }) => [styles.floatButton, pressed && styles.pressed]}>
-          <Feather name="plus" size={24} color={colors.inkOnDark} />
-        </Pressable>
-        {quickMenuOpen ? (
-          <View style={styles.quickMenu}>
-            {quickActionItems.map((item) => (
-              <Pressable key={item.label} onPress={() => navigate(item.route)} style={({ pressed }) => [styles.menuActionRow, pressed && styles.pressed]}>
-                <View style={styles.menuActionCopy}>
-                  <Text style={styles.menuActionLabel}>{item.label}</Text>
-                </View>
-                <Feather name={item.icon as keyof typeof Feather.glyphMap} size={15} color={colors.accent} />
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
       </View>
     </Screen>
   );
 }
 
-function InfoChip({
-  label,
-  tone
-}: {
-  label: string;
-  tone: "accent" | "success" | "warning" | "dark";
-}) {
+function QuickAction({ icon, label, onPress }: { icon: keyof typeof Feather.glyphMap; label: string; onPress: () => void }) {
   return (
-    <View
-      style={[
-        styles.infoChip,
-        tone === "accent" && styles.infoChipAccent,
-        tone === "success" && styles.infoChipSuccess,
-        tone === "warning" && styles.infoChipWarning,
-        tone === "dark" && styles.infoChipDark
-      ]}
-    >
-      <Text
-        style={[
-          styles.infoChipText,
-          tone === "dark" && styles.infoChipTextDark,
-          tone === "warning" && styles.infoChipTextWarning
-        ]}
-      >
-        {label}
-      </Text>
-    </View>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+      <View style={styles.quickIcon}>
+        <Feather name={icon} size={18} color={colors.inkOnDark} />
+      </View>
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
-function ActionButton({
-  label,
-  onPress,
-  variant = "primary"
-}: {
-  label: string;
-  onPress: () => void;
-  variant?: "primary" | "secondary";
-}) {
+function InfoBadge({ label }: { label: string }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        variant === "primary" ? styles.actionButtonPrimary : styles.actionButtonSecondary,
-        pressed && styles.pressed
-      ]}
-    >
-      <Text style={[styles.actionButtonText, variant === "secondary" && styles.actionButtonTextSecondary]}>{label}</Text>
-    </Pressable>
+    <View style={styles.infoBadge}>
+      <Text style={styles.infoBadgeText}>{label}</Text>
+    </View>
   );
 }
 
@@ -445,141 +195,91 @@ const styles = StyleSheet.create({
   shell: {
     gap: 16
   },
-  appBar: {
+  topBar: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12
+    alignItems: "center",
+    justifyContent: "space-between"
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.lineDark,
+    width: 46,
+    height: 46,
+    borderRadius: 18,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)"
   },
-  appBarCenter: {
-    flex: 1,
+  topBarCopy: {
     alignItems: "center",
-    gap: 3,
-    paddingTop: 2
+    gap: 2
   },
-  appBarEyebrow: {
+  topBarEyebrow: {
     color: colors.inkOnDarkSoft,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1.6,
+    letterSpacing: 1.2,
     textTransform: "uppercase"
   },
-  appBarTitle: {
+  topBarTitle: {
     color: colors.inkOnDark,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "800"
-  },
-  appBarSubtitle: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: "center"
   },
   overlayCard: {
-    borderRadius: radius.lg,
-    padding: 16,
-    gap: 10,
-    backgroundColor: "rgba(255,255,255,0.94)",
+    gap: 8,
+    padding: 12,
+    borderRadius: radius.xl,
+    backgroundColor: "rgba(19,21,34,0.94)",
     borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow
-  },
-  overlayTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800"
+    borderColor: colors.lineDark
   },
   overlayRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.panelMuted,
-    borderWidth: 1,
-    borderColor: colors.line
-  },
-  overlayIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    backgroundColor: colors.accentSoft,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  overlayLabel: {
-    flex: 1,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  profileMenu: {
-    alignSelf: "flex-end",
-    width: "72%",
-    minWidth: 220,
-    borderRadius: radius.lg,
-    padding: 10,
-    gap: 6,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow
-  },
-  menuActionRow: {
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: radius.md
+    padding: 12,
+    borderRadius: radius.lg,
+    backgroundColor: "rgba(255,255,255,0.03)"
   },
-  menuActionCopy: {
-    flex: 1
-  },
-  menuActionLabel: {
-    color: colors.ink,
+  overlayText: {
+    color: colors.inkOnDark,
     fontSize: 14,
     fontWeight: "700"
-  },
-  logoutLabel: {
-    color: colors.danger
   },
   heroCard: {
-    minHeight: 228,
+    position: "relative",
     borderRadius: radius.xl,
     overflow: "hidden",
-    backgroundColor: colors.heroEnd,
-    ...shadow
+    minHeight: 320,
+    backgroundColor: colors.heroEnd
+  },
+  heroImageWrap: {
+    ...StyleSheet.absoluteFillObject
   },
   heroImage: {
-    ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%"
   },
   heroShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(16,22,37,0.42)"
+    backgroundColor: "rgba(9,11,20,0.45)"
   },
   heroContent: {
     flex: 1,
     justifyContent: "flex-end",
     gap: 10,
-    padding: 18,
-    backgroundColor: "rgba(16,22,37,0.22)"
+    padding: 20
+  },
+  heroEyebrow: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
   },
   heroTitle: {
     color: colors.inkOnDark,
-    fontSize: 24,
+    fontSize: 28,
+    lineHeight: 32,
     fontWeight: "800"
   },
   heroBody: {
@@ -587,269 +287,119 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21
   },
-  chipRow: {
+  heroBadgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8
   },
-  infoChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+  infoBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: radius.pill,
-    borderWidth: 1
+    backgroundColor: "rgba(255,255,255,0.08)"
   },
-  infoChipAccent: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accentSoft
-  },
-  infoChipSuccess: {
-    backgroundColor: colors.successSoft,
-    borderColor: colors.successSoft
-  },
-  infoChipWarning: {
-    backgroundColor: colors.warningSoft,
-    borderColor: colors.warningSoft
-  },
-  infoChipDark: {
-    backgroundColor: "rgba(17,24,40,0.72)",
-    borderColor: "rgba(255,255,255,0.08)"
-  },
-  infoChipText: {
-    color: colors.ink,
+  infoBadgeText: {
+    color: colors.inkOnDark,
     fontSize: 12,
-    fontWeight: "800"
+    fontWeight: "700"
   },
-  infoChipTextDark: {
-    color: colors.inkOnDark
-  },
-  infoChipTextWarning: {
-    color: colors.warning
-  },
-  quickGrid: {
+  quickRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10
   },
   quickCard: {
-    width: "47.8%",
-    minHeight: 118,
-    borderRadius: radius.lg,
-    padding: 14,
+    flex: 1,
     gap: 10,
-    backgroundColor: "rgba(255,255,255,0.88)",
+    padding: 16,
+    borderRadius: radius.xl,
+    backgroundColor: "rgba(19,21,34,0.86)",
     borderWidth: 1,
-    borderColor: colors.line
+    borderColor: colors.lineDark
   },
   quickIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accentSoft
   },
-  quickTitle: {
-    color: colors.ink,
+  quickLabel: {
+    color: colors.inkOnDark,
     fontSize: 14,
-    fontWeight: "800"
+    fontWeight: "700"
   },
-  quickSubtitle: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  panel: {
-    borderRadius: radius.xl,
-    padding: 16,
-    gap: 14,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow
-  },
-  panelHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+  recommendationSection: {
     gap: 12
   },
-  panelEyebrow: {
-    color: colors.brand,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    textTransform: "uppercase"
-  },
-  panelTitle: {
-    color: colors.ink,
-    fontSize: 21,
-    fontWeight: "800",
-    marginTop: 2
-  },
-  recommendationCard: {
-    gap: 14
-  },
-  recommendationImage: {
-    width: "100%",
-    height: 220,
-    borderRadius: radius.lg,
-    backgroundColor: colors.pageStrong
-  },
-  recommendationCopy: {
-    gap: 10
-  },
-  recommendationTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "800"
-  },
-  recommendationBody: {
-    color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 22
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  actionButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1
-  },
-  actionButtonPrimary: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accentStrong
-  },
-  actionButtonSecondary: {
-    backgroundColor: colors.panelStrong,
-    borderColor: colors.lineStrong
-  },
-  actionButtonText: {
-    color: colors.inkOnDark,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  actionButtonTextSecondary: {
-    color: colors.ink
-  },
-  checklist: {
-    gap: 10
-  },
-  checkCard: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-    padding: 12,
-    borderRadius: radius.lg,
-    backgroundColor: colors.panelMuted,
-    borderWidth: 1,
-    borderColor: colors.line
-  },
-  checkIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  checkCopy: {
-    flex: 1,
+  sectionHeader: {
     gap: 4
   },
-  checkTitle: {
-    color: colors.ink,
-    fontSize: 14,
+  sectionTitle: {
+    color: colors.inkOnDark,
+    fontSize: 22,
     fontWeight: "800"
   },
-  checkDetail: {
-    color: colors.inkSoft,
-    fontSize: 13,
-    lineHeight: 19
+  sectionSubtitle: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 14
   },
-  feedCard: {
-    minHeight: 430,
+  recommendationCard: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
     borderRadius: radius.xl,
-    overflow: "hidden",
-    backgroundColor: colors.heroEnd
+    backgroundColor: "rgba(19,21,34,0.86)",
+    borderWidth: 1,
+    borderColor: colors.lineDark
   },
-  feedImage: {
-    ...StyleSheet.absoluteFillObject,
+  recommendationThumbWrap: {
+    width: 92,
+    height: 120
+  },
+  recommendationThumb: {
     width: "100%",
     height: "100%"
   },
-  feedShade: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(10,15,28,0.42)"
+  recommendationCopy: {
+    flex: 1,
+    gap: 8
   },
-  feedCopy: {
-    position: "absolute",
-    left: 16,
-    right: 80,
-    bottom: 18,
+  recommendationTopRow: {
+    flexDirection: "row",
     gap: 10
   },
-  feedTitle: {
+  recommendationName: {
     color: colors.inkOnDark,
-    fontSize: 18,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  recommendationMeta: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 12
+  },
+  matchPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft
+  },
+  matchPillText: {
+    color: colors.inkOnDark,
+    fontSize: 12,
     fontWeight: "800"
   },
-  feedBody: {
+  recommendationReason: {
     color: colors.inkOnDarkSoft,
     fontSize: 13,
-    lineHeight: 20
+    lineHeight: 19
   },
-  feedActions: {
-    position: "absolute",
-    right: 14,
-    bottom: 18,
-    gap: 10
-  },
-  feedFab: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)"
-  },
-  feedFabAccent: {
-    backgroundColor: colors.accent
-  },
-  floatButton: {
-    position: "absolute",
-    right: 0,
-    bottom: 8,
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accent,
-    borderWidth: 1,
-    borderColor: colors.accentStrong,
-    ...shadow
-  },
-  quickMenu: {
-    position: "absolute",
-    right: 0,
-    bottom: 76,
-    width: 220,
-    borderRadius: radius.lg,
-    padding: 10,
-    gap: 6,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow
+  recommendationActions: {
+    flexDirection: "row",
+    gap: 8
   },
   pressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.985 }]
+    opacity: 0.92
   }
 });

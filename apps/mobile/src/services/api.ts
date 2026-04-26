@@ -187,6 +187,37 @@ function cloneDemoValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+type DemoRuntimeState = {
+  profile: UserProfile;
+  savedLooks: SavedLook[];
+  tryOnRequest: TryOnRequest;
+};
+
+let demoRuntimeState: DemoRuntimeState | null = null;
+
+function createDemoRuntimeState(): DemoRuntimeState {
+  return {
+    profile: cloneDemoValue(demoData.profile),
+    savedLooks: cloneDemoValue(demoData.savedLooks),
+    tryOnRequest: cloneDemoValue(demoData.tryOnRequest)
+  };
+}
+
+function getDemoRuntimeState() {
+  if (!demoRuntimeState) {
+    demoRuntimeState = createDemoRuntimeState();
+  }
+
+  return demoRuntimeState;
+}
+
+function syncDemoProfileToStore() {
+  const runtime = getDemoRuntimeState();
+  runtime.profile.savedLooks = cloneDemoValue(runtime.savedLooks);
+  useAppStore.getState().setProfile(cloneDemoValue(runtime.profile));
+  return runtime.profile;
+}
+
 function isDemoSessionToken(token: string | null | undefined) {
   return token === demoData.demoToken;
 }
@@ -270,8 +301,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 async function refreshProfileIntoStore(userId: string) {
   if (shouldUseDemoApi()) {
-    const profile = cloneDemoValue(demoData.profile);
-    useAppStore.getState().setProfile(profile);
+    const runtime = getDemoRuntimeState();
+    runtime.profile.id = runtime.profile.id || userId;
+    const profile = cloneDemoValue(syncDemoProfileToStore());
     return profile;
   }
 
@@ -303,6 +335,32 @@ export const mobileApi = {
   fitProfile: (): Promise<FitProfileResponse> =>
     shouldUseDemoApi() ? Promise.resolve(cloneDemoValue(demoData.fitProfile)) : apiFetch("/users/me/fit-profile"),
   updateProfile: async (userId: string, input: ProfileInput): Promise<UserProfile> => {
+    if (shouldUseDemoApi()) {
+      const runtime = getDemoRuntimeState();
+      runtime.profile = {
+        ...runtime.profile,
+        id: runtime.profile.id || `profile-${userId}`,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        avatarUploadId: input.avatarUploadId ?? runtime.profile.avatarUploadId ?? null,
+        avatarUrl: input.avatarUrl ?? runtime.profile.avatarUrl ?? null,
+        gender: input.gender ?? null,
+        age: input.age ?? null,
+        heightCm: input.heightCm ?? null,
+        weightKg: input.weightKg ?? null,
+        bodyShape: input.bodyShape ?? null,
+        fitPreference: input.fitPreference ?? null,
+        budgetMin: input.budgetMin ?? null,
+        budgetMax: input.budgetMax ?? null,
+        budgetLabel: input.budgetLabel ?? null,
+        closetStatus: input.closetStatus ?? runtime.profile.closetStatus ?? null,
+        stylePreference: input.stylePreference ?? runtime.profile.stylePreference ?? null,
+        preferredColors: cloneDemoValue(input.preferredColors),
+        avoidedColors: cloneDemoValue(input.avoidedColors)
+      };
+      return cloneDemoValue(syncDemoProfileToStore());
+    }
+
     await apiFetch<UserProfile>(`/profile/${userId}`, {
       method: "PUT",
       body: JSON.stringify(input)
@@ -378,11 +436,26 @@ export const mobileApi = {
       budgetMax?: number | null;
       budgetLabel?: string | null;
     }
-  ): Promise<UserProfile> =>
-    apiFetch(`/style-preferences/${userId}`, {
+  ): Promise<UserProfile> => {
+    if (shouldUseDemoApi()) {
+      const runtime = getDemoRuntimeState();
+      runtime.profile = {
+        ...runtime.profile,
+        stylePreference: input.stylePreference,
+        preferredColors: cloneDemoValue(input.preferredColors),
+        avoidedColors: cloneDemoValue(input.avoidedColors),
+        budgetMin: input.budgetMin ?? runtime.profile.budgetMin ?? null,
+        budgetMax: input.budgetMax ?? runtime.profile.budgetMax ?? null,
+        budgetLabel: input.budgetLabel ?? runtime.profile.budgetLabel ?? null
+      };
+      return Promise.resolve(cloneDemoValue(syncDemoProfileToStore()));
+    }
+
+    return apiFetch(`/style-preferences/${userId}`, {
       method: "PUT",
       body: JSON.stringify(input)
-    }),
+    });
+  },
   measurements: (userId: string): Promise<Measurement[]> =>
     shouldUseDemoApi() ? Promise.resolve(cloneDemoValue(demoData.profile.measurements ?? [])) : apiFetch(`/measurements?userId=${userId}`),
   saveMeasurement: async (
@@ -390,11 +463,15 @@ export const mobileApi = {
     input: Omit<Measurement, "id" | "userId"> & { id?: string }
   ): Promise<Measurement | null> => {
     if (shouldUseDemoApi()) {
-      return Promise.resolve({
+      const measurement = {
         id: input.id ?? "measurement-demo",
         userId,
         ...input
-      });
+      };
+      const runtime = getDemoRuntimeState();
+      runtime.profile.measurements = [measurement];
+      syncDemoProfileToStore();
+      return Promise.resolve(cloneDemoValue(measurement));
     }
 
     return input.id
@@ -454,32 +531,42 @@ export const mobileApi = {
     return apiFetch(`/shops/compare?${params.toString()}`);
   },
   savedLooks: (userId: string): Promise<SavedLook[]> =>
-    shouldUseDemoApi() ? Promise.resolve(cloneDemoValue(demoData.savedLooks)) : apiFetch(`/saved-looks?userId=${userId}`),
+    shouldUseDemoApi() ? Promise.resolve(cloneDemoValue(getDemoRuntimeState().savedLooks)) : apiFetch(`/saved-looks?userId=${userId}`),
   saveLook: (
     userId: string,
     input: { name: string; note?: string; productIds: string[]; isWishlist?: boolean }
   ): Promise<SavedLook> =>
     shouldUseDemoApi()
-      ? Promise.resolve({
-          id: `demo-saved-${Date.now()}`,
-          name: input.name,
-          note: input.note ?? "Saved in demo mode",
-          isWishlist: input.isWishlist ?? false,
-          items: input.productIds
-            .map((productId, index) => {
-              const product = cloneDemoValue(demoData.products.find((entry) => entry.id === productId));
-              if (!product) {
-                return null;
-              }
+      ? Promise.resolve((() => {
+          const runtime = getDemoRuntimeState();
+          const saved = {
+            id: `demo-saved-${Date.now()}`,
+            name: input.name,
+            note: input.note ?? "Saved in demo mode",
+            isWishlist: input.isWishlist ?? false,
+            items: input.productIds
+              .map((productId, index) => {
+                const product = cloneDemoValue(demoData.products.find((entry) => entry.id === productId));
+                if (!product) {
+                  return null;
+                }
 
-              return {
-                id: `demo-item-${index + 1}`,
-                productId,
-                product
-              } satisfies SavedLookItem;
-            })
-            .filter(Boolean) as SavedLookItem[]
-        } as SavedLook)
+                return {
+                  id: `demo-item-${index + 1}`,
+                  productId,
+                  product
+                } satisfies SavedLookItem;
+              })
+              .filter(Boolean) as SavedLookItem[],
+            recommendedProducts: input.productIds
+              .map((productId) => cloneDemoValue(demoData.products.find((entry) => entry.id === productId)))
+              .filter(Boolean) as Product[]
+          } satisfies SavedLook;
+
+          runtime.savedLooks = [saved, ...runtime.savedLooks];
+          syncDemoProfileToStore();
+          return cloneDemoValue(saved);
+        })())
       : apiFetch("/saved-looks", {
           method: "POST",
           body: JSON.stringify({ userId, ...input })
@@ -539,15 +626,43 @@ export const mobileApi = {
     }
   ): Promise<TryOnRequest> =>
     shouldUseDemoApi()
-      ? Promise.resolve(
-          cloneDemoValue({
-            ...demoData.tryOnRequest,
+      ? Promise.resolve((() => {
+          const runtime = getDemoRuntimeState();
+          const product = demoData.products.find((entry) => entry.variants?.some((variant) => variant.id === variantId)) ?? demoData.products[0];
+          const variant = product.variants?.find((entry) => entry.id === variantId) ?? product.variants?.[0];
+          runtime.tryOnRequest = {
+            ...cloneDemoValue(runtime.tryOnRequest),
+            id: `demo-tryon-${Date.now()}`,
             userId,
             variantId,
-            fitStyle: input.fitStyle ?? demoData.tryOnRequest.fitStyle,
-            comparisonLabel: input.comparisonLabel ?? demoData.tryOnRequest.comparisonLabel
-          })
-        )
+            fitStyle: input.fitStyle ?? runtime.tryOnRequest.fitStyle,
+            comparisonLabel: input.comparisonLabel ?? product.name,
+            imageUrl: input.imageUrl ?? runtime.profile.avatarUrl ?? runtime.tryOnRequest.imageUrl,
+            status: "COMPLETED",
+            statusMessage: "Demo try-on ready",
+            requestedAt: new Date().toISOString(),
+            processedAt: new Date().toISOString(),
+            variant: variant ? { ...cloneDemoValue(variant), product: cloneDemoValue(product) } : runtime.tryOnRequest.variant,
+            garmentImageUrl: variant?.imageUrl ?? product.imageUrl ?? runtime.tryOnRequest.garmentImageUrl,
+            result: {
+              id: runtime.tryOnRequest.result?.id ?? demoData.tryOnRequest.result?.id ?? `demo-tryon-result-${Date.now()}`,
+              outputImageUrl:
+                runtime.tryOnRequest.result?.outputImageUrl ??
+                demoData.tryOnRequest.result?.outputImageUrl ??
+                runtime.tryOnRequest.imageUrl,
+              overlayImageUrl: runtime.tryOnRequest.result?.overlayImageUrl ?? demoData.tryOnRequest.result?.overlayImageUrl ?? null,
+              confidence: runtime.tryOnRequest.result?.confidence ?? demoData.tryOnRequest.result?.confidence ?? 0.9,
+              requestId: `demo-tryon-${Date.now()}`,
+              summary: `${product.name} lands as a strong ${runtime.profile.fitPreference ?? "regular"} fit with high screenshot confidence.`,
+              metadata: {
+                ...(runtime.tryOnRequest.result?.metadata ?? {}),
+                fitStyle: input.fitStyle ?? runtime.profile.fitPreference ?? "regular",
+                selectedColor: product.baseColor
+              }
+            }
+          };
+          return cloneDemoValue(runtime.tryOnRequest);
+        })())
       : apiFetch("/try-on/requests", {
           method: "POST",
           body: JSON.stringify({ userId, variantId, ...input })
@@ -563,7 +678,26 @@ export const mobileApi = {
     }
   ) => {
     if (shouldUseDemoApi()) {
-      return cloneDemoValue(demoData.tryOnRequest);
+      const runtime = getDemoRuntimeState();
+      runtime.tryOnRequest.imageUrl = asset.uri || runtime.tryOnRequest.imageUrl;
+      runtime.tryOnRequest.sourceUpload = {
+        ...(runtime.tryOnRequest.sourceUpload ?? demoData.tryOnRequest.sourceUpload!),
+        id: `upload-source-${Date.now()}`,
+        publicUrl: asset.uri || runtime.tryOnRequest.imageUrl
+      };
+      if (input?.garmentAsset) {
+        runtime.tryOnRequest.garmentImageUrl = input.garmentAsset.uri || runtime.tryOnRequest.garmentImageUrl;
+        runtime.tryOnRequest.garmentUpload = {
+          ...(runtime.tryOnRequest.garmentUpload ?? demoData.tryOnRequest.garmentUpload!),
+          id: `upload-garment-${Date.now()}`,
+          publicUrl: input.garmentAsset.uri || runtime.tryOnRequest.garmentImageUrl!
+        };
+      }
+      return mobileApi.createTryOn(userId, variantId, {
+        fitStyle: input?.fitStyle,
+        comparisonLabel: input?.comparisonLabel,
+        imageUrl: asset.uri
+      });
     }
 
     const sourceSession = await mobileApi.createUploadSession(userId, asset, "try-on-source");
@@ -584,7 +718,7 @@ export const mobileApi = {
     });
   },
   tryOnResult: (requestId: string): Promise<TryOnRequest> =>
-    shouldUseDemoApi() ? Promise.resolve(cloneDemoValue(demoData.tryOnRequest)) : apiFetch(`/try-on/requests/${requestId}`),
+    shouldUseDemoApi() ? Promise.resolve(cloneDemoValue(getDemoRuntimeState().tryOnRequest)) : apiFetch(`/try-on/requests/${requestId}`),
   shareLook: (input: { tryOnRequestId?: string; savedLookId?: string; channel: string }): Promise<ShareEvent> =>
     apiFetch("/engagement/share-events", {
       method: "POST",

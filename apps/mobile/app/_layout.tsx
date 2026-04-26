@@ -76,10 +76,10 @@ export default function RootLayout() {
   }
 
   if (!isAuthenticated && !isPublicRoute) {
-    return <Redirect href="/onboarding" />;
+    return <Redirect href="/auth" />;
   }
 
-  if (isAuthenticated && rootSegment != null && publicRoutes.has(rootSegment)) {
+  if (isAuthenticated && rootSegment === "auth") {
     return <Redirect href="/feed" />;
   }
 
@@ -106,10 +106,13 @@ export default function RootLayout() {
         <Stack.Screen name="discover" options={{ headerShown: false }} />
         <Stack.Screen name="demo-checklist" options={{ title: "Demo Checklist" }} />
         <Stack.Screen name="measurements" options={{ title: "Measurements" }} />
+        <Stack.Screen name="style-preferences" options={{ title: "Style Preferences" }} />
+        <Stack.Screen name="budget" options={{ title: "Budget" }} />
         <Stack.Screen name="recommendations" options={{ title: "Recommendations" }} />
         <Stack.Screen name="saved-looks" options={{ headerShown: false }} />
         <Stack.Screen name="shops" options={{ headerShown: false }} />
         <Stack.Screen name="tryon-upload" options={{ headerShown: false }} />
+        <Stack.Screen name="processing" options={{ headerShown: false }} />
         <Stack.Screen name="tryon-result" options={{ title: "Try-On Result" }} />
         <Stack.Screen name="rewards" options={{ title: "Rewards" }} />
         <Stack.Screen name="referrals" options={{ title: "Referrals" }} />
