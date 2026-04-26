@@ -344,11 +344,12 @@ class UsersService {
         userId: string;
         name: string;
         note: string | null;
+        isWishlist: boolean;
         createdAt: Date;
         updatedAt: Date;
       }>
     >(Prisma.sql`
-      SELECT id, "userId", name, note, "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, "isWishlist", "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE "userId" = ${userId}
       ORDER BY "updatedAt" DESC
@@ -365,7 +366,6 @@ class UsersService {
 
     return looks.map((look) => ({
       ...look,
-      isWishlist: false,
       items: items.filter((item) => item.savedLookId === look.id)
     }));
   }

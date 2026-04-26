@@ -9,7 +9,7 @@
       "environment": "preview",
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://fitmeapi-production.up.railway.app",
+        "EXPO_PUBLIC_API_URL": "https://fitme-api-237152691367.asia-south1.run.app",
         "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true"
       },
       "android": {
@@ -20,7 +20,7 @@
     "production": {
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://fitmeapi-production.up.railway.app",
+        "EXPO_PUBLIC_API_URL": "https://fitme-api-237152691367.asia-south1.run.app",
         "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true"
       },
       "android": {

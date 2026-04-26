@@ -19,10 +19,20 @@ import type { FitIssue } from "../../types/api";
 
 const fitStyles = ["balanced", "relaxed", "tailored"];
 const vibes = [
-  { id: "midnight-glam", title: "Midnight Glam", subtitle: "Glossy contrast and stronger shine." },
-  { id: "soft-campus", title: "Soft Campus", subtitle: "Lighter polish with relaxed styling." },
-  { id: "editorial-street", title: "Editorial Street", subtitle: "Sharper framing and moodier energy." }
+  { id: "cyberpunk-city", title: "Cyberpunk City", subtitle: "Sharper glow, moodier contrast." },
+  { id: "cozy-coffee-shop", title: "Coffee Shop", subtitle: "Softer indoor warmth and casual framing." },
+  { id: "y2k-studio", title: "Y2K Studio", subtitle: "Cleaner flash, brighter pop, more playful tone." }
 ] as const;
+
+function fitTone(fitLabel?: string | null) {
+  if (fitLabel === "slim") {
+    return "accent" as const;
+  }
+  if (fitLabel === "relaxed") {
+    return "info" as const;
+  }
+  return "neutral" as const;
+}
 
 function confidenceTone(confidence?: number) {
   if (!confidence) {
@@ -35,16 +45,6 @@ function confidenceTone(confidence?: number) {
     return "info" as const;
   }
   return "warning" as const;
-}
-
-function fitTone(fitLabel?: string | null) {
-  if (fitLabel === "slim") {
-    return "accent" as const;
-  }
-  if (fitLabel === "relaxed") {
-    return "info" as const;
-  }
-  return "neutral" as const;
 }
 
 function issueTone(issue: FitIssue) {
@@ -63,6 +63,7 @@ export function TryOnUploadScreen() {
   const profile = useAppStore((state) => state.profile);
   const setLastTryOnRequestId = useAppStore((state) => state.setLastTryOnRequestId);
   const { data, loading, error } = useAsyncResource(() => mobileApi.products(), []);
+
   const [selectedImage, setSelectedImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [selectedGarment, setSelectedGarment] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
@@ -71,32 +72,33 @@ export function TryOnUploadScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const firstProduct = data?.[0];
-  const variants = firstProduct?.variants ?? [];
+  const featuredProduct = data?.[0];
+  const variants = featuredProduct?.variants ?? [];
   const selectedVariant = variants[selectedVariantIndex] ?? variants[0];
-  const sizeOptions = variants.map((variant) => variant.sizeLabel ?? "One");
-  const activeSelfUri = selectedImage?.uri ?? profile?.avatarUrl ?? null;
-  const activeGarmentUri = selectedGarment?.uri ?? selectedVariant?.imageUrl ?? firstProduct?.imageUrl ?? null;
-
-  const colorOptions = useMemo(
-    () => Array.from(new Set(variants.map((variant) => variant.color).filter(Boolean))) as string[],
-    [variants]
-  );
+  const sizeOptions = variants.map((variant) => variant.sizeLabel ?? "One size");
+  const selfImageUri = selectedImage?.uri ?? profile?.avatarUrl ?? null;
+  const garmentImageUri = selectedGarment?.uri ?? selectedVariant?.imageUrl ?? featuredProduct?.imageUrl ?? null;
+  const comparisonLabel = `${vibes.find((entry) => entry.id === vibe)?.title ?? "Scene"} / ${featuredProduct?.name ?? "Look"} / ${selectedVariant?.sizeLabel ?? "M"}`;
 
   const {
     data: fitPreview,
     loading: fitLoading
   } = useAsyncResource(async () => {
-    if (!firstProduct?.id || !selectedVariant?.id) {
+    if (!featuredProduct?.id || !selectedVariant?.id) {
       return null;
     }
 
-    return mobileApi.productFitPreview(firstProduct.id, {
+    return mobileApi.productFitPreview(featuredProduct.id, {
       variantId: selectedVariant.id,
       chosenSizeLabel: selectedVariant.sizeLabel,
       fitPreference: profile?.fitPreference ?? "regular"
     });
-  }, [firstProduct?.id, profile?.fitPreference, selectedVariant?.id, selectedVariant?.sizeLabel]);
+  }, [featuredProduct?.id, profile?.fitPreference, selectedVariant?.id, selectedVariant?.sizeLabel]);
+
+  const colorOptions = useMemo(
+    () => Array.from(new Set(variants.map((variant) => variant.color).filter(Boolean))) as string[],
+    [variants]
+  );
 
   const pickImage = async (kind: "self" | "garment", source: "camera" | "library") => {
     setSubmitError(null);
@@ -141,7 +143,6 @@ export function TryOnUploadScreen() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const comparisonLabel = `${firstProduct?.name ?? "Look"} / ${selectedVariant.sizeLabel ?? "size"} / ${vibe}`;
       const created = selectedImage
         ? await mobileApi.createTryOnFromAssets(
             userId,
@@ -173,13 +174,13 @@ export function TryOnUploadScreen() {
           : null;
 
       if (!created) {
-        throw new Error("Select a self image or use your uploaded profile image first.");
+        throw new Error("Select a self image or use your saved profile photo first.");
       }
 
       setLastTryOnRequestId(created.id);
       router.push("/tryon-result");
     } catch (nextError: unknown) {
-      setSubmitError(nextError instanceof Error ? nextError.message : "Failed to start try-on");
+      setSubmitError(nextError instanceof Error ? nextError.message : "Failed to start try-on.");
     } finally {
       setSubmitting(false);
     }
@@ -188,7 +189,7 @@ export function TryOnUploadScreen() {
   if (loading) {
     return (
       <Screen tone="dark">
-        <LoadingState title="Try-On" subtitle="Preparing upload, garment, and product context." />
+        <LoadingState title="Try-On" subtitle="Preparing camera, catalog, and fit preview context." />
       </Screen>
     );
   }
@@ -196,7 +197,7 @@ export function TryOnUploadScreen() {
   if (error) {
     return (
       <Screen tone="dark">
-        <ErrorState title="Try-On" message="The upload flow could not load its product context." actionLabel="Go to feed" onRetry={() => router.push("/feed")} />
+        <ErrorState title="Try-On" message="The try-on screen could not load product context." actionLabel="Feed" onRetry={() => router.push("/feed")} />
       </Screen>
     );
   }
@@ -204,7 +205,7 @@ export function TryOnUploadScreen() {
   if (!selectedVariant?.id) {
     return (
       <Screen tone="dark">
-        <EmptyState title="No try-on item available" message="The catalog currently has no variant ready for the try-on flow." actionLabel="View recommendations" onAction={() => router.push("/recommendations")} />
+        <EmptyState title="No try-on garment available" message="The catalog does not currently expose a garment variant for try-on." actionLabel="Shops" onAction={() => router.push("/retail")} />
       </Screen>
     );
   }
@@ -214,74 +215,78 @@ export function TryOnUploadScreen() {
       <SectionCard
         tone="dark"
         eyebrow="Try-On"
-        title="Upload, frame, and generate"
-        subtitle="The entry flow now behaves like a camera stage: clear self-image status, garment override, vibe selection, and a strong generation CTA."
+        title="Capture fit"
+        subtitle="Photo, garment, and scene vibe all live in one stage before the request is created."
       >
-        <View style={styles.statusRow}>
-          <Pill label={activeSelfUri ? "Self image ready" : "Self image needed"} tone={activeSelfUri ? "success" : "warning"} />
-          <Pill label={selectedGarment ? "Custom garment" : "Catalog garment"} tone="info" />
-          <Pill label={vibes.find((entry) => entry.id === vibe)?.title ?? "Vibe"} tone="accent" />
+        <View style={styles.appbar}>
+          <Pressable onPress={() => void pickImage("self", "camera")} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <Feather name="camera" size={18} color={colors.inkOnDark} />
+          </Pressable>
+          <View style={styles.appbarCopy}>
+            <Text style={styles.appbarTitle}>Capture fit</Text>
+            <Text style={styles.appbarText}>Photo, garment, vibe.</Text>
+          </View>
+          <Pressable onPress={() => void pickImage("self", "library")} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <Feather name="upload" size={18} color={colors.inkOnDark} />
+          </Pressable>
         </View>
 
-        <View style={styles.stage}>
-          <View style={styles.stagePanel}>
-            <Text style={styles.stageLabel}>Self capture</Text>
-            <View style={styles.frame}>
-              {activeSelfUri ? <Image source={{ uri: activeSelfUri }} style={styles.frameImage} /> : <Feather name="user" size={28} color={colors.inkOnDarkSoft} />}
-              <View style={styles.frameCorners} />
+        <View style={styles.cameraStage}>
+          {selfImageUri ? <Image source={{ uri: selfImageUri }} style={styles.cameraImage} /> : null}
+          <View style={styles.frame} />
+          {!selfImageUri ? (
+            <View style={styles.cameraHint}>
+              <Feather name="image" size={22} color={colors.inkOnDarkSoft} />
+              <Text style={styles.cameraHintText}>Start camera or upload a photo.</Text>
             </View>
-            <Text style={styles.stageText}>
-              {selectedImage?.fileName ??
-                (profile?.avatarUrl ? "Using your uploaded profile image until you replace it." : "Choose a clear front-facing image to avoid a weak try-on render.")}
-            </Text>
-            <View style={styles.actionRow}>
-              <PrimaryButton onPress={() => pickImage("self", "camera")} variant="secondary" size="sm">
-                Camera
-              </PrimaryButton>
-              <PrimaryButton onPress={() => pickImage("self", "library")} variant="secondary" size="sm">
-                Upload
-              </PrimaryButton>
-            </View>
-          </View>
+          ) : null}
+        </View>
 
-          <View style={styles.stagePanel}>
-            <Text style={styles.stageLabel}>Garment source</Text>
-            <View style={styles.frame}>
-              {activeGarmentUri ? <Image source={{ uri: activeGarmentUri }} style={styles.frameImage} /> : <Feather name="shopping-bag" size={28} color={colors.inkOnDarkSoft} />}
-              <View style={styles.frameCorners} />
-            </View>
-            <Text style={styles.stageText}>
-              {selectedGarment?.fileName ?? "Use the catalog garment or override it with a custom piece for a different visual test."}
-            </Text>
-            <View style={styles.actionRow}>
-              <PrimaryButton onPress={() => pickImage("garment", "camera")} variant="secondary" size="sm">
-                Camera
-              </PrimaryButton>
-              <PrimaryButton onPress={() => pickImage("garment", "library")} variant="secondary" size="sm">
-                Upload
-              </PrimaryButton>
-            </View>
+        <View style={styles.buttonRow}>
+          <PrimaryButton onPress={() => void pickImage("self", "camera")} variant="secondary">
+            Start camera
+          </PrimaryButton>
+          <PrimaryButton onPress={() => void pickImage("self", "camera")} variant="secondary">
+            Capture
+          </PrimaryButton>
+          <PrimaryButton onPress={() => void pickImage("self", "library")}>Upload</PrimaryButton>
+        </View>
+
+        <View style={styles.previewGrid}>
+          <View style={styles.previewCard}>
+            {selfImageUri ? <Image source={{ uri: selfImageUri }} style={styles.previewImage} /> : <Text style={styles.previewEmpty}>Your photo</Text>}
+          </View>
+          <Pressable onPress={() => void pickImage("garment", "library")} style={({ pressed }) => [styles.previewCard, pressed && styles.pressed]}>
+            {garmentImageUri ? <Image source={{ uri: garmentImageUri }} style={styles.previewImage} /> : <Text style={styles.previewEmpty}>Garment</Text>}
+          </Pressable>
+        </View>
+
+        <View style={styles.configPanel}>
+          <Text style={styles.sectionTitle}>Scene vibe</Text>
+          <Text style={styles.sectionText}>{vibes.find((entry) => entry.id === vibe)?.title ?? "Scene vibe"}</Text>
+          <View style={styles.vibeRow}>
+            {vibes.map((entry) => {
+              const active = entry.id === vibe;
+              return (
+                <Pressable key={entry.id} onPress={() => setVibe(entry.id)} style={({ pressed }) => [styles.vibeChip, active && styles.vibeChipActive, pressed && styles.pressed]}>
+                  <Text style={[styles.vibeChipTitle, active && styles.vibeChipTitleActive]}>{entry.title}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
         <Text style={styles.label}>Size variation</Text>
-        <SegmentedControl options={sizeOptions.length > 0 ? sizeOptions : ["Default"]} selected={selectedVariant.sizeLabel ?? sizeOptions[0]} onSelect={(value) => setSelectedVariantIndex(Math.max(0, sizeOptions.indexOf(value)))} />
+        <SegmentedControl
+          options={sizeOptions.length > 0 ? sizeOptions : ["Default"]}
+          selected={selectedVariant.sizeLabel ?? sizeOptions[0]}
+          onSelect={(value) => setSelectedVariantIndex(Math.max(0, sizeOptions.indexOf(value)))}
+        />
+
         <Text style={styles.label}>Fit style</Text>
         <SegmentedControl options={fitStyles} selected={fitStyle} onSelect={setFitStyle} />
-        <Text style={styles.label}>Vibe</Text>
-        <View style={styles.vibeList}>
-          {vibes.map((entry) => {
-            const active = entry.id === vibe;
-            return (
-              <Pressable key={entry.id} onPress={() => setVibe(entry.id)} style={({ pressed }) => [styles.vibeCard, active && styles.vibeCardActive, pressed && styles.pressed]}>
-                <Text style={[styles.vibeTitle, active && styles.vibeTitleActive]}>{entry.title}</Text>
-                <Text style={[styles.vibeSubtitle, active && styles.vibeSubtitleActive]}>{entry.subtitle}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
 
-        <View style={styles.colorRow}>
+        <View style={styles.chips}>
           {colorOptions.map((color) => (
             <Pill key={color} label={color} tone={color === selectedVariant.color ? "success" : "neutral"} />
           ))}
@@ -289,53 +294,44 @@ export function TryOnUploadScreen() {
 
         {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
 
-        <View style={styles.ctaStrip}>
-          <View style={styles.ctaCopy}>
-            <Text style={styles.ctaTitle}>Ready to generate</Text>
-            <Text style={styles.ctaText}>Uploads are persisted first, then the request is created and polled from the result screen.</Text>
-          </View>
-          <PrimaryButton onPress={submit} disabled={submitting || !activeSelfUri}>
-            {submitting ? "Generating..." : "Generate try-on"}
+        <View style={styles.buttonRow}>
+          <PrimaryButton onPress={submit} disabled={submitting || !selfImageUri}>
+            {submitting ? "Generating..." : "Generate"}
+          </PrimaryButton>
+          <PrimaryButton onPress={() => router.push("/retail")} variant="secondary">
+            Scan product
           </PrimaryButton>
         </View>
       </SectionCard>
 
       <SectionCard
-        eyebrow="Fit Intelligence"
-        title="Recommended size before you render"
-        subtitle="Keep the fit layer up front so users know whether the current selection is worth rendering."
+        tone="dark"
+        eyebrow="Fit Preview"
+        title="Recommended size before render"
+        subtitle="The current try-on request is still grounded in fit intelligence, not just image generation."
       >
         {fitLoading ? (
-          <LoadingState title="Fit guidance" subtitle="Scoring size options for the selected garment." />
+          <LoadingState title="Fit preview" subtitle="Scoring the selected garment against your profile." />
         ) : fitPreview ? (
           <>
-            <View style={styles.fitHero}>
-              <View style={styles.fitHeroCopy}>
-                <Text style={styles.fitHeroEyebrow}>Best current size</Text>
-                <Text style={styles.fitHeroSize}>{fitPreview.recommendedSize ?? "n/a"}</Text>
-                <Text style={styles.fitHeroText}>{fitPreview.explanation}</Text>
-              </View>
-              <View style={styles.fitHeroBadges}>
-                <Pill label={`${fitPreview.fitLabel} fit`} tone={fitTone(fitPreview.fitLabel)} />
-                <Pill label={`${Math.round(fitPreview.confidenceScore * 100)}% confidence`} tone={confidenceTone(fitPreview.confidenceScore)} />
-              </View>
+            <View style={styles.metrics}>
+              <MetricTile label="Best size" value={fitPreview.recommendedSize ?? "--"} caption="Current recommendation" />
+              <MetricTile label="Fit" value={fitPreview.fitLabel} caption="Likely silhouette" />
+              <MetricTile label="Confidence" value={`${Math.round(fitPreview.confidenceScore * 100)}%`} caption="Fit confidence" />
             </View>
-
-            <View style={styles.metricRow}>
-              <MetricTile label="Selected size" value={selectedVariant.sizeLabel ?? "--"} caption="Current variant choice" />
-              <MetricTile label="Fit score" value={`${Math.round(fitPreview.fitScore)}`} caption="Relative suitability" />
+            <View style={styles.chips}>
+              <Pill label={`${fitPreview.fitLabel} fit`} tone={fitTone(fitPreview.fitLabel)} />
+              <Pill label={`${Math.round(fitPreview.confidenceScore * 100)}% confidence`} tone={confidenceTone(fitPreview.confidenceScore)} />
             </View>
-
-            {fitPreview.issues?.length ? (
-              <View style={styles.issueRow}>
-                {fitPreview.issues.slice(0, 3).map((issue) => (
-                  <Pill key={issue.code} label={issue.message} tone={issueTone(issue)} />
-                ))}
-              </View>
-            ) : null}
+            <Text style={styles.fitBody}>{fitPreview.explanation}</Text>
+            <View style={styles.chips}>
+              {fitPreview.issues.slice(0, 3).map((issue) => (
+                <Pill key={issue.code} label={issue.message} tone={issueTone(issue)} />
+              ))}
+            </View>
           </>
         ) : (
-          <EmptyState title="Fit preview missing" message="Fit guidance could not be derived for this product variant." />
+          <EmptyState title="Fit preview unavailable" message="The fit engine could not score this garment yet." />
         )}
       </SectionCard>
     </Screen>
@@ -343,94 +339,146 @@ export function TryOnUploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  statusRow: {
+  appbar: {
     flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  stage: {
+    alignItems: "center",
     gap: 12
   },
-  stagePanel: {
-    borderRadius: 24,
-    padding: 16,
-    backgroundColor: colors.glass,
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.lineDark,
-    gap: 12
+    backgroundColor: "rgba(255,255,255,0.08)"
   },
-  stageLabel: {
+  appbarCopy: {
+    flex: 1,
+    alignItems: "center",
+    gap: 3
+  },
+  appbarTitle: {
     color: colors.inkOnDark,
-    fontSize: 13,
+    fontSize: 21,
+    lineHeight: 24,
     fontWeight: "800"
   },
-  frame: {
-    height: 220,
+  appbarText: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 12,
+    lineHeight: 17
+  },
+  cameraStage: {
+    minHeight: 238,
     borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.18)",
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: colors.lineDark,
+    backgroundColor: "#1b2440",
     alignItems: "center",
     justifyContent: "center"
   },
-  frameImage: {
+  cameraImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: undefined,
+    height: undefined
+  },
+  frame: {
+    width: 168,
+    height: 198,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.58)",
+    borderStyle: "dashed",
+    zIndex: 2
+  },
+  cameraHint: {
+    position: "absolute",
+    alignItems: "center",
+    gap: 8
+  },
+  cameraHintText: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 12
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 9
+  },
+  previewGrid: {
+    flexDirection: "row",
+    gap: 10
+  },
+  previewCard: {
+    flex: 1,
+    height: 116,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.lineDark,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  previewImage: {
     width: "100%",
     height: "100%"
   },
-  frameCorners: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)"
-  },
-  stageText: {
+  previewEmpty: {
     color: colors.inkOnDarkSoft,
-    fontSize: 12,
+    fontSize: 12
+  },
+  configPanel: {
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: colors.lineDark,
+    gap: 8
+  },
+  sectionTitle: {
+    color: colors.inkOnDark,
+    fontSize: 14.5,
+    fontWeight: "800"
+  },
+  sectionText: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 12.5,
     lineHeight: 18
   },
-  actionRow: {
+  vibeRow: {
     flexDirection: "row",
-    gap: 10,
-    flexWrap: "wrap"
+    flexWrap: "wrap",
+    gap: 8
+  },
+  vibeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: colors.lineDark
+  },
+  vibeChipActive: {
+    backgroundColor: "rgba(109,94,252,0.28)",
+    borderColor: "rgba(109,94,252,0.46)"
+  },
+  vibeChipTitle: {
+    color: colors.inkOnDarkSoft,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  vibeChipTitleActive: {
+    color: colors.inkOnDark
   },
   label: {
     color: colors.inkOnDark,
     fontSize: 12,
     fontWeight: "800"
   },
-  vibeList: {
-    gap: 10
-  },
-  vibeCard: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.lineDark,
-    gap: 4
-  },
-  vibeCardActive: {
-    backgroundColor: "rgba(99,91,255,0.22)",
-    borderColor: "rgba(139,131,255,0.38)"
-  },
-  vibeTitle: {
-    color: colors.inkOnDark,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  vibeTitleActive: {
-    color: colors.inkOnDark
-  },
-  vibeSubtitle: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  vibeSubtitleActive: {
-    color: colors.inkOnDark
-  },
-  colorRow: {
+  chips: {
     flexDirection: "row",
     gap: 8,
     flexWrap: "wrap"
@@ -440,69 +488,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18
   },
-  ctaStrip: {
-    borderRadius: 24,
-    padding: 16,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: colors.lineDark,
-    gap: 12
+  metrics: {
+    flexDirection: "row",
+    gap: 10
   },
-  ctaCopy: {
-    gap: 4
-  },
-  ctaTitle: {
-    color: colors.inkOnDark,
-    fontSize: 16,
-    fontWeight: "800"
-  },
-  ctaText: {
+  fitBody: {
     color: colors.inkOnDarkSoft,
-    fontSize: 12,
+    fontSize: 12.5,
     lineHeight: 18
-  },
-  fitHero: {
-    borderRadius: 24,
-    padding: 16,
-    backgroundColor: colors.panelMuted,
-    gap: 10
-  },
-  fitHeroCopy: {
-    gap: 4
-  },
-  fitHeroEyebrow: {
-    color: colors.brand,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1
-  },
-  fitHeroSize: {
-    color: colors.ink,
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: "700"
-  },
-  fitHeroText: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  fitHeroBadges: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  metricRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  issueRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
   },
   pressed: {
-    opacity: 0.92
+    opacity: 0.9
   }
 });

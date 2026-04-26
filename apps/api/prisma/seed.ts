@@ -332,13 +332,46 @@ async function main() {
     }
   });
 
+  const avatarUpload = await prisma.upload.create({
+    data: {
+      userId: demoUser.id,
+      key: "uploads/demo/avatar-image.jpg",
+      mimeType: "image/jpeg",
+      bucket: "fitme-assets",
+      publicUrl: "http://localhost:9000/fitme-assets/uploads/demo/avatar-image.jpg"
+    }
+  });
+
+  const garmentUpload = await prisma.upload.create({
+    data: {
+      userId: demoUser.id,
+      key: "uploads/demo/garment-image.jpg",
+      mimeType: "image/jpeg",
+      bucket: "fitme-assets",
+      publicUrl: "http://localhost:9000/fitme-assets/uploads/demo/garment-image.jpg"
+    }
+  });
+
+  await prisma.profile.update({
+    where: { userId: demoUser.id },
+    data: {
+      avatarUploadId: avatarUpload.id,
+      avatarUrl: avatarUpload.publicUrl,
+      closetStatus: "ACTIVE"
+    }
+  });
+
   const tryOnRequest = await prisma.tryOnRequest.create({
     data: {
       userId: demoUser.id,
       variantId: firstProduct.variants[1].id,
       sourceUploadId: upload.id,
+      garmentUploadId: garmentUpload.id,
       provider: "mock",
       imageUrl: upload.publicUrl,
+      garmentImageUrl: garmentUpload.publicUrl,
+      fitStyle: "balanced",
+      comparisonLabel: "Cyberpunk City / Commuter Jacket / M",
       status: TryOnStatus.COMPLETED,
       statusMessage: "Try-on completed",
       processedAt: new Date()
@@ -352,7 +385,12 @@ async function main() {
       overlayImageUrl: `${firstProduct.imageUrl}?overlay=1`,
       confidence: 0.88,
       summary: "Mock try-on generated successfully with a balanced drape estimate.",
-      metadata: { provider: "mock" }
+      metadata: {
+        provider: "mock",
+        fitStyle: "balanced",
+        selectedColor: firstProduct.variants[1].color,
+        sceneVibe: "Cyberpunk City"
+      }
     }
   });
 
@@ -375,6 +413,25 @@ async function main() {
       items: { create: products.slice(0, 3).map((product) => ({ productId: product.id })) }
     },
     include: { items: true }
+  });
+
+  await prisma.savedLook.create({
+    data: {
+      userId: demoUser.id,
+      name: "Night Market Fit",
+      note: "Saved from the try-on result for a moodier evening scene.",
+      items: { create: products.slice(3, 6).map((product) => ({ productId: product.id })) }
+    }
+  });
+
+  await prisma.savedLook.create({
+    data: {
+      userId: demoUser.id,
+      name: "Liked Campus Edit",
+      note: "Wishlist-backed pieces for campus and creator-style outfits.",
+      isWishlist: true,
+      items: { create: products.slice(6, 9).map((product) => ({ productId: product.id })) }
+    }
   });
 
   const wallet = await (prisma as any).rewardWallet.create({

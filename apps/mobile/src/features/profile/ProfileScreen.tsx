@@ -1,11 +1,9 @@
-import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { MetricTile } from "../../components/MetricTile";
-import { NavigationCard } from "../../components/NavigationCard";
 import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
@@ -13,11 +11,8 @@ import { SectionCard } from "../../components/SectionCard";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateCard";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
-import { colors, fonts, radius } from "../../theme/design";
+import { colors, radius } from "../../theme/design";
 import type { UserProfile } from "../../types/api";
-
-const suggestedStyles = ["minimal", "smart", "sport", "streetwear", "tailored", "casual"];
-const suggestedColors = ["black", "white", "olive", "navy", "cream", "camel", "gray"];
 
 type AvatarDraft = {
   uploadId: string;
@@ -25,64 +20,29 @@ type AvatarDraft = {
   localUri: string;
 } | null;
 
-function parseStyleList(value: unknown) {
+function parsePreferredStyles(value: unknown) {
   return Array.isArray(value) ? value.map(String) : [];
 }
 
-function formatBudgetSummary(budgetLabel: string, budgetMin: string, budgetMax: string) {
-  if (budgetLabel) {
-    return budgetLabel;
-  }
-  if (budgetMin && budgetMax) {
-    return `$${budgetMin}-${budgetMax}`;
-  }
-  if (budgetMax) {
-    return `Up to $${budgetMax}`;
-  }
-  if (budgetMin) {
-    return `From $${budgetMin}`;
-  }
-  return "Not set";
-}
-
-function buildProfilePayload(
-  profile: UserProfile,
-  input: {
-    firstName?: string;
-    lastName?: string;
-    bodyShape?: string;
-    gender?: string;
-    budgetLabel?: string;
-    budgetMin?: string;
-    budgetMax?: string;
-    preferredStyles?: string[];
-    preferredColors?: string[];
-    avoidedColors?: string[];
-    avatarUploadId?: string | null;
-    avatarUrl?: string | null;
-  }
-) {
+function buildProfilePayload(profile: UserProfile, budgetLabel: string) {
   return {
-    firstName: input.firstName?.trim() || profile.firstName,
-    lastName: input.lastName?.trim() || profile.lastName,
-    avatarUploadId: input.avatarUploadId === undefined ? profile.avatarUploadId ?? null : input.avatarUploadId,
-    avatarUrl: input.avatarUrl === undefined ? profile.avatarUrl ?? null : input.avatarUrl,
-    gender: input.gender?.trim() || profile.gender || null,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    avatarUploadId: profile.avatarUploadId ?? null,
+    avatarUrl: profile.avatarUrl ?? null,
+    gender: profile.gender ?? null,
     age: profile.age ?? null,
     heightCm: profile.heightCm ?? null,
     weightKg: profile.weightKg ?? null,
-    bodyShape: input.bodyShape?.trim() || profile.bodyShape || null,
+    bodyShape: profile.bodyShape ?? null,
     fitPreference: profile.fitPreference ?? "regular",
-    budgetMin: input.budgetMin ? Number(input.budgetMin) : profile.budgetMin ?? null,
-    budgetMax: input.budgetMax ? Number(input.budgetMax) : profile.budgetMax ?? null,
-    budgetLabel: input.budgetLabel?.trim() || profile.budgetLabel || null,
+    budgetMin: profile.budgetMin ?? null,
+    budgetMax: profile.budgetMax ?? null,
+    budgetLabel: budgetLabel || profile.budgetLabel || null,
     closetStatus: profile.closetStatus ?? "COMING_SOON",
-    stylePreference: {
-      ...(profile.stylePreference ?? {}),
-      preferredStyles: input.preferredStyles ?? parseStyleList(profile.stylePreference?.preferredStyles)
-    },
-    preferredColors: input.preferredColors ?? profile.preferredColors ?? [],
-    avoidedColors: input.avoidedColors ?? profile.avoidedColors ?? []
+    stylePreference: profile.stylePreference ?? null,
+    preferredColors: profile.preferredColors ?? [],
+    avoidedColors: profile.avoidedColors ?? []
   };
 }
 
@@ -90,28 +50,15 @@ export function ProfileScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
   const userEmail = useAppStore((state) => state.userEmail);
+  const userRole = useAppStore((state) => state.userRole);
   const profile = useAppStore((state) => state.profile);
-  const profileVersion = useAppStore((state) => state.profileVersion);
   const logout = useAppStore((state) => state.logout);
-  const lastTryOnRequestId = useAppStore((state) => state.lastTryOnRequestId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [avatarDraft, setAvatarDraft] = useState<AvatarDraft>(null);
-
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [bodyShape, setBodyShape] = useState("");
-  const [gender, setGender] = useState("");
   const [budgetLabel, setBudgetLabel] = useState("");
-  const [budgetMin, setBudgetMin] = useState("");
-  const [budgetMax, setBudgetMax] = useState("");
-  const [preferredStyles, setPreferredStyles] = useState<string[]>([]);
-  const [preferredColors, setPreferredColors] = useState<string[]>([]);
-  const [avoidedColors, setAvoidedColors] = useState<string[]>([]);
 
   const refreshProfile = useCallback(async () => {
     if (!userId) {
@@ -120,7 +67,8 @@ export function ProfileScreen() {
 
     setLoading(true);
     try {
-      await mobileApi.refreshProfile(userId);
+      const next = await mobileApi.refreshProfile(userId);
+      setBudgetLabel(next.budgetLabel ?? "");
       setError(null);
     } catch (nextError: unknown) {
       setError(nextError instanceof Error ? nextError.message : "Could not load profile");
@@ -140,93 +88,16 @@ export function ProfileScreen() {
   );
 
   useEffect(() => {
-    if (!profile) {
-      return;
+    if (profile) {
+      setBudgetLabel(profile.budgetLabel ?? "");
     }
-
-    setFirstName(profile.firstName ?? "");
-    setLastName(profile.lastName ?? "");
-    setBodyShape(profile.bodyShape ?? "");
-    setGender(profile.gender ?? "");
-    setBudgetLabel(profile.budgetLabel ?? "");
-    setBudgetMin(profile.budgetMin != null ? `${profile.budgetMin}` : "");
-    setBudgetMax(profile.budgetMax != null ? `${profile.budgetMax}` : "");
-    setPreferredColors(profile.preferredColors ?? []);
-    setAvoidedColors(profile.avoidedColors ?? []);
-    setPreferredStyles(parseStyleList(profile.stylePreference?.preferredStyles));
-    setAvatarDraft((current) => {
-      if (!current) {
-        return null;
-      }
-
-      if (profile.avatarUploadId === current.uploadId || profile.avatarUrl === current.publicUrl) {
-        return null;
-      }
-
-      return current;
-    });
-  }, [profile, profileVersion]);
+  }, [profile]);
 
   const latestMeasurement = profile?.measurements?.[0] ?? null;
   const avatarSource = avatarDraft?.localUri ?? avatarDraft?.publicUrl ?? profile?.avatarUrl ?? null;
-  const displayName = `${firstName || profile?.firstName || ""} ${lastName || profile?.lastName || ""}`.trim() || "FitMe Member";
-  const savedLooksCount = profile?.savedLooks?.length ?? 0;
-  const wishlistCount = profile?.savedLooks?.filter((look) => Boolean(look.isWishlist)).length ?? 0;
-  const wardrobeItems = profile?.savedLooks?.slice(0, 4) ?? [];
-  const budgetSummary = formatBudgetSummary(budgetLabel, budgetMin, budgetMax);
-  const hasIdentity = Boolean(firstName.trim() || lastName.trim() || profile?.firstName || profile?.lastName);
-
-  const completionScore = useMemo(
-    () =>
-      [
-        avatarSource,
-        profile?.heightCm,
-        profile?.bodyShape,
-        preferredColors.length > 0,
-        preferredStyles.length > 0,
-        budgetLabel || budgetMin || budgetMax
-      ].filter(Boolean).length,
-    [avatarSource, budgetLabel, budgetMax, budgetMin, preferredColors.length, preferredStyles.length, profile?.bodyShape, profile?.heightCm]
-  );
-
-  const toggleValue = (value: string, list: string[], setter: (next: string[]) => void) => {
-    setter(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
-  };
-
-  const saveProfile = async () => {
-    if (!profile || !userId) {
-      return;
-    }
-
-    setSaving(true);
-    setMessage(null);
-    try {
-      await mobileApi.updateProfile(
-        userId,
-        buildProfilePayload(profile, {
-          firstName,
-          lastName,
-          bodyShape,
-          gender,
-          budgetLabel,
-          budgetMin,
-          budgetMax,
-          preferredStyles,
-          preferredColors,
-          avoidedColors,
-          avatarUploadId: avatarDraft?.uploadId ?? profile.avatarUploadId ?? null,
-          avatarUrl: avatarDraft?.publicUrl ?? profile.avatarUrl ?? null
-        })
-      );
-      setMessage(avatarDraft ? "Profile and photo saved" : "Profile updated");
-      setAvatarDraft(null);
-      setEditorOpen(false);
-    } catch (nextError: unknown) {
-      setMessage(nextError instanceof Error ? nextError.message : "Could not update profile");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const savedLooks = profile?.savedLooks ?? [];
+  const displayName = `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() || "fitcheck.ai user";
+  const styleSummary = parsePreferredStyles(profile?.stylePreference?.preferredStyles).slice(0, 2).join(" • ") || "Style profile";
 
   const pickAvatar = async () => {
     if (!profile || !userId) {
@@ -235,7 +106,7 @@ export function ProfileScreen() {
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setMessage("Photo library permission is required to upload a profile image");
+      setMessage("Photo library permission is required to upload a profile image.");
       return;
     }
 
@@ -253,12 +124,6 @@ export function ProfileScreen() {
     const asset = result.assets[0];
     setUploadingAvatar(true);
     setMessage(null);
-    setAvatarDraft({
-      uploadId: profile.avatarUploadId ?? "",
-      publicUrl: profile.avatarUrl ?? asset.uri,
-      localUri: asset.uri
-    });
-
     try {
       const upload = await mobileApi.uploadProfileImage(userId, {
         uri: asset.uri,
@@ -266,21 +131,39 @@ export function ProfileScreen() {
         mimeType: asset.mimeType
       });
 
-      await mobileApi.updateProfile(
-        userId,
-        buildProfilePayload(profile, {
-          avatarUploadId: upload.id,
-          avatarUrl: upload.publicUrl
-        })
-      );
+      setAvatarDraft({
+        uploadId: upload.id,
+        publicUrl: upload.publicUrl,
+        localUri: asset.uri
+      });
+
+      await mobileApi.updateProfile(userId, {
+        ...buildProfilePayload(profile, budgetLabel),
+        avatarUploadId: upload.id,
+        avatarUrl: upload.publicUrl
+      });
 
       setAvatarDraft(null);
-      setMessage("Profile photo uploaded");
+      setMessage("Profile photo uploaded.");
     } catch (nextError: unknown) {
       setAvatarDraft(null);
-      setMessage(nextError instanceof Error ? nextError.message : "Could not upload profile image");
+      setMessage(nextError instanceof Error ? nextError.message : "Could not upload profile image.");
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const saveBudgetLabel = async () => {
+    if (!profile) {
+      return;
+    }
+
+    setMessage(null);
+    try {
+      await mobileApi.updateProfile(userId, buildProfilePayload(profile, budgetLabel));
+      setMessage("Profile preferences updated.");
+    } catch (nextError: unknown) {
+      setMessage(nextError instanceof Error ? nextError.message : "Could not update profile.");
     }
   };
 
@@ -293,7 +176,7 @@ export function ProfileScreen() {
   if (loading && !profile) {
     return (
       <Screen>
-        <LoadingState title="Profile" subtitle="Loading your profile hub." />
+        <LoadingState title="Profile" subtitle="Loading your wardrobe and account controls." />
       </Screen>
     );
   }
@@ -309,324 +192,241 @@ export function ProfileScreen() {
   if (!profile) {
     return (
       <Screen>
-        <EmptyState title="Profile missing" message="There is no profile data loaded for this account yet." actionLabel="Go to onboarding" onAction={() => router.push("/onboarding")} />
+        <EmptyState title="Profile missing" message="There is no profile data loaded for this account yet." actionLabel="Onboarding" onAction={() => router.push("/onboarding")} />
       </Screen>
     );
   }
 
   return (
     <Screen>
-      <SectionCard eyebrow="Profile" title="Your wardrobe hub" subtitle="Avatar, logout, profile signals, and saved looks stay in one lighter premium surface.">
-        <View style={styles.heroCard}>
-          <View style={styles.heroBackdrop} />
-          <View style={styles.profileHero}>
-            <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}>
-              {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatar} /> : <Feather name="camera" size={22} color={colors.ink} />}
-            </Pressable>
-            <View style={styles.profileCopy}>
-              <Text style={styles.name}>{displayName}</Text>
-              <Text style={styles.email}>{userEmail || "Member account"}</Text>
-              <View style={styles.badgeRow}>
-                <Pill label={`${completionScore}/6 profile signals set`} tone={completionScore >= 4 ? "success" : "warning"} />
-                <Pill label={profile.bodyShape ?? "Shape pending"} tone="neutral" />
-                {uploadingAvatar ? <Pill label="Uploading photo..." tone="info" /> : null}
-              </View>
+      <SectionCard eyebrow="Profile" title="Wardrobe" subtitle="Saved fits, account controls, measurements, and style identity all live here.">
+        <View style={styles.appbar}>
+          <Pressable onPress={() => router.push("/saved")} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <Text style={styles.iconText}>☰</Text>
+          </Pressable>
+          <View style={styles.appbarCopy}>
+            <Text style={styles.appbarTitle}>Wardrobe</Text>
+            <Text style={styles.appbarSub}>Saved fits and account.</Text>
+          </View>
+          <Pressable onPress={() => void handleLogout()} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <Text style={styles.iconText}>⎋</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.profileHead}>
+          <Pressable onPress={pickAvatar} style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}>
+            {avatarSource ? <Image source={{ uri: avatarSource }} style={styles.avatarImage} /> : <Text style={styles.avatarFallback}>AI</Text>}
+          </Pressable>
+          <View style={styles.profileCopy}>
+            <Text style={styles.name}>{displayName}</Text>
+            <Text style={styles.mail}>{userEmail || "student@campus.com"}</Text>
+            <View style={styles.row}>
+              <Pill label={`${savedLooks.length} saved fits`} tone="success" />
+              <Pill label={styleSummary} tone="neutral" />
+              {uploadingAvatar ? <Pill label="Uploading..." tone="info" /> : null}
+              {userRole === "ADMIN" || userRole === "OPERATOR" ? <Pill label="Admin tools" tone="accent" /> : null}
             </View>
           </View>
-
-          <View style={styles.profileActions}>
-            <PrimaryButton onPress={pickAvatar} variant="secondary">
-              Change photo
-            </PrimaryButton>
-            <PrimaryButton onPress={() => setEditorOpen((current) => !current)}>{editorOpen ? "Close editor" : "Edit profile"}</PrimaryButton>
-            <PrimaryButton variant="ghost" onPress={handleLogout}>
-              Logout
-            </PrimaryButton>
-          </View>
-
-          {message ? <Text style={styles.message}>{message}</Text> : null}
         </View>
 
-        <View style={styles.metricGrid}>
-          <MetricTile label="Measurements" value={latestMeasurement ? "Ready" : "Pending"} caption="Cross-screen fit sync" />
-          <MetricTile label="Saved looks" value={`${savedLooksCount}`} caption="Wardrobe memory" />
+        <View style={styles.metrics}>
+          <MetricTile label="Fit" value={latestMeasurement ? "92%" : "--"} caption="Current confidence" />
+          <MetricTile label="Looks" value={`${savedLooks.length}`} caption="Saved wardrobe entries" />
+          <MetricTile label="Budget" value={budgetLabel || "Open"} caption="Current spend label" />
         </View>
-        <View style={styles.metricGrid}>
-          <MetricTile label="Wishlist" value={`${wishlistCount}`} caption="Liked intent signals" />
-          <MetricTile label="Budget" value={budgetSummary} caption="Current spend range" />
-        </View>
-      </SectionCard>
 
-      <SectionCard eyebrow="Navigation" title="Move through your style workflow" subtitle="Profile stays the hub for fit, try-on, wardrobe, retail, and recommendation routes.">
-        <NavigationCard icon="sliders" title="Measurements" subtitle="Refresh sizing inputs and fit preference." badge={latestMeasurement ? "Ready" : "Pending"} onPress={() => router.push("/measurements")} />
-        <NavigationCard icon="camera" title="Try-On" subtitle="Capture or upload a new look with your current profile context." badge={lastTryOnRequestId ? "Recent" : null} onPress={() => router.push("/try-on")} />
-        <NavigationCard icon="heart" title="Wardrobe" subtitle="Review saved looks, liked items, and wardrobe memory." badge={`${savedLooksCount}`} onPress={() => router.push("/saved")} />
-        <NavigationCard icon="shopping-bag" title="Shops" subtitle="Compare offers and outbound retailer paths." onPress={() => router.push("/retail")} />
-        <NavigationCard icon="star" title="Recommendations" subtitle="See ranked picks shaped by fit, color, and budget." onPress={() => router.push("/recommendations")} />
-      </SectionCard>
-
-      <SectionCard eyebrow="Wardrobe" title="Saved fits and liked pieces" subtitle="Saved looks sit directly inside profile so the page remains a true hub.">
-        <View style={styles.wardrobeGrid}>
-          {wardrobeItems.length > 0 ? (
-            wardrobeItems.map((look, index) => (
-              <View key={look.id} style={styles.wardrobeItem}>
-                <View style={[styles.wardrobeThumb, index % 2 === 1 && styles.wardrobeThumbAlt]}>
-                  <Text style={styles.wardrobeThumbText}>{look.isWishlist ? "Liked" : "Saved"}</Text>
-                </View>
-                <View style={styles.wardrobeMeta}>
-                  <Text style={styles.wardrobeTitle}>{look.name}</Text>
-                  <Text style={styles.wardrobeText}>{look.isWishlist ? "Liked garment" : look.note ?? "Saved just now"}</Text>
-                </View>
+        <View style={styles.grid}>
+          {savedLooks.slice(0, 4).map((look, index) => (
+            <View key={look.id} style={styles.wardCard}>
+              <View style={[styles.thumb, index % 2 === 1 && styles.thumbAlt]} />
+              <View style={styles.meta}>
+                <Text style={styles.metaTitle}>{look.name}</Text>
+                <Text style={styles.metaText}>{look.note ?? (look.isWishlist ? "Liked garment" : "Saved just now")}</Text>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyWardrobe}>
-              <Text style={styles.wardrobeText}>Your next saved fit will appear here.</Text>
             </View>
-          )}
+          ))}
+        </View>
+
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Profile controls</Text>
+          <Text style={styles.panelBody}>
+            Change photo, logout, measurements, privacy, notifications, and style presets from this hub.
+          </Text>
+        </View>
+
+        <TextInput
+          style={styles.input}
+          value={budgetLabel}
+          onChangeText={setBudgetLabel}
+          placeholder="Budget label"
+          placeholderTextColor={colors.inkMuted}
+        />
+
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+
+        <View style={styles.buttonRow}>
+          <PrimaryButton onPress={() => void saveBudgetLabel()}>Save profile</PrimaryButton>
+          <PrimaryButton onPress={() => router.push("/measurements")} variant="secondary">
+            Measurements
+          </PrimaryButton>
         </View>
       </SectionCard>
-
-      {editorOpen ? (
-        <SectionCard eyebrow="Identity" title="Update your profile signals" subtitle="Changes save back into the shared profile store so the rest of the app stays synchronized.">
-          <View style={styles.inlineRow}>
-            <TextInput style={[styles.input, styles.half]} placeholder="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" placeholderTextColor={colors.inkMuted} />
-            <TextInput style={[styles.input, styles.half]} placeholder="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" placeholderTextColor={colors.inkMuted} />
-          </View>
-          <View style={styles.inlineRow}>
-            <TextInput style={[styles.input, styles.half]} placeholder="Body shape" value={bodyShape} onChangeText={setBodyShape} placeholderTextColor={colors.inkMuted} />
-            <TextInput style={[styles.input, styles.half]} placeholder="Gender" value={gender} onChangeText={setGender} placeholderTextColor={colors.inkMuted} />
-          </View>
-          <View style={styles.inlineRow}>
-            <TextInput style={[styles.input, styles.half]} placeholder="Budget label" value={budgetLabel} onChangeText={setBudgetLabel} placeholderTextColor={colors.inkMuted} />
-            <TextInput style={[styles.input, styles.half]} placeholder="Budget max" value={budgetMax} onChangeText={setBudgetMax} keyboardType="numeric" placeholderTextColor={colors.inkMuted} />
-          </View>
-          <TextInput style={styles.input} placeholder="Budget min" value={budgetMin} onChangeText={setBudgetMin} keyboardType="numeric" placeholderTextColor={colors.inkMuted} />
-
-          <Text style={styles.label}>Preferred styles</Text>
-          <View style={styles.chipWrap}>
-            {suggestedStyles.map((entry) => {
-              const active = preferredStyles.includes(entry);
-              return (
-                <Pressable key={entry} onPress={() => toggleValue(entry, preferredStyles, setPreferredStyles)} style={[styles.selectChip, active && styles.selectChipActive]}>
-                  <Text style={[styles.selectChipText, active && styles.selectChipTextActive]}>{entry}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.label}>Preferred colors</Text>
-          <View style={styles.chipWrap}>
-            {suggestedColors.map((entry) => {
-              const active = preferredColors.includes(entry);
-              return (
-                <Pressable key={entry} onPress={() => toggleValue(entry, preferredColors, setPreferredColors)} style={[styles.selectChip, active && styles.selectChipActive]}>
-                  <Text style={[styles.selectChipText, active && styles.selectChipTextActive]}>{entry}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.label}>Avoided colors</Text>
-          <View style={styles.chipWrap}>
-            {suggestedColors.map((entry) => {
-              const active = avoidedColors.includes(entry);
-              return (
-                <Pressable key={entry} onPress={() => toggleValue(entry, avoidedColors, setAvoidedColors)} style={[styles.selectChip, active && styles.selectChipActive]}>
-                  <Text style={[styles.selectChipText, active && styles.selectChipTextActive]}>{entry}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View style={styles.editorActions}>
-            <PrimaryButton onPress={saveProfile} disabled={saving || !hasIdentity}>
-              {saving ? "Saving profile..." : "Save profile"}
-            </PrimaryButton>
-            <PrimaryButton onPress={() => router.push("/measurements")} variant="secondary">
-              Measurements
-            </PrimaryButton>
-          </View>
-        </SectionCard>
-      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: 24,
-    padding: 16,
-    backgroundColor: colors.panelMuted,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 16
-  },
-  heroBackdrop: {
-    position: "absolute",
-    top: -38,
-    right: -22,
-    width: 140,
-    height: 140,
-    borderRadius: radius.pill,
-    backgroundColor: "#dfe4ff"
-  },
-  profileHero: {
+  appbar: {
     flexDirection: "row",
-    gap: 16,
-    alignItems: "center"
+    alignItems: "flex-start",
+    gap: 12
   },
-  avatarButton: {
-    width: 92,
-    height: 92,
-    borderRadius: radius.pill,
-    backgroundColor: colors.pageStrong,
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.lineStrong,
-    overflow: "hidden"
+    backgroundColor: colors.panelStrong
+  },
+  iconText: {
+    color: colors.ink,
+    fontSize: 16
+  },
+  appbarCopy: {
+    flex: 1,
+    alignItems: "center",
+    gap: 3
+  },
+  appbarTitle: {
+    color: colors.ink,
+    fontSize: 21,
+    lineHeight: 24,
+    fontWeight: "800"
+  },
+  appbarSub: {
+    color: colors.inkSoft,
+    fontSize: 12,
+    lineHeight: 17
+  },
+  profileHead: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center"
   },
   avatar: {
+    width: 66,
+    height: 66,
+    borderRadius: 22,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#dcdffd"
+  },
+  avatarImage: {
     width: "100%",
     height: "100%"
   },
+  avatarFallback: {
+    color: colors.accent,
+    fontSize: 20,
+    fontWeight: "900"
+  },
   profileCopy: {
     flex: 1,
-    gap: 6
+    gap: 4
   },
   name: {
     color: colors.ink,
-    fontSize: 26,
-    lineHeight: 30,
-    fontFamily: fonts.display
+    fontSize: 18,
+    fontWeight: "800"
   },
-  email: {
+  mail: {
     color: colors.inkSoft,
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 12
   },
-  badgeRow: {
+  row: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
+  },
+  metrics: {
+    flexDirection: "row",
+    gap: 10
+  },
+  grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8
-  },
-  profileActions: {
     gap: 10
+  },
+  wardCard: {
+    width: "48%",
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panelStrong
+  },
+  thumb: {
+    height: 108,
+    backgroundColor: "#eadfd6"
+  },
+  thumbAlt: {
+    backgroundColor: "#d9e2ff"
+  },
+  meta: {
+    padding: 10,
+    gap: 3
+  },
+  metaTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  metaText: {
+    color: colors.inkSoft,
+    fontSize: 11.5
+  },
+  panel: {
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: colors.panelMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 6
+  },
+  panelTitle: {
+    color: colors.ink,
+    fontSize: 14.5,
+    fontWeight: "800"
+  },
+  panelBody: {
+    color: colors.inkSoft,
+    fontSize: 12.5,
+    lineHeight: 18
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: colors.panelStrong,
+    color: colors.ink,
+    fontSize: 14
   },
   message: {
     color: colors.brand,
     fontSize: 12,
     lineHeight: 18
   },
-  metricGrid: {
+  buttonRow: {
     flexDirection: "row",
-    gap: 10
-  },
-  wardrobeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10
-  },
-  wardrobeItem: {
-    width: "48%",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    overflow: "hidden",
-    backgroundColor: colors.panelStrong
-  },
-  wardrobeThumb: {
-    height: 118,
-    backgroundColor: "#e7eaff",
-    padding: 12,
-    justifyContent: "flex-end"
-  },
-  wardrobeThumbAlt: {
-    backgroundColor: "#dce8ff"
-  },
-  wardrobeThumbText: {
-    color: colors.accent,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1
-  },
-  wardrobeMeta: {
-    padding: 10,
-    gap: 3
-  },
-  wardrobeTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  wardrobeText: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  emptyWardrobe: {
-    width: "100%",
-    borderRadius: 18,
-    backgroundColor: colors.panelMuted,
-    padding: 16
-  },
-  inlineRow: {
-    flexDirection: "row",
-    gap: 10
-  },
-  half: {
-    flex: 1
-  },
-  input: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.panelStrong,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    color: colors.ink,
-    fontSize: 13
-  },
-  label: {
-    color: colors.brand,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  selectChip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.panelStrong
-  },
-  selectChipActive: {
-    borderColor: "rgba(99,91,255,0.24)",
-    backgroundColor: colors.accentSoft
-  },
-  selectChipText: {
-    color: colors.brand,
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  selectChipTextActive: {
-    color: colors.accent
-  },
-  editorActions: {
     gap: 10
   },
   pressed: {
-    opacity: 0.92
+    opacity: 0.9
   }
 });

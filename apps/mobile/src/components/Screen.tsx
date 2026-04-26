@@ -1,12 +1,17 @@
 import { PropsWithChildren } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { useAppStore } from "../store/app-store";
 import { colors } from "../theme/design";
+import { AppProfileStrip } from "./AppProfileStrip";
 
 export function Screen({
   children,
-  tone = "light"
-}: PropsWithChildren<{ tone?: "light" | "dark" }>) {
+  tone = "light",
+  showProfileStrip = true
+}: PropsWithChildren<{ tone?: "light" | "dark"; showProfileStrip?: boolean }>) {
+  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
+
   return (
     <ScrollView contentContainerStyle={styles.content} style={[styles.container, tone === "dark" && styles.containerDark]} showsVerticalScrollIndicator={false}>
       {tone === "light" ? (
@@ -22,7 +27,10 @@ export function Screen({
           <View style={styles.darkGlowSide} />
         </>
       )}
-      <View style={styles.body}>{children}</View>
+      <View style={styles.body}>
+        {isAuthenticated && showProfileStrip ? <AppProfileStrip tone={tone} /> : null}
+        {children}
+      </View>
     </ScrollView>
   );
 }

@@ -1,9 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { MetricTile } from "../../components/MetricTile";
 import { Pill } from "../../components/Pill";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
@@ -16,15 +14,22 @@ import { useAppStore } from "../../store/app-store";
 import { colors, radius } from "../../theme/design";
 import type { Recommendation } from "../../types/api";
 
+function formatPrice(value?: number | null) {
+  return value != null ? `$${Math.round(value)}` : "--";
+}
+
 export function ShopsScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
   const { data: recommendations, loading: recommendationLoading, error: recommendationError } = useAsyncResource(
     () => mobileApi.recommendations(userId),
     [userId]
   );
+
   const items = recommendations ?? [];
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedProductId && items[0]?.productId) {
@@ -37,6 +42,22 @@ export function ShopsScreen() {
     [selectedProductId]
   );
 
+  const selectedRecommendation = items.find((item) => item.productId === selectedProductId) ?? items[0] ?? null;
+
+  const saveProducts = async () => {
+    if (!selectedRecommendation?.productId) {
+      return;
+    }
+
+    const saved = await mobileApi.saveLook(userId, {
+      name: `${selectedRecommendation.product?.name ?? "Selected"} wishlist`,
+      note: "Saved from the shopping recommendations screen.",
+      productIds: [selectedRecommendation.productId],
+      isWishlist: true
+    });
+    setSaveMessage(`Saved ${saved.name}`);
+  };
+
   if (recommendationLoading) {
     return (
       <Screen>
@@ -48,7 +69,7 @@ export function ShopsScreen() {
   if (recommendationError) {
     return (
       <Screen>
-        <ErrorState title="Shops" message="Retail partner data could not be loaded." actionLabel="Back to recommendations" onRetry={() => router.push("/recommendations")} />
+        <ErrorState title="Shops" message="Retail partner data could not be loaded." actionLabel="Feed" onRetry={() => router.push("/feed")} />
       </Screen>
     );
   }
@@ -56,270 +77,237 @@ export function ShopsScreen() {
   if (items.length === 0) {
     return (
       <Screen>
-        <EmptyState title="No shop-ready products yet" message="Recommendations need profile, fit, and pricing signals before shop comparison can be useful." actionLabel="See recommendations" onAction={() => router.push("/recommendations")} />
+        <EmptyState title="No shop-ready products yet" message="Recommendations need profile, fit, and pricing signals before shop comparison can be useful." actionLabel="Measurements" onAction={() => router.push("/measurements")} />
       </Screen>
     );
   }
 
-  const comparison = data;
+  if (loading) {
+    return (
+      <Screen>
+        <LoadingState title="Shop comparison" subtitle="Comparing offers for the selected recommendation." />
+      </Screen>
+    );
+  }
+
+  if (error || !data || !data.productId) {
+    return (
+      <Screen>
+        <ErrorState title="Offer comparison" message="Offer comparison is unavailable for the selected item." actionLabel="Feed" onRetry={() => router.push("/feed")} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
       <SectionCard
-        eyebrow="Shops"
-        title="Retail comparison built for handoff"
-        subtitle="Badges, pricing, and CTA order are stronger, but the screen still reads as a practical commerce surface."
+        eyebrow="Shop"
+        title="Complete look"
+        subtitle="Products are ranked by fit, vibe, budget, and live retailer availability from the current recommendation set."
       >
-        <View style={styles.topCard}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.headerLabel}>Retail handoff</Text>
-            <Text style={styles.headerTitle}>{comparison?.productName ?? items[0]?.product?.name ?? "Shop comparison"}</Text>
-            <Text style={styles.headerText}>Keep selection, fit context, and price clarity visible before sending users off-platform.</Text>
-          </View>
-          <Pressable onPress={() => router.push("/recommendations")} style={({ pressed }) => [styles.profileChip, pressed && styles.pressed]}>
-            <Feather name="star" size={14} color={colors.ink} />
-            <Text style={styles.profileChipText}>Recommendations</Text>
-          </Pressable>
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>Scene-matched picks</Text>
+          <Text style={styles.heroText}>
+            {selectedRecommendation?.explanation ??
+              "Products are ranked by fit, vibe, budget, availability, and similarity to the generated result."}
+          </Text>
         </View>
 
         <View style={styles.row}>
-          <Pill label={`${items.length} recommended products`} tone="accent" />
-          {comparison?.recommendedSize ? <Pill label={`Recommended ${comparison.recommendedSize}`} tone="success" /> : null}
-          {(comparison?.badges ?? []).slice(0, 2).map((badge) => (
-            <Pill key={badge} label={badge} tone={badge.includes("Price") ? "warning" : "info"} />
-          ))}
+          <Pill label={selectedRecommendation?.rankingBadges?.[0] ?? "Best vibe"} tone="success" />
+          <Pill label={formatPrice(data.lowestPrice)} tone="warning" />
+          <Pill label={`${data.offers.length} offers`} tone="accent" />
         </View>
+
         <SegmentedControl
           options={items.slice(0, 4).map((item: Recommendation) => item.product?.name ?? item.productId)}
-          selected={items.find((item) => item.productId === selectedProductId)?.product?.name ?? items[0]?.product?.name ?? ""}
+          selected={selectedRecommendation?.product?.name ?? selectedRecommendation?.productId ?? ""}
           onSelect={(label) => setSelectedProductId(items.find((item) => (item.product?.name ?? item.productId) === label)?.productId ?? null)}
         />
+
+        <View style={styles.productCard}>
+          <View style={styles.productArt} />
+          <View style={styles.productCopy}>
+            <Text style={styles.productTitle}>{data.productName ?? selectedRecommendation?.product?.name ?? "Selected product"}</Text>
+            <Text style={styles.productText}>
+              {selectedRecommendation?.fitWarning ??
+                "Strong match for the selected vibe with live retailer pricing and fit guidance."}
+            </Text>
+            <View style={styles.row}>
+              <Pill label={selectedRecommendation?.rankingBadges?.[0] ?? "Best vibe"} tone="success" />
+              <Pill label={formatPrice(data.lowestPrice)} tone="warning" />
+              <Pill label={`${data.offers.length} offers`} tone="accent" />
+            </View>
+            <Text style={styles.priceLine}>
+              {formatPrice(data.lowestPrice)} <Text style={styles.priceSub}>{data.offers.slice(0, 2).map((offer) => offer.shop?.name).filter(Boolean).join(" · ") || "Retailers"}</Text>
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Bundle suggestion</Text>
+          <Text style={styles.panelBody}>
+            {selectedRecommendation?.reasonTags?.length
+              ? `Push the look further with ${selectedRecommendation.reasonTags.slice(0, 2).join(" and ")} signals from your saved style profile.`
+              : "Add accessories or complementary pieces that reinforce the generated scene aesthetic."}
+          </Text>
+        </View>
+
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Recommendation logic</Text>
+          <Text style={styles.panelBody}>
+            Explain every suggestion using fit score, price range, style compatibility, size confidence, and retailer availability.
+          </Text>
+        </View>
+
+        {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
+
+        <View style={styles.buttonRow}>
+          <PrimaryButton onPress={() => data.bestOffer?.externalUrl && Linking.openURL(data.bestOffer.externalUrl)}>
+            Open retailer
+          </PrimaryButton>
+          <PrimaryButton onPress={() => void saveProducts()} variant="secondary">
+            Save products
+          </PrimaryButton>
+        </View>
       </SectionCard>
 
-      {loading ? (
-        <LoadingState title="Offers" subtitle="Comparing connected shops for the selected item." />
-      ) : error || !comparison || !comparison.productId ? (
-        <ErrorState title="Offer comparison" message="Offer comparison is unavailable for the selected item." actionLabel="Back to recommendations" onRetry={() => router.push("/recommendations")} />
-      ) : (
-        <>
-          <SectionCard eyebrow="Offer Detail" title={comparison.productName ?? "Selected item"} subtitle="The top metrics stay up front so users can compare retailers quickly.">
-            <View style={styles.metricRow}>
-              <MetricTile label="Lowest" value={comparison.lowestPrice != null ? `$${Math.round(comparison.lowestPrice)}` : "--"} caption="Best visible price" />
-              <MetricTile label="Highest" value={comparison.highestPrice != null ? `$${Math.round(comparison.highestPrice)}` : "--"} caption="Top offer in range" />
+      <SectionCard eyebrow="Offers" title="Retail comparison" subtitle="The offer list remains practical while keeping the visual hierarchy tighter and easier to scan.">
+        {data.offers.map((offer) => (
+          <View key={offer.id} style={styles.offerCard}>
+            <View style={styles.offerHeader}>
+              <View>
+                <Text style={styles.offerTitle}>{offer.shop?.name ?? "Retailer"}</Text>
+                <Text style={styles.offerSub}>{offer.shop?.region ?? "Online"} region</Text>
+              </View>
+              <Pill label={offer.stock > 0 ? "In stock" : "Sold out"} tone={offer.stock > 0 ? "success" : "danger"} />
             </View>
-            <View style={styles.metricRow}>
-              <MetricTile label="Offers" value={`${comparison.offers.length}`} caption="Available buy paths" />
-              <MetricTile label="Fit" value={comparison.fitLabel ?? "regular"} caption={comparison.recommendedSize ? `Size ${comparison.recommendedSize}` : "Size guidance unavailable"} />
+            <View style={styles.row}>
+              <Pill label={formatPrice(offer.price)} tone="warning" />
+              <Pill label={`${offer.stock} units`} tone="info" />
+              <Pill label={offer.variant?.sizeLabel ?? data.recommendedSize ?? "One size"} tone="neutral" />
             </View>
-          </SectionCard>
-
-          {comparison.bestOffer ? (
-            <SectionCard eyebrow="Best Offer" title={`${comparison.bestOffer.shop?.name ?? "Retailer"} leads`} subtitle="The strongest CTA stays obvious: best price, visible stock, then the outbound path.">
-              <View style={styles.bestOfferCard}>
-                <View style={styles.row}>
-                  <Pill label={`$${Math.round(comparison.bestOffer.price ?? 0)}`} tone="warning" />
-                  <Pill label={(comparison.bestOffer.stock ?? 0) > 0 ? "In stock" : "Sold out"} tone={(comparison.bestOffer.stock ?? 0) > 0 ? "success" : "danger"} />
-                  <Pill label={comparison.bestOffer.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"} tone="info" />
-                </View>
-                <Text style={styles.offerText}>This is the cleanest handoff right now based on visible price and availability.</Text>
-                <View style={styles.ctaRow}>
-                  <PrimaryButton onPress={() => comparison.bestOffer?.externalUrl && Linking.openURL(comparison.bestOffer.externalUrl)}>
-                    Buy now
-                  </PrimaryButton>
-                  <PrimaryButton onPress={() => router.push("/try-on")} variant="secondary">
-                    Try on again
-                  </PrimaryButton>
-                </View>
-              </View>
-            </SectionCard>
-          ) : null}
-
-          <SectionCard eyebrow="Partner Cards" title="Shop comparison" subtitle="Retailer cards stay readable while the badges and CTA hierarchy become more assertive.">
-            {comparison.offers.map((offer) => (
-              <View key={offer.id} style={styles.shopCard}>
-                <View style={styles.shopHeader}>
-                  <View style={styles.shopMeta}>
-                    <Text style={styles.shopTitle}>{offer.shop?.name ?? "Retailer"}</Text>
-                    <Text style={styles.shopSubtitle}>{offer.shop?.region ?? "Online"} region</Text>
-                  </View>
-                  <Pill label={offer.stock > 0 ? "In stock" : "Sold out"} tone={offer.stock > 0 ? "success" : "danger"} />
-                </View>
-                <View style={styles.offerStrip}>
-                  <View style={styles.offerMetric}>
-                    <Feather name="tag" size={15} color={colors.accent} />
-                    <Text style={styles.offerLabel}>${Math.round(offer.price)}</Text>
-                  </View>
-                  <View style={styles.offerMetric}>
-                    <Feather name="box" size={15} color={colors.accent} />
-                    <Text style={styles.offerLabel}>{offer.stock} units</Text>
-                  </View>
-                  <View style={styles.offerMetric}>
-                    <Feather name="shopping-bag" size={15} color={colors.accent} />
-                    <Text style={styles.offerLabel}>{offer.variant?.sizeLabel ?? comparison.recommendedSize ?? "One size"}</Text>
-                  </View>
-                </View>
-                <Text style={styles.offerText}>Outbound handoff is ready through the retailer link for this specific offer.</Text>
-                <PrimaryButton onPress={() => Linking.openURL(offer.externalUrl)}>Visit shop</PrimaryButton>
-              </View>
-            ))}
-            {comparison.cheaperAlternative ? (
-              <View style={styles.altCard}>
-                <Text style={styles.altTitle}>Cheaper alternative</Text>
-                <Text style={styles.altText}>
-                  {comparison.cheaperAlternative.name} from ${Math.round(comparison.cheaperAlternative.offerSummary?.lowestPrice ?? 0)}
-                </Text>
-                <PrimaryButton onPress={() => router.push("/feed")} variant="secondary">
-                  View alternative
-                </PrimaryButton>
-              </View>
-            ) : null}
-          </SectionCard>
-        </>
-      )}
+            <PrimaryButton onPress={() => Linking.openURL(offer.externalUrl)} variant="secondary">
+              Visit shop
+            </PrimaryButton>
+          </View>
+        ))}
+      </SectionCard>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  topCard: {
+  hero: {
     borderRadius: 24,
     padding: 16,
-    backgroundColor: colors.panelMuted,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 12
+    backgroundColor: colors.accent,
+    gap: 8
   },
-  headerCopy: {
-    gap: 4
+  heroTitle: {
+    color: colors.panelStrong,
+    fontSize: 17,
+    fontWeight: "800"
   },
-  headerLabel: {
-    color: colors.brand,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase"
-  },
-  headerTitle: {
-    color: colors.ink,
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: "700"
-  },
-  headerText: {
-    color: colors.inkSoft,
-    fontSize: 12,
+  heroText: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 12.5,
     lineHeight: 18
   },
-  profileChip: {
+  row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: "flex-start",
-    borderRadius: radius.pill,
+    flexWrap: "wrap",
+    gap: 8
+  },
+  productCard: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 14,
+    borderRadius: 20,
     backgroundColor: colors.panelStrong,
     borderWidth: 1,
     borderColor: colors.line
   },
-  profileChipText: {
+  productArt: {
+    width: 78,
+    height: 100,
+    borderRadius: 18,
+    backgroundColor: "#d9e2ff",
+    borderWidth: 1,
+    borderColor: "#d6dcff"
+  },
+  productCopy: {
+    flex: 1,
+    gap: 8
+  },
+  productTitle: {
     color: colors.ink,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "800"
   },
-  pressed: {
-    opacity: 0.92
+  productText: {
+    color: colors.inkSoft,
+    fontSize: 12.5,
+    lineHeight: 18
   },
-  row: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
+  priceLine: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "800"
   },
-  metricRow: {
-    flexDirection: "row",
-    gap: 10
+  priceSub: {
+    color: colors.inkSoft,
+    fontSize: 12,
+    fontWeight: "500"
   },
-  bestOfferCard: {
-    borderRadius: 22,
+  panel: {
+    borderRadius: 20,
     padding: 14,
     backgroundColor: colors.panelMuted,
     borderWidth: 1,
     borderColor: colors.line,
-    gap: 12
+    gap: 6
   },
-  ctaRow: {
+  panelTitle: {
+    color: colors.ink,
+    fontSize: 14.5,
+    fontWeight: "800"
+  },
+  panelBody: {
+    color: colors.inkSoft,
+    fontSize: 12.5,
+    lineHeight: 18
+  },
+  saveMessage: {
+    color: colors.brand,
+    fontSize: 12,
+    lineHeight: 18
+  },
+  buttonRow: {
+    flexDirection: "row",
     gap: 10
   },
-  shopCard: {
+  offerCard: {
     borderRadius: radius.lg,
+    padding: 14,
     backgroundColor: colors.panelStrong,
     borderWidth: 1,
     borderColor: colors.line,
-    padding: 14,
-    gap: 12
-  },
-  shopHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12
-  },
-  shopMeta: {
-    flex: 1,
-    gap: 4
-  },
-  shopTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: "700"
-  },
-  shopSubtitle: {
-    color: colors.inkSoft,
-    fontSize: 12
-  },
-  offerStrip: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  offerMetric: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: colors.accentSoft
-  },
-  offerLabel: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  offerText: {
-    color: colors.inkSoft,
-    fontSize: 12,
-    lineHeight: 18
-  },
-  altCard: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: colors.infoSoft,
-    borderWidth: 1,
-    borderColor: "rgba(47,109,246,0.16)",
     gap: 10
   },
-  altTitle: {
-    color: colors.info,
-    fontSize: 12,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1
+  offerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10
   },
-  altText: {
+  offerTitle: {
     color: colors.ink,
-    fontSize: 12,
-    lineHeight: 18
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  offerSub: {
+    color: colors.inkSoft,
+    fontSize: 12
   }
 });
