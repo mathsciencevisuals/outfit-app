@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  Alert, ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, Keyboard, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
 import { EmptyState }     from '../../components/EmptyState';
@@ -77,10 +77,11 @@ export function MeasurementsScreen() {
       const cm = toCm(edits[key], unit);
       if (!isNaN(cm) && cm > 0) (updates as Record<string, number>)[key] = cm;
     }
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await mobileApi.saveMeasurements(userId, updates);
-      router.push('/style-preferences');
+      router.replace('/style-preferences');
     } catch (err) {
       Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {

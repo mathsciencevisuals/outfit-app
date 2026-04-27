@@ -7,6 +7,9 @@ export type ThemeMode  = 'light' | 'dark';
 
 interface AppState {
   userId:            string;
+  accessToken:       string | null;
+  authEmail:         string | null;
+  authPassword:      string | null;
   theme:             ThemeMode;
   accent:            AccentColor;
   savedProductIds:   string[];
@@ -14,6 +17,8 @@ interface AppState {
   lastTryOnRequestId: string | null;
 
   setUserId:              (id: string) => void;
+  setAccessToken:         (token: string | null) => void;
+  setSession:             (session: { userId: string; accessToken: string | null; authEmail?: string | null; authPassword?: string | null }) => void;
   setTheme:               (t: ThemeMode) => void;
   setAccent:              (a: AccentColor) => void;
   toggleSavedProduct:     (id: string) => void;
@@ -26,7 +31,10 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      userId:             'demo-user',
+      userId:             'user-demo',
+      accessToken:        null,
+      authEmail:          null,
+      authPassword:       null,
       theme:              'light',
       accent:             'teal',
       savedProductIds:    [],
@@ -34,6 +42,14 @@ export const useAppStore = create<AppState>()(
       lastTryOnRequestId: null,
 
       setUserId:  (id)  => set({ userId: id }),
+      setAccessToken: (token) => set({ accessToken: token }),
+      setSession: ({ userId, accessToken, authEmail, authPassword }) =>
+        set((state) => ({
+          userId,
+          accessToken,
+          authEmail: authEmail ?? state.authEmail,
+          authPassword: authPassword ?? state.authPassword,
+        })),
       setTheme:   (t)   => set({ theme: t }),
       setAccent:  (a)   => set({ accent: a }),
 
@@ -57,6 +73,7 @@ export const useAppStore = create<AppState>()(
     {
       name:    'fitme-store',
       storage: createJSONStorage(() => AsyncStorage),
+      skipHydration: false,
     },
   ),
 );

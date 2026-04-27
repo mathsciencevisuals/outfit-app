@@ -1,15 +1,45 @@
 import { env } from '../utils/env';
+import { useAppStore } from '../store/app-store';
 import type {
   UserProfile, UserStats, Measurement, Product,
   Recommendation, SavedLook, Shop,
   TryOnRequest, TryOnResult,
 } from '../types';
+import type { AuthResponse, SessionResponse } from '../types/api';
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+const DEMO_EMAIL = 'demo@fitme.dev';
+const DEMO_PASSWORD = 'fitme1234';
+
+function randomDemoAccount() {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  return {
+    email: `apk-demo-${suffix}@fitme.dev`,
+    password: `Fitme!${suffix}`,
+    firstName: 'Demo',
+    lastName: 'User',
+  };
+}
+
+function buildHeaders(init?: RequestInit, includeJsonContentType = true) {
+  const accessToken = useAppStore.getState().accessToken;
+  return {
+    ...(includeJsonContentType ? { 'content-type': 'application/json' } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(init?.headers ?? {}),
+  };
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit, allowAuthRetry = true): Promise<T> {
   const response = await fetch(`${env.EXPO_PUBLIC_API_URL}${path}`, {
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers: buildHeaders(init),
     ...init,
   });
+
+  if (response.status === 401 && allowAuthRetry && !path.startsWith('/auth/')) {
+    await mobileApi.ensureDemoSession();
+    return apiFetch<T>(path, init, false);
+  }
+
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(`API ${response.status}: ${text || response.statusText}`);
@@ -18,11 +48,18 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return payload.data;
 }
 
-async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+async function apiUpload<T>(path: string, form: FormData, allowAuthRetry = true): Promise<T> {
   const response = await fetch(`${env.EXPO_PUBLIC_API_URL}${path}`, {
     method: 'POST',
+    headers: buildHeaders(undefined, false),
     body: form,
   });
+
+  if (response.status === 401 && allowAuthRetry && !path.startsWith('/auth/')) {
+    await mobileApi.ensureDemoSession();
+    return apiUpload<T>(path, form, false);
+  }
+
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(`Upload ${response.status}: ${text || response.statusText}`);
@@ -32,6 +69,73 @@ async function apiUpload<T>(path: string, form: FormData): Promise<T> {
 }
 
 export const mobileApi = {
+  register: (payload: { email: string; password: string; firstName: string; lastName: string }): Promise<AuthResponse> =>
+    apiFetch<AuthResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  login: (email: string, password: string): Promise<AuthResponse> =>
+    apiFetch<AuthResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  session: (): Promise<SessionResponse> =>
+    apiFetch<SessionResponse>('/auth/session'),
+
+  ensureDemoSession: async () => {
+    const store = useAppStore.getState();
+    const preferredEmail = store.authEmail ?? DEMO_EMAIL;
+    const preferredPassword = store.authPassword ?? DEMO_PASSWORD;
+
+    if (store.accessToken) {
+      try {
+        const session = await mobileApi.session();
+        useAppStore.getState().setSession({
+          userId: session.user.id,
+          accessToken: store.accessToken,
+          authEmail: preferredEmail,
+          authPassword: preferredPassword,
+        });
+        return session.user;
+      } catch {
+        useAppStore.getState().setAccessToken(null);
+      }
+    }
+
+    try {
+      const auth = await mobileApi.login(preferredEmail, preferredPassword);
+      useAppStore.getState().setSession({
+        userId: auth.user.id,
+        accessToken: auth.accessToken,
+        authEmail: preferredEmail,
+        authPassword: preferredPassword,
+      });
+      return auth.user;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const shouldBootstrapAccount =
+        preferredEmail === DEMO_EMAIL &&
+        preferredPassword === DEMO_PASSWORD &&
+        message.includes('API 401');
+
+      if (!shouldBootstrapAccount) {
+        throw error;
+      }
+
+      const fallbackAccount = randomDemoAccount();
+      const auth = await mobileApi.register(fallbackAccount);
+      useAppStore.getState().setSession({
+        userId: auth.user.id,
+        accessToken: auth.accessToken,
+        authEmail: fallbackAccount.email,
+        authPassword: fallbackAccount.password,
+      });
+      return auth.user;
+    }
+  },
+
   // ── Profile ──────────────────────────────────────────────────────────────
   profile: (userId: string): Promise<UserProfile> =>
     apiFetch<UserProfile>(`/profile/${userId}`),
@@ -135,14 +239,32 @@ export const mobileApi = {
     apiFetch<void>(`/saved-looks/${lookId}`, { method: 'DELETE' }),
 
   // ── Style Preferences ─────────────────────────────────────────────────────
-  // POST /users/:userId/style-preferences
+  // PUT /style-preferences/:userId
   saveStylePreferences: (
     userId: string,
     prefs: { styles?: string[]; colors?: string[]; budget?: string },
-  ): Promise<void> =>
-    apiFetch<void>(`/users/${userId}/style-preferences`, {
-      method: 'POST', body: JSON.stringify(prefs),
-    }),
+  ): Promise<void> => {
+    const BUDGET_RANGES: Record<string, { min?: number; max?: number; label: string }> = {
+      under500:    {              max: 500,  label: 'Under ₹500' },
+      '500_2000':  { min: 500,   max: 2000, label: '₹500 – ₹2,000' },
+      '2000_5000': { min: 2000,  max: 5000, label: '₹2,000 – ₹5,000' },
+      above5000:   { min: 5000,             label: 'Above ₹5,000' },
+    };
+    const budget = prefs.budget ? BUDGET_RANGES[prefs.budget] : undefined;
+    return apiFetch<void>(`/style-preferences/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        stylePreference: { styles: prefs.styles ?? [] },
+        preferredColors: prefs.colors ?? [],
+        avoidedColors:   [],
+        ...(budget && {
+          budgetMin:   budget.min ?? null,
+          budgetMax:   budget.max ?? null,
+          budgetLabel: budget.label,
+        }),
+      }),
+    });
+  },
 
   // ── Try-On ────────────────────────────────────────────────────────────────
   createTryOn: async (userId: string, variantId: string, localImageUri: string): Promise<TryOnRequest> => {
