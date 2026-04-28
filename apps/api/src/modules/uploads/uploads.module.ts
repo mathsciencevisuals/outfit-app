@@ -229,6 +229,29 @@ export class UploadsService {
     }
   }
 
+  async storeFile(
+    userId: string,
+    buffer: Buffer,
+    mimetype: string,
+    purpose = "tryon"
+  ): Promise<string> {
+    const ext = this.resolveExtension(mimetype);
+    const key = `${purpose}/${userId}/${randomUUID()}${ext}`;
+    const stub = {
+      id: "",
+      userId,
+      key,
+      mimeType: mimetype,
+      bucket: this.bucket,
+      publicUrl: "",
+      createdAt: new Date()
+    };
+    if (this.storageProvider === "gcs") {
+      return this.uploadToGcs(stub, { buffer, mimetype });
+    }
+    return this.uploadToMinio(stub, { buffer, mimetype, size: buffer.length });
+  }
+
   private buildPublicUrl(key: string) {
     if (this.storageProvider === "gcs") {
       const configuredBase = this.configService.get<string>("GCS_PUBLIC_BASE_URL");
