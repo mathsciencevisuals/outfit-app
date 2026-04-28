@@ -22,8 +22,10 @@ const baseEnvSchema = z
     MINIO_REGION: z.string().default("us-east-1"),
     MINIO_USE_SSL: z.coerce.boolean().default(false),
     MINIO_PUBLIC_URL: z.string().url().optional(),
-    TRYON_PROVIDER: z.enum(["mock", "http"]).default("mock"),
-    TRYON_HTTP_BASE_URL: z.string().optional()
+    TRYON_PROVIDER: z.enum(["mock", "http", "grok"]).default("mock"),
+    TRYON_HTTP_BASE_URL: z.string().optional(),
+    GROK_API_KEY: z.string().optional(),
+    GROK_USE_PRO: z.coerce.boolean().default(false)
   })
   .superRefine((config, ctx) => {
     if (config.STORAGE_PROVIDER === "gcs" && !config.GCS_BUCKET) {
@@ -43,6 +45,10 @@ const baseEnvSchema = z
 
     if (config.TRYON_PROVIDER === "http" && !config.TRYON_HTTP_BASE_URL) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["TRYON_HTTP_BASE_URL"], message: "TRYON_HTTP_BASE_URL is required when TRYON_PROVIDER=http" });
+    }
+
+    if (config.TRYON_PROVIDER === "grok" && !config.GROK_API_KEY) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["GROK_API_KEY"], message: "GROK_API_KEY is required when TRYON_PROVIDER=grok" });
     }
 
     if (config.TRYON_HTTP_BASE_URL) {
