@@ -129,6 +129,24 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
   const fullName = data
     ? `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim() || 'User'
     : 'User';
+  const latestMeasurement = data?.measurements?.[0];
+  const preferredStyles = Array.isArray((data?.stylePreference as Record<string, unknown> | undefined)?.styles)
+    ? ((data?.stylePreference as Record<string, unknown>).styles as unknown[]).map(String).filter(Boolean)
+    : [];
+  const styleSummary = preferredStyles.length > 0 ? preferredStyles.join(', ') : '—';
+  const colorSummary = (data?.preferredColors ?? []).join(', ') || '—';
+  const shoulderValue =
+    latestMeasurement && 'shouldersCm' in latestMeasurement && latestMeasurement.shouldersCm != null
+      ? `${latestMeasurement.shouldersCm} cm`
+      : latestMeasurement && 'shoulderCm' in latestMeasurement && latestMeasurement.shoulderCm != null
+        ? `${latestMeasurement.shoulderCm} cm`
+        : '—';
+  const heightValue =
+    latestMeasurement && 'heightCm' in latestMeasurement && latestMeasurement.heightCm != null
+      ? `${latestMeasurement.heightCm} cm`
+      : data?.heightCm
+        ? `${data.heightCm} cm`
+        : '—';
 
   // ── Main profile ─────────────────────────────────────────────────────────────
 
@@ -194,11 +212,22 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
 
         {/* Profile details */}
         <SectionCard title="Profile details">
-          <InfoRow label="Height"     value={data?.heightCm ? `${data.heightCm} cm` : '—'} />
+          <InfoRow label="Height"     value={heightValue} />
+          <InfoRow label="Shoulders"  value={shoulderValue} />
           <InfoRow label="Body shape" value={data?.bodyShape ?? '—'} />
           <InfoRow
             label="Palette"
-            value={(data?.preferredColors ?? []).join(', ') || '—'}
+            value={colorSummary}
+            last
+          />
+        </SectionCard>
+
+        <SectionCard title="Style preferences">
+          <InfoRow label="Preferred styles" value={styleSummary} />
+          <InfoRow label="Fit preference" value={data?.fitPreference ?? '—'} />
+          <InfoRow
+            label="Budget"
+            value={data?.budgetLabel ?? '—'}
             last
           />
         </SectionCard>
@@ -220,11 +249,22 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
         subtitle="Foundational details that power fit and style recommendations."
       >
         <InfoRow label="Name"       value={fullName} />
-        <InfoRow label="Height"     value={data?.heightCm ? `${data.heightCm} cm` : '—'} />
+        <InfoRow label="Height"     value={heightValue} />
+        <InfoRow label="Shoulders"  value={shoulderValue} />
         <InfoRow label="Body shape" value={data?.bodyShape ?? '—'} />
         <InfoRow
           label="Palette"
-          value={(data?.preferredColors ?? []).join(', ') || '—'}
+          value={colorSummary}
+          last
+        />
+      </SectionCard>
+
+      <SectionCard title="Style preferences">
+        <InfoRow label="Preferred styles" value={styleSummary} />
+        <InfoRow label="Fit preference" value={data?.fitPreference ?? '—'} />
+        <InfoRow
+          label="Budget"
+          value={data?.budgetLabel ?? '—'}
           last
         />
       </SectionCard>

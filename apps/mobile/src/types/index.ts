@@ -31,15 +31,29 @@ export interface Product {
 
 export interface UserProfile {
   id: string;
+  userId?: string;
   firstName: string;
   lastName: string;
   email?: string;
-  avatarUrl?: string;
-  heightCm?: number;
-  bodyShape?: string;
+  avatarUploadId?: string | null;
+  avatarUrl?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  bodyShape?: string | null;
+  fitPreference?: 'slim' | 'regular' | 'relaxed' | null;
   preferredColors?: string[];
+  avoidedColors?: string[];
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  budgetLabel?: string | null;
+  closetStatus?: string | null;
+  stylePreference?: Record<string, unknown> | null;
   stylePreferences?: string[];
   defaultSize?: string;
+  measurements?: Measurement[];
+  savedLooks?: SavedLook[];
 }
 
 export interface UserStats {
@@ -57,8 +71,11 @@ export interface Measurement {
   waistCm?: number;
   hipsCm?: number;
   inseamCm?: number;
+  shoulderCm?: number;
   shouldersCm?: number;
   heightCm?: number;
+  footLengthCm?: number;
+  source?: string;
   createdAt: string;
 }
 
@@ -90,6 +107,15 @@ export type TryOnStatus =
   | 'complete'
   | 'error';
 
+export type ViewAngle = 'front' | 'back' | 'side_left' | 'side_right';
+
+export const VIEW_ANGLE_LABELS: Record<ViewAngle, string> = {
+  front:      'Front',
+  back:       'Back',
+  side_left:  'Left',
+  side_right: 'Right',
+};
+
 export interface TryOnRequest {
   id: string;
   userId: string;
@@ -100,13 +126,18 @@ export interface TryOnRequest {
 
 export interface TryOnResult {
   id: string;
-  status: TryOnStatus;
-  resultImageUrl?: string;
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | TryOnStatus;
   result?: {
+    id: string;
+    outputImageUrl: string;
+    overlayImageUrl?: string;
     confidence: number;
     summary: string;
-    fitNotes?: string[];
-  };
+    metadata?: {
+      views?: Partial<Record<ViewAngle, string>>;
+      [key: string]: unknown;
+    };
+  } | null;
 }
 
 // ─── Recommendation Types ──────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ export function AuthScreen() {
   const submit = async () => {
     setLoading(true);
     setError(null);
+    let navigated = false;
 
     try {
       const response =
@@ -48,26 +49,32 @@ export function AuthScreen() {
 
       if (mode === 'signup') {
         await AsyncStorage.removeItem(ONBOARDED_KEY);
+        navigated = true;
         router.replace('/onboarding');
         return;
       }
 
       const onboarded = await AsyncStorage.getItem(ONBOARDED_KEY);
+      navigated = true;
       router.replace(onboarded ? '/dashboard' : '/onboarding');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Authentication failed.');
     } finally {
-      setLoading(false);
+      if (!navigated) {
+        setLoading(false);
+      }
     }
   };
 
   const useDemo = async () => {
     setLoading(true);
     setError(null);
+    let navigated = false;
 
     try {
       const user = await mobileApi.ensureDemoSession();
       const onboarded = await AsyncStorage.getItem(ONBOARDED_KEY);
+      navigated = true;
       router.replace(onboarded ? '/dashboard' : '/onboarding');
       if (!user) {
         throw new Error('Demo session could not be created.');
@@ -75,7 +82,9 @@ export function AuthScreen() {
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Demo login failed.');
     } finally {
-      setLoading(false);
+      if (!navigated) {
+        setLoading(false);
+      }
     }
   };
 

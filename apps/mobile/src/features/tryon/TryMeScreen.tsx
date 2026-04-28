@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -13,10 +14,28 @@ import { mobileApi } from '../../services/api';
 import { useAppStore } from '../../store/app-store';
 import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
 import { formatPrice } from '../../utils/currency';
-import type { Product, ProductVariant } from '../../types';
+import type { Product, ProductVariant, ViewAngle } from '../../types';
+import { VIEW_ANGLE_LABELS } from '../../types';
 
 const CATEGORIES = ['All', 'Tops', 'Dresses', 'Outerwear', 'Bottoms'] as const;
 const MAX_COMPARE = 3;
+const ALL_ANGLES: ViewAngle[] = ['front', 'back', 'side_left', 'side_right'];
+const SAVE_DIR = `${FileSystem.documentDirectory}FitMe Generated/`;
+
+async function ensureSaveDir() {
+  const info = await FileSystem.getInfoAsync(SAVE_DIR);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(SAVE_DIR, { intermediates: true });
+  }
+}
+
+async function saveImageToDevice(url: string, label: string): Promise<string> {
+  await ensureSaveDir();
+  const filename = `fitme_${label}_${Date.now()}.jpg`;
+  const dest = SAVE_DIR + filename;
+  await FileSystem.downloadAsync(url, dest);
+  return dest;
+}
 
 export function TryMeScreen() {
   const { C } = useTheme();
@@ -27,16 +46,23 @@ export function TryMeScreen() {
   const setLastTryOnId = useAppStore(s => s.setLastTryOnRequestId);
 
   // ── Try-on state ─────────────────────────────────────────────────────────────
-  const [userPhoto,     setUserPhoto]     = useState<string | null>(null);
-  const [garmentUri,    setGarmentUri]    = useState<string | null>(null);
+  const [userPhoto,      setUserPhoto]      = useState<string | null>(null);
+  const [garmentUri,     setGarmentUri]     = useState<string | null>(null);
   const [garmentProduct, setGarmentProduct] = useState<Product | null>(null);
   const [garmentVariant, setGarmentVariant] = useState<ProductVariant | null>(null);
-  const [generating,    setGenerating]    = useState(false);
-  const [genProgress,   setGenProgress]   = useState(0);
-  const [generatedUrl,  setGeneratedUrl]  = useState<string | null>(null);
-  const [requestId,     setRequestId]     = useState<string | null>(null);
-  const [savingLook,    setSavingLook]    = useState(false);
-  const [lookSaved,     setLookSaved]     = useState(false);
+  const [generating,     setGenerating]     = useState(false);
+  const [genProgress,    setGenProgress]    = useState(0);
+  const [generatedViews, setGeneratedViews] = useState<Partial<Record<ViewAngle, string>>>({});
+  const [primaryUrl,     setPrimaryUrl]     = useState<string | null>(null);
+  const [activeView,     setActiveView]     = useState<ViewAngle>('front');
+  const [requestId,      setRequestId]      = useState<string | null>(null);
+  const [savingLook,     setSavingLook]     = useState(false);
+  const [lookSaved,      setLookSaved]      = useState(false);
+  const [savedCount,     setSavedCount]     = useState(0);
+  const [savingToDevice, setSavingToDevice] = useState(false);
+
+  // ── View angle selection ─────────────────────────────────────────────────────
+  const [selectedAngles, setSelectedAngles] = useState<Set<ViewAngle>>(new Set(['front']));
 
   // ── Products & compare ───────────────────────────────────────────────────────
   const [products,  setProducts]  = useState<Product[]>([]);
@@ -67,7 +93,7 @@ export function TryMeScreen() {
       allowsEditing: true, aspect: [3, 4], quality: 0.85,
       cameraType: ImagePicker.CameraType.front,
     });
-    if (!result.canceled) { setUserPhoto(result.assets[0].uri); setGeneratedUrl(null); setLookSaved(false); }
+    if (!result.canceled) { setUserPhoto(result.assets[0].uri); resetResult(); }
   };
 
   const handleUserGallery = async () => {
@@ -77,7 +103,7 @@ export function TryMeScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true, aspect: [3, 4], quality: 0.85,
     });
-    if (!result.canceled) { setUserPhoto(result.assets[0].uri); setGeneratedUrl(null); setLookSaved(false); }
+    if (!result.canceled) { setUserPhoto(result.assets[0].uri); resetResult(); }
   };
 
   // ── Garment ──────────────────────────────────────────────────────────────────
@@ -91,7 +117,7 @@ export function TryMeScreen() {
       setGarmentUri(result.assets[0].uri);
       setGarmentProduct(null);
       setGarmentVariant(null);
-      setGeneratedUrl(null); setLookSaved(false);
+      resetResult();
     }
   };
 
@@ -103,7 +129,7 @@ export function TryMeScreen() {
       setGarmentUri(result.assets[0].uri);
       setGarmentProduct(null);
       setGarmentVariant(null);
-      setGeneratedUrl(null); setLookSaved(false);
+      resetResult();
     }
   };
 
@@ -113,27 +139,62 @@ export function TryMeScreen() {
     setGarmentVariant(variant ?? null);
     setGarmentUri(null);
     setShowPicker(false);
-    setGeneratedUrl(null); setLookSaved(false);
+    resetResult();
   };
 
   const clearGarment = () => {
     setGarmentUri(null); setGarmentProduct(null); setGarmentVariant(null);
-    setGeneratedUrl(null); setLookSaved(false);
+    resetResult();
+  };
+
+  const resetResult = () => {
+    setGeneratedViews({}); setPrimaryUrl(null); setLookSaved(false); setSavedCount(0);
+  };
+
+  // ── View angle toggle ─────────────────────────────────────────────────────────
+  const toggleAngle = (angle: ViewAngle) => {
+    setSelectedAngles(prev => {
+      const next = new Set(prev);
+      if (next.has(angle)) {
+        if (next.size === 1) return prev; // keep at least one
+        next.delete(angle);
+      } else {
+        next.add(angle);
+      }
+      return next;
+    });
   };
 
   // ── Generate ──────────────────────────────────────────────────────────────────
-  const canGenerate = !!userPhoto && !!garmentVariant && !generating;
+  const canGenerate = !!userPhoto && (!!garmentVariant || !!garmentUri) && !generating && selectedAngles.size > 0;
 
   const handleGenerate = async () => {
-    if (!userPhoto || !garmentVariant) return;
-    setGenerating(true); setGenProgress(5); setGeneratedUrl(null); setLookSaved(false);
+    if (!userPhoto) return;
+    if (!garmentVariant && !garmentUri) return;
+
+    setGenerating(true); setGenProgress(5); resetResult();
+
     try {
-      const created = await mobileApi.createTryOn(userId, garmentVariant.id, userPhoto);
+      const angles = Array.from(selectedAngles);
+      const created = await mobileApi.createTryOn(userId, garmentVariant?.id, userPhoto, {
+        viewAngles: angles,
+        provider: 'grok',
+        garmentPhotoUri: garmentUri ?? undefined,
+      });
       setRequestId(created.id); setLastTryOnId(created.id); setGenProgress(15);
+
       const result = await mobileApi.pollTryOnResult(created.id, pct => {
         setGenProgress(15 + Math.round(pct * 0.85));
       });
-      setGeneratedUrl(result.resultImageUrl ?? null);
+
+      const views = result.result?.metadata?.views ?? {};
+      const primary = result.result?.outputImageUrl ?? null;
+      setGeneratedViews(views);
+      setPrimaryUrl(primary);
+
+      // Set active view to first generated angle
+      const firstAngle = angles.find(a => views[a] || a === angles[0]);
+      if (firstAngle) setActiveView(firstAngle);
     } catch (err) {
       Alert.alert('Generation failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
@@ -143,15 +204,15 @@ export function TryMeScreen() {
 
   // ── Save look ─────────────────────────────────────────────────────────────────
   const handleSaveLook = async () => {
-    if (!generatedUrl || !garmentProduct) return;
+    if (!primaryUrl || !garmentProduct) return;
     setSavingLook(true);
     try {
       await mobileApi.saveLook({
         userId,
         name: garmentProduct.name,
         tryOnResultId: requestId ?? undefined,
-        tryOnImageUrl: generatedUrl,
-        products:      [garmentProduct],
+        tryOnImageUrl: primaryUrl,
+        products: [garmentProduct],
       });
       setLookSaved(true);
       showToast('Look saved!');
@@ -159,6 +220,28 @@ export function TryMeScreen() {
       Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setSavingLook(false);
+    }
+  };
+
+  // ── Save to device ────────────────────────────────────────────────────────────
+  const handleSaveToDevice = async () => {
+    const allUrls = Object.entries(generatedViews) as [ViewAngle, string][];
+    if (!allUrls.length && primaryUrl) allUrls.push(['front', primaryUrl]);
+    if (!allUrls.length) return;
+
+    setSavingToDevice(true);
+    try {
+      let count = 0;
+      for (const [angle, url] of allUrls) {
+        await saveImageToDevice(url, angle);
+        count++;
+      }
+      setSavedCount(count);
+      showToast(`${count} image${count > 1 ? 's' : ''} saved to device`);
+    } catch (err) {
+      Alert.alert('Save failed', err instanceof Error ? err.message : 'Could not save to device.');
+    } finally {
+      setSavingToDevice(false);
     }
   };
 
@@ -181,6 +264,10 @@ export function TryMeScreen() {
     : products.filter(p => p.category.toLowerCase() === category.toLowerCase());
 
   const garmentDisplayUri = garmentUri ?? garmentProduct?.variants[0]?.imageUrl ?? null;
+  const hasResult = !!primaryUrl || Object.keys(generatedViews).length > 0;
+  const displayedAngles = Array.from(selectedAngles).filter(a => generatedViews[a]);
+
+  const activeImageUrl = generatedViews[activeView] ?? primaryUrl ?? null;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -190,7 +277,7 @@ export function TryMeScreen() {
       >
         {/* Header */}
         <Text style={[styles.title, { color: C.textPrimary }]}>Try Me</Text>
-        <Text style={[styles.sub, { color: C.textSecondary }]}>See how clothes look on you</Text>
+        <Text style={[styles.sub, { color: C.textSecondary }]}>Grok AI · See how clothes look on you</Text>
 
         {/* ── Two-card row ── */}
         <View style={styles.cardRow}>
@@ -207,7 +294,7 @@ export function TryMeScreen() {
                   <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={handleUserGallery}>
                     <Ionicons name="images-outline" size={14} color={C.textSecondary} />
                   </Pressable>
-                  <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={() => { setUserPhoto(null); setGeneratedUrl(null); }}>
+                  <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={() => { setUserPhoto(null); resetResult(); }}>
                     <Ionicons name="close" size={14} color={C.textMuted} />
                   </Pressable>
                 </View>
@@ -278,12 +365,36 @@ export function TryMeScreen() {
           </View>
         </View>
 
-        {/* Note when garment is from gallery/scan (no variant = can't generate) */}
+        {/* Gallery garment tip */}
         {garmentUri && !garmentVariant && (
           <Text style={[styles.noteText, { color: C.textMuted }]}>
-            💡 Select from Store to enable AI try-on generation
+            Your uploaded garment image will be used directly for the try-on result.
           </Text>
         )}
+
+        {/* ── View angle selector ── */}
+        <View style={[styles.angleSection, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.angleTitle, { color: C.textPrimary }]}>Generate Views</Text>
+          <View style={styles.angleRow}>
+            {ALL_ANGLES.map(angle => {
+              const active = selectedAngles.has(angle);
+              return (
+                <Pressable
+                  key={angle}
+                  style={[styles.angleChip, {
+                    backgroundColor: active ? C.primary : C.surface2,
+                    borderColor: active ? C.primary : C.border,
+                  }]}
+                  onPress={() => toggleAngle(angle)}
+                >
+                  <Text style={[styles.angleChipTxt, { color: active ? '#fff' : C.textSecondary }]}>
+                    {VIEW_ANGLE_LABELS[angle]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
         {/* Generate button */}
         <Pressable
@@ -293,30 +404,82 @@ export function TryMeScreen() {
         >
           <Ionicons name="sparkles" size={18} color={canGenerate ? '#fff' : C.textMuted} />
           <Text style={[styles.generateTxt, { color: canGenerate ? '#fff' : C.textMuted }]}>
-            Generate Try-Out
+            Generate {selectedAngles.size > 1 ? `${selectedAngles.size} Views` : 'Try-On'}
           </Text>
         </Pressable>
 
         {/* Generated result */}
-        {generatedUrl && (
+        {hasResult && (
           <View style={[styles.resultCard, { backgroundColor: C.surface, borderColor: C.border }, Shadow.md]}>
             <Text style={[styles.resultTitle, { color: C.textPrimary }]}>Your Generated Look</Text>
-            <Image source={{ uri: generatedUrl }} style={styles.resultImage} resizeMode="cover" />
-            {lookSaved ? (
-              <View style={[styles.savedBadge, { backgroundColor: C.successDim }]}>
-                <Ionicons name="checkmark-circle" size={16} color={C.success} />
-                <Text style={[styles.savedTxt, { color: C.success }]}>Saved to your looks</Text>
-              </View>
-            ) : (
-              <Pressable
-                style={[styles.saveBtn, { backgroundColor: C.primary }]}
-                onPress={handleSaveLook}
-                disabled={savingLook}
-              >
-                <Ionicons name="bookmark" size={15} color="#fff" />
-                <Text style={styles.saveTxt}>{savingLook ? 'Saving…' : 'Save to Looks'}</Text>
-              </Pressable>
+
+            {/* View tabs */}
+            {displayedAngles.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.viewTabs}>
+                {displayedAngles.map(angle => (
+                  <Pressable
+                    key={angle}
+                    style={[styles.viewTab, {
+                      backgroundColor: activeView === angle ? C.primary : C.surface2,
+                      borderColor: activeView === angle ? C.primary : C.border,
+                    }]}
+                    onPress={() => setActiveView(angle)}
+                  >
+                    <Text style={[styles.viewTabTxt, { color: activeView === angle ? '#fff' : C.textSecondary }]}>
+                      {VIEW_ANGLE_LABELS[angle]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             )}
+
+            {/* Active view image */}
+            {activeImageUrl && (
+              <Image source={{ uri: activeImageUrl }} style={styles.resultImage} resizeMode="cover" />
+            )}
+
+            {/* Action buttons */}
+            <View style={styles.resultActions}>
+              {/* Save to device */}
+              {savedCount > 0 ? (
+                <View style={[styles.savedBadge, { backgroundColor: C.successDim, flex: 1 }]}>
+                  <Ionicons name="folder-open" size={14} color={C.success} />
+                  <Text style={[styles.savedTxt, { color: C.success }]}>
+                    {savedCount} image{savedCount > 1 ? 's' : ''} saved to device
+                  </Text>
+                </View>
+              ) : (
+                <Pressable
+                  style={[styles.actionBtn, { backgroundColor: C.surface2, borderColor: C.border, borderWidth: 1, flex: 1 }]}
+                  onPress={handleSaveToDevice}
+                  disabled={savingToDevice}
+                >
+                  <Ionicons name="download-outline" size={14} color={C.textSecondary} />
+                  <Text style={[styles.actionBtnTxt, { color: C.textSecondary }]}>
+                    {savingToDevice ? 'Saving…' : `Save to Device`}
+                  </Text>
+                </Pressable>
+              )}
+
+              {/* Save look */}
+              {garmentProduct && (
+                lookSaved ? (
+                  <View style={[styles.savedBadge, { backgroundColor: C.successDim, flex: 1 }]}>
+                    <Ionicons name="checkmark-circle" size={14} color={C.success} />
+                    <Text style={[styles.savedTxt, { color: C.success }]}>Saved to looks</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={[styles.actionBtn, { backgroundColor: C.primary, flex: 1 }]}
+                    onPress={handleSaveLook}
+                    disabled={savingLook}
+                  >
+                    <Ionicons name="bookmark" size={14} color="#fff" />
+                    <Text style={styles.actionBtnTxt}>{savingLook ? 'Saving…' : 'Save Look'}</Text>
+                  </Pressable>
+                )
+              )}
+            </View>
           </View>
         )}
 
@@ -440,7 +603,7 @@ export function TryMeScreen() {
         </View>
       </Modal>
 
-      <LoadingOverlay visible={generating} message="Generating your look…" progress={genProgress} />
+      <LoadingOverlay visible={generating} message="Generating with Grok Aurora…" progress={genProgress} />
       <Toast message={toast} visible={toastVis} />
     </View>
   );
@@ -467,18 +630,29 @@ const styles = StyleSheet.create({
 
   noteText:   { fontSize: FontSize.xs, textAlign: 'center', lineHeight: 18 },
 
+  // View angle selector
+  angleSection: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.sm, gap: Spacing.xs },
+  angleTitle:   { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  angleRow:     { flexDirection: 'row', gap: Spacing.xs },
+  angleChip:    { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.sm, borderWidth: 1 },
+  angleChipTxt: { fontSize: 11, fontWeight: FontWeight.semibold },
+
   // Generate button
   generateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingVertical: 14, borderRadius: Radius.full },
   generateTxt: { fontSize: FontSize.base, fontWeight: FontWeight.bold },
 
   // Result
-  resultCard:  { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', padding: Spacing.sm, gap: Spacing.sm },
-  resultTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
-  resultImage: { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md },
-  saveBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingVertical: 10, borderRadius: Radius.full },
-  saveTxt:     { color: '#fff', fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
-  savedBadge:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, paddingVertical: 8, borderRadius: Radius.full },
-  savedTxt:    { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
+  resultCard:    { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', padding: Spacing.sm, gap: Spacing.sm },
+  resultTitle:   { fontSize: FontSize.md, fontWeight: FontWeight.bold },
+  resultImage:   { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md },
+  viewTabs:      { flexDirection: 'row' as any },
+  viewTab:       { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.full, marginRight: 6, borderWidth: 1 },
+  viewTabTxt:    { fontSize: FontSize.xs, fontWeight: FontWeight.semibold },
+  resultActions: { flexDirection: 'row', gap: Spacing.xs },
+  actionBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: Radius.full },
+  actionBtnTxt:  { color: '#fff', fontSize: FontSize.xs, fontWeight: FontWeight.semibold },
+  savedBadge:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, paddingVertical: 10, borderRadius: Radius.full },
+  savedTxt:      { fontSize: FontSize.xs, fontWeight: FontWeight.medium },
 
   // Compare section
   sectionHeader: { gap: 2 },

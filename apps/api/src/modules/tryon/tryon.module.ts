@@ -10,15 +10,19 @@ import {
   Param,
   Post,
   Put,
-  Query
+  Query,
+  UploadedFile,
+  UploadedFiles,
+  UseInterceptors
 } from "@nestjs/common";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { Queue } from "bullmq";
 import { IsBoolean, IsOptional, IsString } from "class-validator";
 
-import { createTryOnProvider } from "@fitme/ai-client";
+import { createTryOnProvider, ViewAngle } from "@fitme/ai-client";
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
@@ -26,13 +30,17 @@ import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 import { TRYON_QUEUE } from "../../jobs/queues/tryon.queue";
 import { RewardsModule, RewardsService } from "../rewards/rewards.module";
+import { UploadsModule, UploadsService } from "../uploads/uploads.module";
+
+const { memoryStorage } = require("multer") as { memoryStorage: () => unknown };
 
 class CreateTryOnRequestDto {
   @IsString()
   userId!: string;
 
+  @IsOptional()
   @IsString()
-  variantId!: string;
+  variantId?: string;
 
   @IsOptional()
   @IsString()
@@ -57,6 +65,11 @@ class CreateTryOnRequestDto {
   @IsOptional()
   @IsString()
   provider?: string;
+
+  /** Comma-separated list of view angles to generate: front,back,side_left,side_right */
+  @IsOptional()
+  @IsString()
+  viewAngles?: string;
 }
 
 class UpdateProviderConfigDto {
@@ -85,6 +98,7 @@ export class TryOnService {
     private readonly configService: ConfigService,
     private readonly authorizationService: AuthorizationService,
     private readonly rewardsService: RewardsService,
+    private readonly uploadsService: UploadsService,
     @InjectQueue(TRYON_QUEUE) private readonly queue: Queue
   ) {}
 
@@ -133,10 +147,18 @@ export class TryOnService {
     return request ? this.serializeRequest(request) : null;
   }
 
-  async create(user: AuthenticatedUser, dto: CreateTryOnRequestDto) {
+  async create(
+    user: AuthenticatedUser,
+    dto: CreateTryOnRequestDto,
+    files?: {
+      userPhoto?: Array<{ buffer?: Buffer; mimetype?: string; originalname?: string }>;
+      garmentPhoto?: Array<{ buffer?: Buffer; mimetype?: string; originalname?: string }>;
+    }
+  ) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this try-on request");
 
     const provider = dto.provider ?? this.configService.getOrThrow<string>("TRYON_PROVIDER");
+    const garmentPhotoFile = files?.garmentPhoto?.[0];
     const upload = dto.uploadId
       ? await (this.prisma.upload as any).findUnique({ where: { id: dto.uploadId } })
       : null;
@@ -152,22 +174,53 @@ export class TryOnService {
       throw new BadRequestException("Garment upload is missing or does not belong to the user");
     }
 
-    const imageUrl = upload?.publicUrl ?? dto.imageUrl;
-    if (!imageUrl) {
-      throw new BadRequestException("A completed upload or imageUrl is required");
+    const selectedVariant = dto.variantId
+      ? await (this.prisma.productVariant as any).findUnique({ where: { id: dto.variantId } })
+      : await (this.prisma.productVariant as any).findFirst({
+          orderBy: [{ productId: "asc" }, { createdAt: "asc" }]
+        });
+
+    if (!selectedVariant) {
+      throw new BadRequestException("No product variant is available for try-on generation");
     }
+
+    // Accept inline file uploads when no pre-signed upload is provided
+    const userPhotoFile = files?.userPhoto?.[0];
+    let imageUrl = upload?.publicUrl ?? dto.imageUrl;
+    if (!imageUrl && userPhotoFile?.buffer) {
+      imageUrl = await this.uploadsService.storeFile(
+        dto.userId, userPhotoFile.buffer, userPhotoFile.mimetype ?? "image/jpeg", "tryon"
+      );
+    }
+    if (!imageUrl) {
+      throw new BadRequestException("A completed upload, imageUrl, or userPhoto file is required");
+    }
+
+    let inlineGarmentUrl: string | null = garmentUpload?.publicUrl ?? null;
+    if (!inlineGarmentUrl && garmentPhotoFile?.buffer) {
+      inlineGarmentUrl = await this.uploadsService.storeFile(
+        dto.userId, garmentPhotoFile.buffer, garmentPhotoFile.mimetype ?? "image/jpeg", "garment"
+      );
+    }
+    if (!inlineGarmentUrl && !dto.variantId) {
+      throw new BadRequestException("A garment image or store item is required");
+    }
+
+    // Encode selected view angles in comparisonLabel (parsed back during processing)
+    const viewAnglesStr = dto.viewAngles ?? "front";
+    const comparisonLabel = dto.comparisonLabel ?? viewAnglesStr;
 
     const request = await (this.prisma.tryOnRequest as any).create({
       data: {
         userId: dto.userId,
-        variantId: dto.variantId,
+        variantId: selectedVariant.id,
         sourceUploadId: upload?.id ?? null,
         garmentUploadId: garmentUpload?.id ?? null,
         imageUrl,
-        garmentImageUrl: garmentUpload?.publicUrl ?? null,
+        garmentImageUrl: inlineGarmentUrl,
         provider,
         fitStyle: dto.fitStyle ?? "balanced",
-        comparisonLabel: dto.comparisonLabel ?? null,
+        comparisonLabel,
         statusMessage: "Queued for processing"
       },
       include: {
@@ -230,8 +283,18 @@ export class TryOnService {
     });
 
     try {
-      const providerMode = request.provider === "http" ? "http" : "mock";
+      const VALID_ANGLES: ViewAngle[] = ["front", "back", "side_left", "side_right"];
+      const rawAngles = (request.comparisonLabel ?? "front").split(",").map((s: string) => s.trim());
+      const viewAngles: ViewAngle[] = rawAngles.filter((a: string) => VALID_ANGLES.includes(a as ViewAngle)) as ViewAngle[];
+      const selectedAngles: ViewAngle[] = viewAngles.length ? viewAngles : ["front"];
+
+      const providerMode: "mock" | "http" | "grok" =
+        request.provider === "http" ? "http" :
+        request.provider === "grok" ? "grok" : "mock";
       const providerBaseUrl = this.configService.get<string>("TRYON_HTTP_BASE_URL") ?? "http://localhost:4010";
+      const grokApiKey = this.configService.get<string>("GROK_API_KEY");
+      const grokUsePro = this.configService.get<string>("GROK_USE_PRO") === "true";
+
       const input = {
         requestId: request.id,
         personImageUrl: request.imageUrl,
@@ -241,21 +304,28 @@ export class TryOnService {
           request.variant.imageUrl ??
           request.variant.product.imageUrl ??
           request.imageUrl,
-        prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color} with ${request.fitStyle ?? "balanced"} fit styling`
+        prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color} with ${request.fitStyle ?? "balanced"} fit styling`,
+        viewAngles: selectedAngles,
       };
 
       let result;
       try {
-        const provider = createTryOnProvider(providerMode, providerBaseUrl);
+        const provider = createTryOnProvider(providerMode, providerBaseUrl, grokApiKey ?? undefined, grokUsePro);
         result = await provider.generate(input);
       } catch (providerError) {
-        if (providerMode !== "http") {
-          throw providerError;
-        }
-
+        if (providerMode === "mock") throw providerError;
+        // Fallback to mock on http/grok failures
         const fallbackProvider = createTryOnProvider("mock", providerBaseUrl);
         result = await fallbackProvider.generate(input);
       }
+
+      const resultMetadata: Prisma.InputJsonValue = {
+        ...(result.metadata ?? {}),
+        ...(result.views ? { views: result.views } : {}),
+        fitStyle: request.fitStyle ?? "balanced",
+        selectedColor: request.variant.color,
+        selectedSize: request.variant.sizeLabel,
+      } as Prisma.InputJsonValue;
 
       await (this.prisma.tryOnResult as any).upsert({
         where: { requestId: request.id },
@@ -264,13 +334,7 @@ export class TryOnService {
           overlayImageUrl: result.overlayImageUrl,
           confidence: result.confidence,
           summary: result.summary,
-          metadata: {
-            ...(result.metadata ?? {}),
-            fitStyle: request.fitStyle ?? "balanced",
-            comparisonLabel: request.comparisonLabel,
-            selectedColor: request.variant.color,
-            selectedSize: request.variant.sizeLabel
-          } as Prisma.InputJsonValue
+          metadata: resultMetadata,
         },
         create: {
           requestId: request.id,
@@ -278,13 +342,7 @@ export class TryOnService {
           overlayImageUrl: result.overlayImageUrl,
           confidence: result.confidence,
           summary: result.summary,
-          metadata: {
-            ...(result.metadata ?? {}),
-            fitStyle: request.fitStyle ?? "balanced",
-            comparisonLabel: request.comparisonLabel,
-            selectedColor: request.variant.color,
-            selectedSize: request.variant.sizeLabel
-          } as Prisma.InputJsonValue
+          metadata: resultMetadata,
         }
       });
 
@@ -292,7 +350,9 @@ export class TryOnService {
         where: { id: request.id },
         data: {
           status: "COMPLETED",
-          statusMessage: providerMode === "http" ? "Try-on completed" : "Try-on completed with preview renderer",
+          statusMessage: providerMode === "grok" ? "Grok Aurora try-on completed"
+            : providerMode === "http" ? "Try-on completed"
+            : "Try-on completed with preview renderer",
           processedAt: new Date()
         }
       });
@@ -356,8 +416,25 @@ class TryOnController {
   }
 
   @Post("requests")
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateTryOnRequestDto) {
-    return this.service.create(user, dto);
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "userPhoto", maxCount: 1 },
+        { name: "garmentPhoto", maxCount: 1 }
+      ],
+      { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }
+    )
+  )
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateTryOnRequestDto,
+    @UploadedFiles()
+    files?: {
+      userPhoto?: Array<{ buffer?: Buffer; mimetype?: string; originalname?: string }>;
+      garmentPhoto?: Array<{ buffer?: Buffer; mimetype?: string; originalname?: string }>;
+    }
+  ) {
+    return this.service.create(user, dto, files);
   }
 
   @Roles("ADMIN", "OPERATOR")
@@ -383,7 +460,7 @@ class TryOnController {
 }
 
 @Module({
-  imports: [RewardsModule, BullModule.registerQueue({ name: TRYON_QUEUE })],
+  imports: [RewardsModule, UploadsModule, BullModule.registerQueue({ name: TRYON_QUEUE })],
   controllers: [TryOnController],
   providers: [TryOnService, PrismaService],
   exports: [TryOnService]

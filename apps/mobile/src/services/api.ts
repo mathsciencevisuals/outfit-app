@@ -3,9 +3,9 @@ import { useAppStore } from '../store/app-store';
 import type {
   UserProfile, UserStats, Measurement, Product,
   Recommendation, SavedLook, Shop,
-  TryOnRequest, TryOnResult,
+  TryOnRequest, TryOnResult, ViewAngle,
 } from '../types';
-import type { AuthResponse, SessionResponse } from '../types/api';
+import type { AuthResponse, SessionResponse, UploadSession } from '../types/api';
 
 const DEMO_EMAIL = 'demo@fitme.dev';
 const DEMO_PASSWORD = 'fitme1234';
@@ -266,14 +266,62 @@ export const mobileApi = {
     });
   },
 
-  // ── Try-On ────────────────────────────────────────────────────────────────
-  createTryOn: async (userId: string, variantId: string, localImageUri: string): Promise<TryOnRequest> => {
+  // ── Uploads ───────────────────────────────────────────────────────────────
+  createUploadSession: (userId: string, mimeType: string, purpose: string): Promise<UploadSession> =>
+    apiFetch<UploadSession>('/uploads/presign', {
+      method: 'POST',
+      body: JSON.stringify({ userId, mimeType, purpose }),
+    }),
+
+  uploadToSession: (uploadPath: string, userId: string, localUri: string, mimeType: string): Promise<unknown> => {
     const form = new FormData();
     form.append('userId', userId);
-    form.append('variantId', variantId);
-    const filename = localImageUri.split('/').pop() ?? 'photo.jpg';
-    const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
-    form.append('userPhoto', { uri: localImageUri, name: filename, type: ext === 'png' ? 'image/png' : 'image/jpeg' } as unknown as Blob);
+    const filename = localUri.split('/').pop() ?? 'file.jpg';
+    form.append('file', { uri: localUri, name: filename, type: mimeType } as unknown as Blob);
+    return apiUpload(uploadPath, form);
+  },
+
+  // ── Try-On ────────────────────────────────────────────────────────────────
+  createTryOn: async (
+    userId: string,
+    variantId: string | undefined,
+    userPhotoUri: string,
+    options?: {
+      viewAngles?: ViewAngle[];
+      garmentPhotoUri?: string;
+      provider?: string;
+    }
+  ): Promise<TryOnRequest> => {
+    const form = new FormData();
+    form.append('userId', userId);
+    if (variantId) {
+      form.append('variantId', variantId);
+    }
+    if (options?.viewAngles?.length) {
+      form.append('viewAngles', options.viewAngles.join(','));
+    }
+    if (options?.provider) {
+      form.append('provider', options.provider);
+    }
+
+    const photoFilename = userPhotoUri.split('/').pop() ?? 'photo.jpg';
+    const photoExt = photoFilename.split('.').pop()?.toLowerCase() ?? 'jpg';
+    form.append('userPhoto', {
+      uri: userPhotoUri,
+      name: photoFilename,
+      type: photoExt === 'png' ? 'image/png' : 'image/jpeg',
+    } as unknown as Blob);
+
+    if (options?.garmentPhotoUri) {
+      const garmentFilename = options.garmentPhotoUri.split('/').pop() ?? 'garment.jpg';
+      const garmentExt = garmentFilename.split('.').pop()?.toLowerCase() ?? 'jpg';
+      form.append('garmentPhoto', {
+        uri: options.garmentPhotoUri,
+        name: garmentFilename,
+        type: garmentExt === 'png' ? 'image/png' : 'image/jpeg',
+      } as unknown as Blob);
+    }
+
     return apiUpload<TryOnRequest>('/try-on/requests', form);
   },
 
@@ -282,13 +330,13 @@ export const mobileApi = {
 
   pollTryOnResult: async (requestId: string, onProgress?: (pct: number) => void): Promise<TryOnResult> => {
     const INTERVAL = 800;
-    const MAX_TRIES = 38;
+    const MAX_TRIES = 45;
     for (let i = 0; i < MAX_TRIES; i++) {
       await new Promise(r => setTimeout(r, INTERVAL));
       const result = await mobileApi.tryOnResult(requestId);
       onProgress?.(Math.min(Math.round(((i + 1) / MAX_TRIES) * 100), 95));
-      if (result.status === 'complete') { onProgress?.(100); return result; }
-      if (result.status === 'error') throw new Error('Try-on processing failed on the server.');
+      if (result.status === 'COMPLETED') { onProgress?.(100); return result; }
+      if (result.status === 'FAILED') throw new Error('Try-on processing failed on the server.');
     }
     throw new Error('Try-on timed out. Please try again.');
   },
