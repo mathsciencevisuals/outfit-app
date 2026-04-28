@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View,
@@ -34,12 +34,6 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
   const { data, loading, error, refetch } = useAsyncResource(
     () => mobileApi.profile(userId),
     [userId],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      refetch();
-    }, [refetch])
   );
 
   // ── Avatar upload ────────────────────────────────────────────────────────────
@@ -136,13 +130,9 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
     ? `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim() || 'User'
     : 'User';
   const latestMeasurement = data?.measurements?.[0];
-  const stylePreference = (data?.stylePreference as Record<string, unknown> | undefined) ?? {};
-  const preferredStylesRaw =
-    Array.isArray(stylePreference.styles) ? stylePreference.styles :
-    Array.isArray(stylePreference.preferredStyles) ? stylePreference.preferredStyles :
-    Array.isArray(stylePreference.occasions) ? stylePreference.occasions :
-    [];
-  const preferredStyles = preferredStylesRaw.map(String).filter(Boolean);
+  const preferredStyles = Array.isArray((data?.stylePreference as Record<string, unknown> | undefined)?.styles)
+    ? ((data?.stylePreference as Record<string, unknown>).styles as unknown[]).map(String).filter(Boolean)
+    : [];
   const styleSummary = preferredStyles.length > 0 ? preferredStyles.join(', ') : '—';
   const colorSummary = (data?.preferredColors ?? []).join(', ') || '—';
   const shoulderValue =

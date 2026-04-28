@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   Alert, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -8,7 +8,6 @@ import {
 import { ONBOARDED_KEY } from '../../../app/_layout';
 import { PrimaryButton }  from '../../components/PrimaryButton';
 import { Screen }         from '../../components/Screen';
-import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { mobileApi }      from '../../services/api';
 import { useAppStore }    from '../../store/app-store';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '../../utils/theme';
@@ -51,36 +50,11 @@ const BUDGETS = [
 export function StylePreferencesScreen() {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
-  const { data: profile, refetch } = useAsyncResource(
-    () => mobileApi.profile(userId),
-    [userId],
-  );
 
   const [selectedStyles,  setStyles]  = useState<Set<string>>(new Set());
   const [selectedColors,  setColors]  = useState<Set<string>>(new Set());
   const [selectedBudget,  setBudget]  = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      refetch();
-    }, [refetch])
-  );
-
-  useEffect(() => {
-    const stylePreference = (profile?.stylePreference as Record<string, unknown> | undefined) ?? {};
-    const savedStyles =
-      Array.isArray(stylePreference.styles) ? stylePreference.styles :
-      Array.isArray(stylePreference.preferredStyles) ? stylePreference.preferredStyles :
-      Array.isArray(stylePreference.occasions) ? stylePreference.occasions :
-      [];
-
-    setStyles(new Set(savedStyles.map(String)));
-    setColors(new Set((profile?.preferredColors ?? []).map(String)));
-
-    const savedBudgetKey = BUDGETS.find((entry) => entry.label === profile?.budgetLabel)?.key ?? null;
-    setBudget(savedBudgetKey);
-  }, [profile]);
 
   const toggle = (set: Set<string>, key: string): Set<string> => {
     const next = new Set(set);

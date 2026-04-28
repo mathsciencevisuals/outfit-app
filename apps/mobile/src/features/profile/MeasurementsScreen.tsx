@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert, Keyboard, StyleSheet, Text, TextInput, View,
@@ -51,12 +51,6 @@ export function MeasurementsScreen() {
   const { data, loading, error, refetch } = useAsyncResource(
     () => mobileApi.measurements(userId),
     [userId],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      refetch();
-    }, [refetch])
   );
 
   const [edits, setEdits] = useState<Record<MeasurementKey, string>>({

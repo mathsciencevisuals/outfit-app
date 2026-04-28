@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -18,11 +18,14 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
   const router   = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
-    if (!navigationState?.key) {
+    if (!navigationState?.key || hasInitialized.current) {
       return;
     }
+
+    hasInitialized.current = true;
 
     let mounted = true;
 
@@ -51,27 +54,24 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
         if (!isAuthenticated) {
           if (!inAuth) {
             router.replace('/auth');
-            return;
           }
-          if (mounted) onReady();
           return;
         }
 
         const value = await AsyncStorage.getItem(ONBOARDED_KEY);
-        const targetRoute = !value ? '/onboarding' : '/dashboard';
-        const alreadyResolved =
-          (!value && inOnboarding) ||
-          (value && first === 'dashboard');
 
-        if (!alreadyResolved) {
-          router.replace(targetRoute);
-          return;
+        if (!value && !inOnboarding) {
+          router.replace('/onboarding');
+        } else if (value && (inAuth || first === 'onboarding' || first === undefined || first === 'index')) {
+          router.replace('/dashboard');
         }
-
-        if (mounted) onReady();
       } catch (error) {
         console.warn('[FitMe] Failed to read onboarding state during app startup.', error);
         router.replace('/auth');
+      } finally {
+        if (mounted) {
+          onReady();
+        }
       }
     };
 
