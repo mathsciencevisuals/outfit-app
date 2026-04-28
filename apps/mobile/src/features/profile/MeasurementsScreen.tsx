@@ -1,6 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert, Keyboard, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -54,17 +53,23 @@ export function MeasurementsScreen() {
     [userId],
   );
 
-  const latest: Partial<Measurement> = Array.isArray(data) && data.length > 0 ? data[0] : {};
-
   const [edits, setEdits] = useState<Record<MeasurementKey, string>>({
-    heightCm:    String(latest.heightCm    ?? ''),
-    chestCm:     String(latest.chestCm     ?? ''),
-    shouldersCm: String(latest.shouldersCm ?? ''),
-    waistCm:     String(latest.waistCm     ?? ''),
-    hipsCm:      String(latest.hipsCm      ?? ''),
-    inseamCm:    String(latest.inseamCm    ?? ''),
+    heightCm:    '', chestCm: '', shouldersCm: '', waistCm: '', hipsCm: '', inseamCm: '',
   });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    const m = data[0];
+    setEdits({
+      heightCm:    m.heightCm    != null ? String(m.heightCm)    : '',
+      chestCm:     m.chestCm     != null ? String(m.chestCm)     : '',
+      shouldersCm: m.shouldersCm != null ? String(m.shouldersCm) : '',
+      waistCm:     m.waistCm     != null ? String(m.waistCm)     : '',
+      hipsCm:      m.hipsCm      != null ? String(m.hipsCm)      : '',
+      inseamCm:    m.inseamCm    != null ? String(m.inseamCm)    : '',
+    });
+  }, [data]);
 
   const handleChange = (key: MeasurementKey, raw: string) => {
     // Store internally as display value; convert on save

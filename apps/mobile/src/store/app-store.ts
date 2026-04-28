@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { Product, ProductVariant, TryOnStatus } from '../types';
 
 export type AccentColor = 'teal' | 'purple' | 'blue' | 'pink';
 export type ThemeMode  = 'light' | 'dark';
@@ -16,6 +17,14 @@ interface AppState {
   compareProductIds: string[];
   lastTryOnRequestId: string | null;
 
+  // Try-on session state (not persisted — file URIs become stale between sessions)
+  capturedPhotoUri:  string | undefined;
+  selectedVariant:   ProductVariant | undefined;
+  selectedProduct:   Product | undefined;
+  tryOnStatus:       TryOnStatus;
+  tryOnProgress:     number;
+  tryOnError:        string | null;
+
   setUserId:              (id: string) => void;
   setAccessToken:         (token: string | null) => void;
   setSession:             (session: { userId: string; accessToken: string | null; authEmail?: string | null; authPassword?: string | null }) => void;
@@ -26,6 +35,12 @@ interface AppState {
   removeFromCompare:      (id: string) => void;
   clearCompare:           () => void;
   setLastTryOnRequestId:  (id: string | null) => void;
+  setCapturedPhoto:       (uri: string | undefined) => void;
+  selectVariant:          (variant: ProductVariant, product: Product) => void;
+  setTryOnStatus:         (s: TryOnStatus) => void;
+  setTryOnProgress:       (p: number) => void;
+  setTryOnError:          (e: string | null) => void;
+  resetTryOn:             () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -40,6 +55,12 @@ export const useAppStore = create<AppState>()(
       savedProductIds:    [],
       compareProductIds:  [],
       lastTryOnRequestId: null,
+      capturedPhotoUri:   undefined,
+      selectedVariant:    undefined,
+      selectedProduct:    undefined,
+      tryOnStatus:        'idle',
+      tryOnProgress:      0,
+      tryOnError:         null,
 
       setUserId:  (id)  => set({ userId: id }),
       setAccessToken: (token) => set({ accessToken: token }),
@@ -47,11 +68,11 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           userId,
           accessToken,
-          authEmail: authEmail ?? state.authEmail,
+          authEmail:    authEmail    ?? state.authEmail,
           authPassword: authPassword ?? state.authPassword,
         })),
-      setTheme:   (t)   => set({ theme: t }),
-      setAccent:  (a)   => set({ accent: a }),
+      setTheme:   (t) => set({ theme: t }),
+      setAccent:  (a) => set({ accent: a }),
 
       toggleSavedProduct: (id) => {
         const ids = get().savedProductIds;
@@ -69,11 +90,35 @@ export const useAppStore = create<AppState>()(
       clearCompare: () => set({ compareProductIds: [] }),
 
       setLastTryOnRequestId: (id) => set({ lastTryOnRequestId: id }),
+      setCapturedPhoto:  (uri)           => set({ capturedPhotoUri: uri }),
+      selectVariant:     (variant, product) => set({ selectedVariant: variant, selectedProduct: product }),
+      setTryOnStatus:    (s)             => set({ tryOnStatus: s }),
+      setTryOnProgress:  (p)             => set({ tryOnProgress: p }),
+      setTryOnError:     (e)             => set({ tryOnError: e }),
+      resetTryOn: () => set({
+        capturedPhotoUri: undefined,
+        selectedVariant:  undefined,
+        selectedProduct:  undefined,
+        tryOnStatus:      'idle',
+        tryOnProgress:    0,
+        tryOnError:       null,
+      }),
     }),
     {
       name:    'fitme-store',
       storage: createJSONStorage(() => AsyncStorage),
       skipHydration: false,
+      partialize: (state) => ({
+        userId:             state.userId,
+        accessToken:        state.accessToken,
+        authEmail:          state.authEmail,
+        authPassword:       state.authPassword,
+        theme:              state.theme,
+        accent:             state.accent,
+        savedProductIds:    state.savedProductIds,
+        compareProductIds:  state.compareProductIds,
+        lastTryOnRequestId: state.lastTryOnRequestId,
+      }),
     },
   ),
 );
