@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ProductCard } from '../../components/ProductCard';
 import { useTheme } from '../../hooks/useTheme';
 import { mobileApi } from '../../services/api';
 import { useAppStore } from '../../store/app-store';
-import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
+import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
 import type { Product, UserProfile, UserStats } from '../../types';
 
 export function DashboardScreen() {
@@ -18,12 +18,23 @@ export function DashboardScreen() {
   const [profile,  setProfile]  = useState<UserProfile | null>(null);
   const [stats,    setStats]    = useState<UserStats | null>(null);
   const [trending, setTrending] = useState<Product[]>([]);
+  const [ready,    setReady]    = useState(false);
 
   useEffect(() => {
-    mobileApi.profile(userId).then(setProfile).catch(() => {});
+    let resolved = false;
+    const markReady = () => { if (!resolved) { resolved = true; setReady(true); } };
+    mobileApi.profile(userId).then(p => { setProfile(p); markReady(); }).catch(markReady);
     mobileApi.stats(userId).then(setStats).catch(() => {});
     mobileApi.trending(4).then(setTrending).catch(() => {});
   }, [userId]);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   const firstName = profile?.firstName ?? 'there';
 

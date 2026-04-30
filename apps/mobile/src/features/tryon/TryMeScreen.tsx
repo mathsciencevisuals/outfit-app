@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, FlatList, Image, Modal, Pressable, ScrollView,
+  ActivityIndicator, Alert, FlatList, Image, Modal, Pressable, ScrollView,
   StyleSheet, Text, View,
 } from 'react-native';
 
@@ -179,7 +179,8 @@ export function TryMeScreen() {
   };
 
   // ── Generate ──────────────────────────────────────────────────────────────────
-  const canGenerate = !!userPhoto && (!!garmentVariant || !!garmentUri) && !generating && selectedAngles.size > 0;
+  const [pendingViews, setPendingViews] = useState(false);
+  const canGenerate = !!userPhoto && (!!garmentVariant || !!garmentUri) && !generating && !pendingViews && selectedAngles.size > 0;
 
   const handleGenerate = async () => {
     if (!userPhoto) return;
@@ -189,7 +190,7 @@ export function TryMeScreen() {
       return;
     }
 
-    setGenerating(true); setGenProgress(5); resetResult();
+    setGenerating(true); setGenProgress(5); resetResult(); setPendingViews(false);
 
     try {
       const angles = Array.from(selectedAngles);
@@ -199,23 +200,60 @@ export function TryMeScreen() {
       });
       setRequestId(created.id); setLastTryOnId(created.id); setGenProgress(15);
 
-      const result = await mobileApi.pollTryOnResult(created.id, pct => {
-        setGenProgress(15 + Math.round(pct * 0.85));
-      });
+      // Poll manually so we can display partial views as each angle completes.
+      // The backend generates angles sequentially and saves a partial result after
+      // each one, so views appear incrementally during PROCESSING status.
+      const POLL_INTERVAL = 3000;
+      const MAX_TRIES = 80; // ~4 minutes max
+      let activeViewSet = false;
+      let overlayDismissed = false;
 
-      const views = result.result?.metadata?.views ?? {};
-      const primary = result.result?.outputImageUrl ?? null;
-      setGeneratedViews(views);
-      setPrimaryUrl(primary);
-      setFitInsight(buildFitInsight(result.result?.metadata, result.result?.summary));
+      for (let i = 0; i < MAX_TRIES; i++) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+        const result = await mobileApi.tryOnResult(created.id);
 
-      // Set active view to first generated angle
-      const firstAngle = angles.find(a => views[a] || a === angles[0]);
-      if (firstAngle) setActiveView(firstAngle);
+        const partialViews = result.result?.metadata?.views ?? {};
+        const partialPrimary = result.result?.outputImageUrl ?? null;
+
+        if (Object.keys(partialViews).length > 0 || partialPrimary) {
+          setGeneratedViews(partialViews);
+          if (partialPrimary) setPrimaryUrl(partialPrimary);
+
+          // Hide loading overlay once the first image is ready; switch to
+          // subtle in-card indicator so the user can see partial results.
+          if (!overlayDismissed) {
+            overlayDismissed = true;
+            setGenerating(false);
+            setGenProgress(0);
+          }
+
+          const stillPending = result.status !== 'COMPLETED' && angles.length > Object.keys(partialViews).length;
+          setPendingViews(stillPending);
+
+          if (!activeViewSet) {
+            const firstAvailable = angles.find(a => partialViews[a]);
+            if (firstAvailable) { setActiveView(firstAvailable); activeViewSet = true; }
+          }
+        } else if (!overlayDismissed) {
+          setGenProgress(Math.min(15 + Math.round(((i + 1) / MAX_TRIES) * 75), 85));
+        }
+
+        if (result.status === 'COMPLETED') {
+          setGeneratedViews(partialViews);
+          if (partialPrimary) setPrimaryUrl(partialPrimary);
+          setFitInsight(buildFitInsight(result.result?.metadata, result.result?.summary));
+          setPendingViews(false);
+          break;
+        }
+
+        if (result.status === 'FAILED') {
+          throw new Error('Try-on processing failed on the server.');
+        }
+      }
     } catch (err) {
       Alert.alert('Generation failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
-      setGenerating(false); setGenProgress(0);
+      setGenerating(false); setGenProgress(0); setPendingViews(false);
     }
   };
 
@@ -445,7 +483,15 @@ export function TryMeScreen() {
         {/* Generated result */}
         {hasResult && (
           <View style={[styles.resultCard, { backgroundColor: C.surface, borderColor: C.border }, Shadow.md]}>
-            <Text style={[styles.resultTitle, { color: C.textPrimary }]}>Your Generated Look</Text>
+            <View style={styles.resultTitleRow}>
+              <Text style={[styles.resultTitle, { color: C.textPrimary }]}>Your Generated Look</Text>
+              {pendingViews && (
+                <View style={[styles.pendingBadge, { backgroundColor: C.primaryDim }]}>
+                  <ActivityIndicator size="small" color={C.primary} style={{ transform: [{ scale: 0.65 }] }} />
+                  <Text style={[styles.pendingTxt, { color: C.primary }]}>Generating more views…</Text>
+                </View>
+              )}
+            </View>
 
             {/* View tabs */}
             {displayedAngles.length > 1 && (
@@ -754,7 +800,10 @@ const styles = StyleSheet.create({
 
   // Result
   resultCard:    { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', padding: Spacing.sm, gap: Spacing.sm },
+  resultTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: Spacing.xs },
   resultTitle:   { fontSize: FontSize.md, fontWeight: FontWeight.bold },
+  pendingBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.full },
+  pendingTxt:    { fontSize: 10, fontWeight: FontWeight.semibold },
   resultImageWrap: { position: 'relative' },
   resultImage:   { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md },
   imageSaveBtn:  { position: 'absolute', top: 10, right: 10, width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },

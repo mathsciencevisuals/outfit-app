@@ -393,21 +393,51 @@ export class TryOnService {
           heightCm:        (measurement?.heightCm ?? profile.heightCm) as number | null,
         } : undefined;
 
-        // Fire Gemini image generation + Claude fit analysis in parallel.
-        // Gemini returns one edited image per call, so generate each requested
-        // angle explicitly and return them through metadata.views.
+        // Fire Claude analysis in parallel with sequential view generation.
+        // Views are generated one at a time (not in parallel) to avoid Gemini
+        // rate-limit failures when 3-4 images are requested simultaneously.
+        // After each view completes we persist a partial result so the client
+        // can display it immediately without waiting for all angles.
         try {
-          const [viewEntries, fitAnalysis] = await Promise.all([
-            Promise.all(
-              selectedAngles.map(async (angle) => [
-                angle,
-                await this.callGemini(personImageUrl, garmentImageUrl, request.userId, angle),
-              ] as const)
-            ),
-            this.callClaude(personImageUrl, garmentImageUrl, claudeCtx),
-          ]);
-          const views = Object.fromEntries(viewEntries) as Partial<Record<ViewAngle, string>>;
-          const outputImageUrl = views.front ?? views[selectedAngles[0]] ?? viewEntries[0]?.[1] ?? "";
+          const claudePromise = this.callClaude(personImageUrl, garmentImageUrl, claudeCtx);
+
+          const views: Partial<Record<ViewAngle, string>> = {};
+          const partialBase = {
+            fitStyle: request.fitStyle ?? "balanced",
+            selectedColor: request.variant.color,
+            selectedSize: request.variant.sizeLabel,
+          };
+
+          for (const angle of selectedAngles) {
+            try {
+              const url = await this.callGemini(personImageUrl, garmentImageUrl, request.userId, angle);
+              views[angle] = url;
+
+              const currentOutputUrl = views.front ?? (Object.values(views)[0] as string | undefined) ?? "";
+              await (this.prisma.tryOnResult as any).upsert({
+                where: { requestId: request.id },
+                update: {
+                  outputImageUrl: currentOutputUrl,
+                  metadata: { ...partialBase, views } as Prisma.InputJsonValue,
+                },
+                create: {
+                  requestId: request.id,
+                  outputImageUrl: currentOutputUrl,
+                  confidence: 0.75,
+                  metadata: { ...partialBase, views } as Prisma.InputJsonValue,
+                },
+              });
+            } catch (angleError) {
+              console.warn(`[TryOn] Skipping ${angle} view after error:`, angleError instanceof Error ? angleError.message : angleError);
+            }
+          }
+
+          if (Object.keys(views).length === 0) {
+            throw new Error("All view generation attempts failed");
+          }
+
+          const fitAnalysis = await claudePromise;
+          const outputImageUrl = views.front ?? (Object.values(views)[0] as string) ?? "";
 
           result = {
             outputImageUrl,
@@ -674,20 +704,20 @@ export class TryOnService {
 
     const imageModel = this.configService.get<string>('GEMINI_IMAGE_MODEL') ?? 'gemini-2.5-flash-image';
     const viewInstruction = {
-      front: 'Show a front-facing try-on view.',
-      back: 'Show a back-facing try-on view of the same person and outfit.',
-      side_left: 'Show a left-side try-on view of the same person and outfit.',
-      side_right: 'Show a right-side try-on view of the same person and outfit.',
+      front: 'Show the person wearing the new garment, viewed from the front.',
+      back: 'Show the person wearing the new garment, viewed from behind.',
+      side_left: 'Show the person wearing the new garment, viewed from the left side.',
+      side_right: 'Show the person wearing the new garment, viewed from the right side.',
     }[viewAngle];
     const prompt = [
-      'Create a realistic virtual try-on image.',
+      'Virtual try-on: the person in Image 1 must be wearing the garment from Image 2 instead of their current clothes.',
+      'Replace ALL clothing on the person with the garment shown in Image 2 — the original clothes must not be visible in the output.',
       viewInstruction,
-      'Image 1 is the person. Image 2 is the garment reference.',
-      'Replace the visible garment on the person with the garment from image 2.',
-      'Preserve the person identity, face, hair, skin tone, pose, body shape, background, camera angle, and lighting.',
-      'Keep the garment color, pattern, neckline, sleeve shape, fabric texture, and silhouette from image 2.',
-      'Make the result look like a real worn outfit with natural folds, shadows, and body drape.',
-      'Do not show the garment as a separate object. Do not create a collage. Return only the final edited try-on image.'
+      'Image 1 is the person. Image 2 is the garment to wear.',
+      'Preserve the person identity, face, hair, skin tone, body shape, background, and lighting exactly.',
+      'Keep the garment color, pattern, neckline, sleeve shape, fabric texture, and silhouette exactly as shown in Image 2.',
+      'The garment must look naturally worn with realistic folds, shadows, and body drape.',
+      'Do not create a collage or composite. Return only the single final edited try-on image.',
     ].join(' ');
 
     const geminiRes = await fetch(
