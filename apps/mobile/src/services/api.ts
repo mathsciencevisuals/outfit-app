@@ -239,7 +239,17 @@ export const mobileApi = {
     apiFetch<SavedLook[]>(`/saved-looks?userId=${userId}`),
 
   saveLook: (look: Omit<SavedLook, 'id' | 'createdAt'>): Promise<SavedLook> =>
-    apiFetch<SavedLook>('/saved-looks', { method: 'POST', body: JSON.stringify(look) }),
+    apiFetch<SavedLook>('/saved-looks', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: look.userId,
+        name: look.name,
+        note: look.note,
+        tryOnResultId: look.tryOnResultId,
+        tryOnImageUrl: look.tryOnImageUrl,
+        productIds: look.products.map((product) => product.id),
+      }),
+    }),
 
   deleteSavedLook: (lookId: string): Promise<void> =>
     apiFetch<void>(`/saved-looks/${lookId}`, { method: 'DELETE' }),

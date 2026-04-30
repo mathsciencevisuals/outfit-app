@@ -47,6 +47,7 @@ export function TryMeScreen() {
 
   // ── Try-on state ─────────────────────────────────────────────────────────────
   const [userPhoto,      setUserPhoto]      = useState<string | null>(null);
+  const [photoWarning,   setPhotoWarning]   = useState<string | null>(null);
   const [garmentUri,     setGarmentUri]     = useState<string | null>(null);
   const [garmentProduct, setGarmentProduct] = useState<Product | null>(null);
   const [garmentVariant, setGarmentVariant] = useState<ProductVariant | null>(null);
@@ -93,7 +94,12 @@ export function TryMeScreen() {
       allowsEditing: true, aspect: [3, 4], quality: 0.85,
       cameraType: ImagePicker.CameraType.front,
     });
-    if (!result.canceled) { setUserPhoto(result.assets[0].uri); resetResult(); }
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setUserPhoto(asset.uri);
+      setPhotoWarning(validateBodyFraming(asset.width, asset.height));
+      resetResult();
+    }
   };
 
   const handleUserGallery = async () => {
@@ -103,7 +109,12 @@ export function TryMeScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true, aspect: [3, 4], quality: 0.85,
     });
-    if (!result.canceled) { setUserPhoto(result.assets[0].uri); resetResult(); }
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setUserPhoto(asset.uri);
+      setPhotoWarning(validateBodyFraming(asset.width, asset.height));
+      resetResult();
+    }
   };
 
   // ── Garment ──────────────────────────────────────────────────────────────────
@@ -171,6 +182,10 @@ export function TryMeScreen() {
   const handleGenerate = async () => {
     if (!userPhoto) return;
     if (!garmentVariant && !garmentUri) return;
+    if (photoWarning) {
+      Alert.alert('Use a full-body photo', photoWarning);
+      return;
+    }
 
     setGenerating(true); setGenProgress(5); resetResult();
 
@@ -203,15 +218,16 @@ export function TryMeScreen() {
 
   // ── Save look ─────────────────────────────────────────────────────────────────
   const handleSaveLook = async () => {
-    if (!primaryUrl || !garmentProduct) return;
+    if (!primaryUrl) return;
     setSavingLook(true);
     try {
       await mobileApi.saveLook({
         userId,
-        name: garmentProduct.name,
+        name: garmentProduct?.name ?? 'Uploaded garment try-on',
+        note: garmentProduct ? undefined : 'Saved from an uploaded garment try-on.',
         tryOnResultId: requestId ?? undefined,
         tryOnImageUrl: primaryUrl,
-        products: [garmentProduct],
+        products: garmentProduct ? [garmentProduct] : [],
       });
       setLookSaved(true);
       showToast('Look saved!');
@@ -293,10 +309,16 @@ export function TryMeScreen() {
                   <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={handleUserGallery}>
                     <Ionicons name="images-outline" size={14} color={C.textSecondary} />
                   </Pressable>
-                  <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={() => { setUserPhoto(null); resetResult(); }}>
+                  <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={() => { setUserPhoto(null); setPhotoWarning(null); resetResult(); }}>
                     <Ionicons name="close" size={14} color={C.textMuted} />
                   </Pressable>
                 </View>
+                {photoWarning && (
+                  <View style={[styles.warningShell, { backgroundColor: C.warningDim, borderColor: C.warning }]}>
+                    <Ionicons name="body-outline" size={14} color={C.warning} />
+                    <Text style={[styles.warningText, { color: C.textPrimary }]}>{photoWarning}</Text>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -461,22 +483,20 @@ export function TryMeScreen() {
               )}
 
               {/* Save look */}
-              {garmentProduct && (
-                lookSaved ? (
-                  <View style={[styles.savedBadge, { backgroundColor: C.successDim, flex: 1 }]}>
-                    <Ionicons name="checkmark-circle" size={14} color={C.success} />
-                    <Text style={[styles.savedTxt, { color: C.success }]}>Saved to looks</Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={[styles.actionBtn, { backgroundColor: C.primary, flex: 1 }]}
-                    onPress={handleSaveLook}
-                    disabled={savingLook}
-                  >
-                    <Ionicons name="bookmark" size={14} color="#fff" />
-                    <Text style={styles.actionBtnTxt}>{savingLook ? 'Saving…' : 'Save Look'}</Text>
-                  </Pressable>
-                )
+              {lookSaved ? (
+                <View style={[styles.savedBadge, { backgroundColor: C.successDim, flex: 1 }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={C.success} />
+                  <Text style={[styles.savedTxt, { color: C.success }]}>Saved to looks</Text>
+                </View>
+              ) : (
+                <Pressable
+                  style={[styles.actionBtn, { backgroundColor: C.primary, flex: 1 }]}
+                  onPress={handleSaveLook}
+                  disabled={savingLook}
+                >
+                  <Ionicons name="bookmark" size={14} color="#fff" />
+                  <Text style={styles.actionBtnTxt}>{savingLook ? 'Saving…' : 'Save Look'}</Text>
+                </Pressable>
               )}
             </View>
           </View>
@@ -618,6 +638,8 @@ const styles = StyleSheet.create({
   uploadCard: { flex: 1, borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.sm, gap: Spacing.sm, overflow: 'hidden' },
   cardLabel:  { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
   cardImage:  { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md },
+  warningShell: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs, borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm },
+  warningText: { flex: 1, fontSize: FontSize.xs, lineHeight: 16 },
   cardPlaceholder: { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', gap: 4 },
   placeholderEmoji: { fontSize: 28 },
   placeholderTxt:   { fontSize: 11, textAlign: 'center' },
@@ -692,3 +714,20 @@ const styles = StyleSheet.create({
   pickerBrand: { fontSize: FontSize.xs },
   pickerPrice: { fontSize: FontSize.sm, fontWeight: FontWeight.bold },
 });
+
+function validateBodyFraming(width?: number, height?: number): string | null {
+  if (!width || !height) {
+    return 'Use a full-body photo from head to shoes so pants, dresses, and long outfits can be placed accurately.';
+  }
+
+  const aspectRatio = height / width;
+  if (aspectRatio < 1.25) {
+    return 'This photo looks too wide or cropped. Use a portrait full-body photo from head to shoes for best try-on results.';
+  }
+
+  if (aspectRatio > 2.4) {
+    return 'This photo looks unusually narrow. Use a clear full-body photo with your full outfit area visible.';
+  }
+
+  return null;
+}

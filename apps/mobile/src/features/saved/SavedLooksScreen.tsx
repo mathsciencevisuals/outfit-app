@@ -52,9 +52,9 @@ export function SavedLooksScreen() {
               onPress={() => {/* navigate to look detail */}}
               activeOpacity={0.8}
             >
-              {look.tryOnImageUrl ? (
+              {look.tryOnImageUrl || look.products[0]?.variants[0]?.imageUrl ? (
                 <Image
-                  source={{ uri: look.tryOnImageUrl }}
+                  source={{ uri: look.tryOnImageUrl ?? look.products[0]?.variants[0]?.imageUrl }}
                   style={styles.lookImage}
                   resizeMode="cover"
                 />
