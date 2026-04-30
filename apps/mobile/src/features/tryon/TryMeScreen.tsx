@@ -12,7 +12,7 @@ import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { Toast } from '../../components/Toast';
 import { useTheme } from '../../hooks/useTheme';
 import { mobileApi } from '../../services/api';
-import { useAppStore } from '../../store/app-store';
+import { useAppStore, type UserGarment } from '../../store/app-store';
 import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
 import { formatPrice } from '../../utils/currency';
 import type { Product, ProductVariant, ViewAngle } from '../../types';
@@ -46,6 +46,9 @@ export function TryMeScreen() {
   const removeCompare  = useAppStore(s => s.removeFromCompare);
   const setLastTryOnId = useAppStore(s => s.setLastTryOnRequestId);
   const setLocalSavedLookPreview = useAppStore(s => s.setLocalSavedLookPreview);
+  const userGarments   = useAppStore(s => s.userGarments);
+  const addUserGarment = useAppStore(s => s.addUserGarment);
+  const removeUserGarment = useAppStore(s => s.removeUserGarment);
 
   // ── Try-on state ─────────────────────────────────────────────────────────────
   const [userPhoto,      setUserPhoto]      = useState<string | null>(null);
@@ -169,6 +172,30 @@ export function TryMeScreen() {
       setIsModelPhoto(true);
       resetResult();
     }
+  };
+
+  // ── My Garments (Browse & Add upload) ────────────────────────────────────────
+  const handleAddMyGarment = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Gallery permission needed'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, quality: 0.85,
+    });
+    if (!result.canceled) {
+      addUserGarment(result.assets[0].uri);
+      showToast('Garment added to My Garments');
+    }
+  };
+
+  const handleTryOnMyGarment = (garment: UserGarment) => {
+    setGarmentUri(garment.uri);
+    setGarmentProduct(null);
+    setGarmentVariant(null);
+    setIsModelPhoto(true); // treat as model/unknown photo — AI will extract
+    resetResult();
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    showToast('Garment selected — add your photo and generate');
   };
 
   const handleSelectFromStore = (product: Product) => {
@@ -695,6 +722,49 @@ export function TryMeScreen() {
           })}
         </View>
 
+        {/* ── My Garments ── Upload your own garments to try on */}
+        <View style={styles.myGarmentsHeader}>
+          <Text style={[styles.gridTitle, { color: C.textPrimary }]}>My Garments</Text>
+          <Pressable
+            style={[styles.addGarmentBtn, { backgroundColor: C.primary }]}
+            onPress={handleAddMyGarment}
+          >
+            <Ionicons name="add" size={14} color="#fff" />
+            <Text style={[styles.addGarmentTxt]}>Upload</Text>
+          </Pressable>
+        </View>
+        {userGarments.length === 0 ? (
+          <Pressable
+            style={[styles.emptyGarmentCard, { backgroundColor: C.surface2, borderColor: C.border }]}
+            onPress={handleAddMyGarment}
+          >
+            <Ionicons name="add-circle-outline" size={28} color={C.textMuted} />
+            <Text style={[styles.emptyGarmentTxt, { color: C.textMuted }]}>
+              Upload your own garments or model photos to try on
+            </Text>
+          </Pressable>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.sm }}>
+            {userGarments.map((g) => {
+              const isActive = garmentUri === g.uri;
+              return (
+                <View key={g.id} style={[styles.myGarmentCard, { backgroundColor: C.surface, borderColor: isActive ? C.success : C.border, borderWidth: isActive ? 2 : 1 }]}>
+                  <Image source={{ uri: g.uri }} style={styles.myGarmentImg} resizeMode="cover" />
+                  <Pressable style={styles.myGarmentRemove} onPress={() => removeUserGarment(g.id)}>
+                    <Ionicons name="close" size={10} color="#fff" />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.myGarmentTryBtn, { backgroundColor: isActive ? C.success : C.primary }]}
+                    onPress={() => handleTryOnMyGarment(g)}
+                  >
+                    <Text style={styles.myGarmentTryTxt}>{isActive ? 'Selected' : 'Try On'}</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
         {/* Category filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.md }}>
           {CATEGORIES.map((cat) => (
@@ -710,7 +780,7 @@ export function TryMeScreen() {
 
         {/* Product grid */}
         <Text style={[styles.gridTitle, { color: C.textPrimary }]}>
-          Browse &amp; Add  <Text style={{ color: C.textMuted }}>tap Try On or Compare</Text>
+          Store Products  <Text style={{ color: C.textMuted }}>tap Try On or Compare</Text>
         </Text>
         <View style={styles.grid}>
           {filtered.map((p) => {
@@ -926,6 +996,17 @@ const styles = StyleSheet.create({
   modelPhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 8, borderRadius: Radius.sm, borderWidth: 1, marginTop: 2 },
   modelPhotoBtnTxt: { fontSize: 10, fontWeight: FontWeight.semibold },
   modelNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs, borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm },
+  // My Garments section
+  myGarmentsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  addGarmentBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.full },
+  addGarmentTxt: { color: '#fff', fontSize: 11, fontWeight: FontWeight.semibold },
+  emptyGarmentCard: { alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, padding: Spacing.base, borderRadius: Radius.md, borderWidth: 1, borderStyle: 'dashed', marginBottom: Spacing.sm },
+  emptyGarmentTxt: { fontSize: FontSize.xs, textAlign: 'center', lineHeight: 17 },
+  myGarmentCard: { width: 90, marginRight: Spacing.sm, borderRadius: Radius.md, overflow: 'hidden', position: 'relative' },
+  myGarmentImg: { width: 90, height: 120 },
+  myGarmentRemove: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
+  myGarmentTryBtn: { padding: 5, alignItems: 'center' },
+  myGarmentTryTxt: { color: '#fff', fontSize: 10, fontWeight: FontWeight.bold },
 
   // Modal
   modal:       { flex: 1 },

@@ -80,6 +80,11 @@ class CreateTryOnRequestDto {
   @IsOptional()
   @IsString()
   viewAngles?: string;
+
+  /** Set to "true" when garmentPhoto shows a model wearing the clothes rather than an isolated garment */
+  @IsOptional()
+  @IsString()
+  garmentIsModelPhoto?: string;
 }
 
 class IdentifyGarmentDto {
@@ -393,13 +398,17 @@ export class TryOnService {
           heightCm:        (measurement?.heightCm ?? profile.heightCm) as number | null,
         } : undefined;
 
-        // Fire Claude analysis in parallel with sequential view generation.
-        // Views are generated one at a time (not in parallel) to avoid Gemini
-        // rate-limit failures when 3-4 images are requested simultaneously.
-        // After each view completes we persist a partial result so the client
-        // can display it immediately without waiting for all angles.
+        // Two-step approach: first describe the garment via Claude (especially important
+        // when the garment image shows a model wearing the clothes), then use that rich
+        // description to guide Gemini's image generation for more reliable results.
+        // Views are generated one at a time (not in parallel) to stay within Gemini rate limits.
+        // After each view completes we persist a partial result so the client can display
+        // it immediately without waiting for all angles.
         try {
-          const claudePromise = this.callClaude(personImageUrl, garmentImageUrl, claudeCtx);
+          const [fitAnalysisResult, garmentDescription] = await Promise.all([
+            this.callClaude(personImageUrl, garmentImageUrl, claudeCtx),
+            this.describeGarmentWithClaude(garmentImageUrl),
+          ]);
 
           const views: Partial<Record<ViewAngle, string>> = {};
           const partialBase = {
@@ -409,26 +418,38 @@ export class TryOnService {
           };
 
           for (const angle of selectedAngles) {
-            try {
-              const url = await this.callGemini(personImageUrl, garmentImageUrl, request.userId, angle);
-              views[angle] = url;
+            let angleSucceeded = false;
+            for (let attempt = 0; attempt < 3 && !angleSucceeded; attempt++) {
+              try {
+                const url = await this.callGemini(
+                  personImageUrl, garmentImageUrl, request.userId, angle, garmentDescription
+                );
+                views[angle] = url;
+                angleSucceeded = true;
 
-              const currentOutputUrl = views.front ?? (Object.values(views)[0] as string | undefined) ?? "";
-              await (this.prisma.tryOnResult as any).upsert({
-                where: { requestId: request.id },
-                update: {
-                  outputImageUrl: currentOutputUrl,
-                  metadata: { ...partialBase, views } as Prisma.InputJsonValue,
-                },
-                create: {
-                  requestId: request.id,
-                  outputImageUrl: currentOutputUrl,
-                  confidence: 0.75,
-                  metadata: { ...partialBase, views } as Prisma.InputJsonValue,
-                },
-              });
-            } catch (angleError) {
-              console.warn(`[TryOn] Skipping ${angle} view after error:`, angleError instanceof Error ? angleError.message : angleError);
+                const currentOutputUrl = views.front ?? (Object.values(views)[0] as string | undefined) ?? "";
+                await (this.prisma.tryOnResult as any).upsert({
+                  where: { requestId: request.id },
+                  update: {
+                    outputImageUrl: currentOutputUrl,
+                    metadata: { ...partialBase, views } as Prisma.InputJsonValue,
+                  },
+                  create: {
+                    requestId: request.id,
+                    outputImageUrl: currentOutputUrl,
+                    confidence: 0.75,
+                    metadata: { ...partialBase, views } as Prisma.InputJsonValue,
+                  },
+                });
+              } catch (angleError) {
+                const msg = angleError instanceof Error ? angleError.message : String(angleError);
+                if (attempt < 2) {
+                  console.warn(`[TryOn] Attempt ${attempt + 1} failed for ${angle}, retrying:`, msg);
+                  await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+                } else {
+                  console.warn(`[TryOn] All attempts failed for ${angle}:`, msg);
+                }
+              }
             }
           }
 
@@ -436,21 +457,20 @@ export class TryOnService {
             throw new Error("All view generation attempts failed");
           }
 
-          const fitAnalysis = await claudePromise;
           const outputImageUrl = views.front ?? (Object.values(views)[0] as string) ?? "";
 
           result = {
             outputImageUrl,
             views,
-            confidence: fitAnalysis.fitScore / 100,
-            summary: `${fitAnalysis.sizeRecommendation} recommended. ${fitAnalysis.styleNotes}`,
+            confidence: fitAnalysisResult.fitScore / 100,
+            summary: `${fitAnalysisResult.sizeRecommendation} recommended. ${fitAnalysisResult.styleNotes}`,
             metadata: {
-              fitScore:            fitAnalysis.fitScore,
-              sizeRecommendation:  fitAnalysis.sizeRecommendation,
-              colourMatch:         fitAnalysis.colourMatch,
-              styleNotes:          fitAnalysis.styleNotes,
-              occasion:            fitAnalysis.occasion,
-              stylistNote:         fitAnalysis.stylistNote,
+              fitScore:            fitAnalysisResult.fitScore,
+              sizeRecommendation:  fitAnalysisResult.sizeRecommendation,
+              colourMatch:         fitAnalysisResult.colourMatch,
+              styleNotes:          fitAnalysisResult.styleNotes,
+              occasion:            fitAnalysisResult.occasion,
+              stylistNote:         fitAnalysisResult.stylistNote,
               provider:            'gemini+claude',
             },
           };
@@ -682,7 +702,8 @@ export class TryOnService {
     personImageUrl: string,
     garmentImageUrl: string,
     userId: string,
-    viewAngle: ViewAngle = "front"
+    viewAngle: ViewAngle = "front",
+    garmentDescription = ""
   ): Promise<string> {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
@@ -702,25 +723,35 @@ export class TryOnService {
     const personMime  = personRes.headers.get('content-type')  ?? 'image/jpeg';
     const garmentMime = garmentRes.headers.get('content-type') ?? 'image/jpeg';
 
-    const imageModel = this.configService.get<string>('GEMINI_IMAGE_MODEL') ?? 'gemini-2.5-flash-image';
+    const imageModel = this.configService.get<string>('GEMINI_IMAGE_MODEL') ?? 'gemini-2.0-flash-exp';
     const viewInstruction = {
-      front: 'Show the person wearing the new garment, viewed from the front.',
-      back: 'Show the person wearing the new garment, viewed from behind.',
-      side_left: 'Show the person wearing the new garment, viewed from the left side.',
-      side_right: 'Show the person wearing the new garment, viewed from the right side.',
+      front:      'Camera angle: straight-on front view.',
+      back:       'Camera angle: from directly behind the person.',
+      side_left:  'Camera angle: from the person\'s left side.',
+      side_right: 'Camera angle: from the person\'s right side.',
     }[viewAngle];
-    const prompt = [
-      'Virtual try-on: the person in Image 1 must be wearing the garment from Image 2 instead of their current clothes.',
-      'Replace ALL clothing on the person with the garment shown in Image 2 — the original clothes must not be visible in the output.',
-      'IMPORTANT: If Image 2 shows a fashion model wearing the garment, extract ONLY the garment/outfit from that model and transfer it to the person in Image 1. Ignore the model in Image 2 — use only the garment details (color, pattern, cut, fabric).',
-      viewInstruction,
-      'Image 1 is the target person. Image 2 is the garment source (may be a flat lay, hanger image, or a model wearing the garment).',
-      'Preserve the person identity, face, hair, skin tone, body shape, background, and lighting exactly.',
-      'Keep the garment color, pattern, neckline, sleeve shape, fabric texture, and silhouette exactly as shown in Image 2.',
-      'The garment must look naturally worn with realistic folds, shadows, and body drape.',
-      'Do not create a collage or composite. Return only the single final edited try-on image.',
-    ].join(' ');
 
+    // Structured prompt: explicit roles + garment description from pre-analysis
+    const garmentLine = garmentDescription
+      ? `The garment to apply is: ${garmentDescription}.`
+      : 'The garment to apply is shown in IMAGE B.';
+
+    const prompt = `You are a virtual try-on AI. Your ONLY task is to produce a single realistic photo of the person wearing a different garment.
+
+IMAGE A = the target person (first image provided). Do NOT change: their face, hair, skin tone, body shape, pose, or background.
+IMAGE B = the garment source (second image provided). This may show a flat-lay garment, a hanger, or a model wearing the clothes. If IMAGE B shows a model, ignore the model entirely — extract ONLY the clothing item.
+
+${garmentLine}
+
+YOUR OUTPUT must be a single image showing IMAGE A's person wearing the garment from IMAGE B. Requirements:
+1. ALL existing clothing on the person MUST be replaced by the garment from IMAGE B. No original clothing visible.
+2. Garment must fit the person's body naturally with realistic draping, folds, and shadows.
+3. Preserve exact: face identity, hair, skin tone, background, body proportions, lighting.
+4. Match exactly from IMAGE B: garment color, pattern, cut, neckline, sleeve shape, fabric texture, length.
+5. ${viewInstruction}
+6. Output ONE merged final image only — no collage, no side-by-side, no commentary.`;
+
+    // Interleave text labels with images so Gemini clearly knows which is which
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`,
       {
@@ -729,31 +760,74 @@ export class TryOnService {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: prompt },
+              { text: 'IMAGE A — TARGET PERSON (do NOT alter this person\'s face, hair, skin, body, background):' },
               { inlineData: { mimeType: personMime,  data: personB64  } },
+              { text: 'IMAGE B — GARMENT SOURCE (extract the clothing item shown; ignore any model wearing it):' },
               { inlineData: { mimeType: garmentMime, data: garmentB64 } },
+              { text: prompt },
             ],
           }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
         }),
       },
     );
 
     if (!geminiRes.ok) {
-      throw new Error(`Gemini API error: ${geminiRes.status}`);
+      const errText = await geminiRes.text().catch(() => '');
+      throw new Error(`Gemini API error ${geminiRes.status}: ${errText.slice(0, 200)}`);
     }
 
     const geminiData = await geminiRes.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> } }>;
+      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string }; text?: string }> } }>;
     };
     const imagePart = geminiData.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.data);
     if (!imagePart?.inlineData?.data) {
-      throw new Error('Gemini did not return an image in the response');
+      const textPart = geminiData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text ?? '';
+      throw new Error(`Gemini returned no image. Response: ${textPart.slice(0, 150)}`);
     }
 
     const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
     const mimeType    = imagePart.inlineData.mimeType ?? 'image/png';
     return this.uploadsService.storeFile(userId, imageBuffer, mimeType, 'tryon-result');
+  }
+
+  // Uses Claude Haiku to describe the garment in detail before sending to Gemini.
+  // This two-step approach is critical when garmentImageUrl shows a model wearing
+  // the clothes — Claude extracts just the garment, giving Gemini better guidance.
+  private async describeGarmentWithClaude(garmentImageUrl: string): Promise<string> {
+    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    if (!apiKey) return '';
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 150,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'url', url: garmentImageUrl } },
+              {
+                type: 'text',
+                text: 'Describe ONLY the clothing item in this image (ignore any model/person wearing it). Be specific: garment type, exact color, pattern, neckline, sleeve style, silhouette/cut, length, and distinctive design features. One dense sentence only.',
+              },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) return '';
+      const data = await res.json() as { content?: Array<{ text?: string }> };
+      return data.content?.[0]?.text?.trim() ?? '';
+    } catch {
+      return '';
+    }
   }
 
   private serializeRequest(request: any) {
