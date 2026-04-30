@@ -40,7 +40,10 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
         let isAuthenticated = false;
         if (accessToken) {
           try {
-            const session = await mobileApi.session();
+            const timeout = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Session check timed out')), 6000)
+            );
+            const session = await Promise.race([mobileApi.session(), timeout]);
             useAppStore.getState().setSession({
               userId: session.user.id,
               accessToken,
