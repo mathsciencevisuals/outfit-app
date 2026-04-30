@@ -309,7 +309,12 @@ export class TryOnService {
       const viewAngles: ViewAngle[] = rawAngles.filter((a: string) => VALID_ANGLES.includes(a as ViewAngle)) as ViewAngle[];
       const selectedAngles: ViewAngle[] = viewAngles.length ? viewAngles : ["front"];
 
-      const providerMode = normalizeTryOnProvider(request.provider);
+      const configuredProvider = normalizeTryOnProvider(this.configService.get<string>("TRYON_PROVIDER"));
+      const storedProvider = normalizeTryOnProvider(request.provider);
+      const providerMode =
+        configuredProvider === "gemini" && storedProvider === "grok"
+          ? "gemini"
+          : storedProvider;
 
       const personImageUrl  = request.imageUrl;
       const garmentImageUrl =

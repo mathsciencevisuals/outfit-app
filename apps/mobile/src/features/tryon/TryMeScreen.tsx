@@ -602,7 +602,7 @@ export function TryMeScreen() {
         </View>
       </Modal>
 
-      <LoadingOverlay visible={generating} message="Generating with Grok Aurora…" progress={genProgress} />
+      <LoadingOverlay visible={generating} message="Generating your try-on…" progress={genProgress} />
       <Toast message={toast} visible={toastVis} />
     </View>
   );
