@@ -55,6 +55,7 @@ export function TryMeScreen() {
   const [genProgress,    setGenProgress]    = useState(0);
   const [generatedViews, setGeneratedViews] = useState<Partial<Record<ViewAngle, string>>>({});
   const [primaryUrl,     setPrimaryUrl]     = useState<string | null>(null);
+  const [fitInsight,     setFitInsight]     = useState<TryOnFitInsight | null>(null);
   const [activeView,     setActiveView]     = useState<ViewAngle>('front');
   const [requestId,      setRequestId]      = useState<string | null>(null);
   const [savingLook,     setSavingLook]     = useState(false);
@@ -159,7 +160,7 @@ export function TryMeScreen() {
   };
 
   const resetResult = () => {
-    setGeneratedViews({}); setPrimaryUrl(null); setLookSaved(false); setSavedCount(0);
+    setGeneratedViews({}); setPrimaryUrl(null); setFitInsight(null); setLookSaved(false); setSavedCount(0);
   };
 
   // ── View angle toggle ─────────────────────────────────────────────────────────
@@ -205,6 +206,7 @@ export function TryMeScreen() {
       const primary = result.result?.outputImageUrl ?? null;
       setGeneratedViews(views);
       setPrimaryUrl(primary);
+      setFitInsight(buildFitInsight(result.result?.metadata, result.result?.summary));
 
       // Set active view to first generated angle
       const firstAngle = angles.find(a => views[a] || a === angles[0]);
@@ -456,7 +458,53 @@ export function TryMeScreen() {
 
             {/* Active view image */}
             {activeImageUrl && (
-              <Image source={{ uri: activeImageUrl }} style={styles.resultImage} resizeMode="cover" />
+              <View style={styles.resultImageWrap}>
+                <Image source={{ uri: activeImageUrl }} style={styles.resultImage} resizeMode="cover" />
+                <Pressable
+                  style={[
+                    styles.imageSaveBtn,
+                    { backgroundColor: lookSaved ? C.success : C.primary },
+                  ]}
+                  onPress={handleSaveLook}
+                  disabled={savingLook || lookSaved}
+                >
+                  <Ionicons name={lookSaved ? 'checkmark' : 'bookmark'} size={18} color="#fff" />
+                </Pressable>
+              </View>
+            )}
+
+            {fitInsight && (
+              <View style={[styles.fitInsightCard, { backgroundColor: C.surface2, borderColor: C.border }]}>
+                <View style={styles.fitInsightTop}>
+                  <Text style={[styles.fitInsightTitle, { color: C.textPrimary }]}>Fit notes</Text>
+                  {fitInsight.fitScore ? (
+                    <Text style={[styles.fitScore, { color: C.primary }]}>{fitInsight.fitScore}/100</Text>
+                  ) : null}
+                </View>
+                <View style={styles.fitPillRow}>
+                  {fitInsight.sizeRecommendation ? (
+                    <View style={[styles.fitPill, { backgroundColor: C.primaryDim }]}>
+                      <Text style={[styles.fitPillText, { color: C.primary }]}>Size {fitInsight.sizeRecommendation}</Text>
+                    </View>
+                  ) : null}
+                  {fitInsight.colourMatch ? (
+                    <View style={[styles.fitPill, { backgroundColor: C.warningDim }]}>
+                      <Text style={[styles.fitPillText, { color: C.warning }]}>{fitInsight.colourMatch} color</Text>
+                    </View>
+                  ) : null}
+                  {fitInsight.occasion ? (
+                    <View style={[styles.fitPill, { backgroundColor: C.successDim }]}>
+                      <Text style={[styles.fitPillText, { color: C.success }]}>{fitInsight.occasion}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {fitInsight.styleNotes ? (
+                  <Text style={[styles.fitInsightText, { color: C.textSecondary }]}>{fitInsight.styleNotes}</Text>
+                ) : null}
+                {fitInsight.stylistNote ? (
+                  <Text style={[styles.stylistNote, { color: C.textPrimary }]}>{fitInsight.stylistNote}</Text>
+                ) : null}
+              </View>
             )}
 
             {/* Action buttons */}
@@ -665,7 +713,18 @@ const styles = StyleSheet.create({
   // Result
   resultCard:    { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', padding: Spacing.sm, gap: Spacing.sm },
   resultTitle:   { fontSize: FontSize.md, fontWeight: FontWeight.bold },
+  resultImageWrap: { position: 'relative' },
   resultImage:   { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md },
+  imageSaveBtn:  { position: 'absolute', top: 10, right: 10, width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  fitInsightCard: { borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm, gap: Spacing.xs },
+  fitInsightTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  fitInsightTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold },
+  fitScore: { fontSize: FontSize.sm, fontWeight: FontWeight.bold },
+  fitPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
+  fitPill: { borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 4 },
+  fitPillText: { fontSize: 10, fontWeight: FontWeight.bold },
+  fitInsightText: { fontSize: FontSize.xs, lineHeight: 17 },
+  stylistNote: { fontSize: FontSize.xs, lineHeight: 17, fontWeight: FontWeight.medium },
   viewTabs:      { flexDirection: 'row' as any },
   viewTab:       { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.full, marginRight: 6, borderWidth: 1 },
   viewTabTxt:    { fontSize: FontSize.xs, fontWeight: FontWeight.semibold },
@@ -714,6 +773,32 @@ const styles = StyleSheet.create({
   pickerBrand: { fontSize: FontSize.xs },
   pickerPrice: { fontSize: FontSize.sm, fontWeight: FontWeight.bold },
 });
+
+type TryOnFitInsight = {
+  fitScore: number | null;
+  sizeRecommendation: string | null;
+  colourMatch: string | null;
+  occasion: string | null;
+  styleNotes: string | null;
+  stylistNote: string | null;
+};
+
+function buildFitInsight(metadata?: Record<string, unknown>, summary?: string): TryOnFitInsight | null {
+  const insight = {
+    fitScore: typeof metadata?.fitScore === 'number' ? metadata.fitScore : null,
+    sizeRecommendation: stringValue(metadata?.sizeRecommendation),
+    colourMatch: stringValue(metadata?.colourMatch),
+    occasion: stringValue(metadata?.occasion),
+    styleNotes: stringValue(metadata?.styleNotes) ?? summary ?? null,
+    stylistNote: stringValue(metadata?.stylistNote),
+  };
+
+  return Object.values(insight).some(Boolean) ? insight : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
 
 function validateBodyFraming(width?: number, height?: number): string | null {
   if (!width || !height) {
