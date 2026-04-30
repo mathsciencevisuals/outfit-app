@@ -712,8 +712,9 @@ export class TryOnService {
     const prompt = [
       'Virtual try-on: the person in Image 1 must be wearing the garment from Image 2 instead of their current clothes.',
       'Replace ALL clothing on the person with the garment shown in Image 2 — the original clothes must not be visible in the output.',
+      'IMPORTANT: If Image 2 shows a fashion model wearing the garment, extract ONLY the garment/outfit from that model and transfer it to the person in Image 1. Ignore the model in Image 2 — use only the garment details (color, pattern, cut, fabric).',
       viewInstruction,
-      'Image 1 is the person. Image 2 is the garment to wear.',
+      'Image 1 is the target person. Image 2 is the garment source (may be a flat lay, hanger image, or a model wearing the garment).',
       'Preserve the person identity, face, hair, skin tone, body shape, background, and lighting exactly.',
       'Keep the garment color, pattern, neckline, sleeve shape, fabric texture, and silhouette exactly as shown in Image 2.',
       'The garment must look naturally worn with realistic folds, shadows, and body drape.',

@@ -40,7 +40,7 @@ export function DashboardScreen() {
 
   const statCards = [
     { label: 'Try-ons',     value: stats?.tryOnsCount    ?? 0,    icon: 'shirt-outline'    as const },
-    { label: 'Saved Items', value: savedCount,                     icon: 'heart-outline'    as const },
+    { label: 'Saved Items', value: stats?.savedCount ?? savedCount, icon: 'heart-outline'    as const },
     { label: 'Style Match', value: `${stats?.styleMatchPct ?? 0}%`, icon: 'trending-up-outline' as const },
   ];
 

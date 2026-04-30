@@ -315,7 +315,7 @@ class UsersService {
         : 0;
 
     return {
-      tryOnCount,
+      tryOnsCount: tryOnCount,
       savedCount: savedLooksCount,
       styleMatchPct: Math.min(styleMatchPct, 100),
       totalOrders: 0,
