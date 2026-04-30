@@ -192,7 +192,7 @@ export class TryOnService {
     const selectedVariant = dto.variantId
       ? await (this.prisma.productVariant as any).findUnique({ where: { id: dto.variantId } })
       : await (this.prisma.productVariant as any).findFirst({
-          orderBy: [{ productId: "asc" }, { createdAt: "asc" }]
+          orderBy: [{ productId: "asc" }, { sku: "asc" }]
         });
 
     if (!selectedVariant) {
