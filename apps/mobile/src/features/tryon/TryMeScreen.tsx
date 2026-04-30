@@ -178,7 +178,6 @@ export function TryMeScreen() {
       const angles = Array.from(selectedAngles);
       const created = await mobileApi.createTryOn(userId, garmentVariant?.id, userPhoto, {
         viewAngles: angles,
-        provider: 'grok',
         garmentPhotoUri: garmentUri ?? undefined,
       });
       setRequestId(created.id); setLastTryOnId(created.id); setGenProgress(15);
