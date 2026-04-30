@@ -23,7 +23,12 @@ export interface Product {
   brand: Brand;
   category: string;
   baseColor: string;
+  secondaryColors?: string[];
+  materials?: string[];
+  styleTags?: string[];
+  occasionTags?: string[];
   description?: string;
+  imageUrl?: string | null;
   trending?: boolean;
   instagramLikes?: string;
   variants: ProductVariant[];
@@ -148,6 +153,24 @@ export interface Recommendation {
   product?: Product;
   score: number;
   explanation: string;
+}
+
+export type TrendSource = 'pinterest' | 'internal' | 'hybrid';
+
+export interface PersonalizedTrendItem {
+  name: string;
+  score: number;
+  source: TrendSource;
+  image: string | null;
+  cta: string;
+  reasons: string[];
+  product: Product;
+}
+
+export interface PersonalizedTrendingResponse {
+  trendingForYou: PersonalizedTrendItem[];
+  popularInApp: PersonalizedTrendItem[];
+  globalTrends: PersonalizedTrendItem[];
 }
 
 // ─── Saved Look Types ─────────────────────────────────────────────────────────

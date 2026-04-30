@@ -2,7 +2,7 @@ import { env } from '../utils/env';
 import { useAppStore } from '../store/app-store';
 import type {
   UserProfile, UserStats, Measurement, Product,
-  Recommendation, SavedLook, Shop,
+  Recommendation, SavedLook, Shop, PersonalizedTrendingResponse,
   TryOnRequest, TryOnResult, TrendingPin, ViewAngle,
 } from '../types';
 import type { AuthResponse, SessionResponse, UploadSession } from '../types/api';
@@ -182,9 +182,12 @@ export const mobileApi = {
   },
 
   // GET /products/trending
-  // Returns top trending products (sorted by instagramLikes, trending=true)
+  // Returns global trending products.
   trending: (limit = 4): Promise<Product[]> =>
     apiFetch<Product[]>(`/products/trending?limit=${limit}`),
+
+  personalizedTrending: (userId: string, limit = 8): Promise<PersonalizedTrendingResponse> =>
+    apiFetch<PersonalizedTrendingResponse>(`/products/trending?userId=${encodeURIComponent(userId)}&limit=${limit}`),
 
   // ── Saved Products ────────────────────────────────────────────────────────
   // GET /users/:userId/saved-products

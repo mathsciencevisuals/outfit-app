@@ -5,11 +5,13 @@ import { Type } from "class-transformer";
 import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { AuthorizationService } from "../../common/auth/authorization.service";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
 import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 import { inferOccasionTags, representativePriceForProduct, serializeProductCard } from "../catalog/catalog.utils";
 import { FitModule, FitService } from "../fit/fit.module";
+import { SocialModule, SocialService } from "../social/social.module";
 
 class VariantDto {
   @IsString()
@@ -71,9 +73,83 @@ class ProductDto {
   variants?: VariantDto[];
 }
 
+type TrendSource = "pinterest" | "internal" | "hybrid";
+
+type PersonalizedTrendItem = {
+  name: string;
+  score: number;
+  source: TrendSource;
+  image: string | null;
+  cta: string;
+  reasons: string[];
+  product: any;
+};
+
+type PersonalizedTrendingResponse = {
+  trendingForYou: PersonalizedTrendItem[];
+  popularInApp: PersonalizedTrendItem[];
+  globalTrends: PersonalizedTrendItem[];
+};
+
+const TREND_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const trendCache = new Map<string, { expiresAt: number; data: PersonalizedTrendingResponse }>();
+
+function normalizedToken(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizedTokens(values: unknown[]) {
+  return Array.from(new Set(values.map(normalizedToken).filter(Boolean)));
+}
+
+function extractStyleStrings(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  return [
+    ...extractStyleStrings(record.preferredStyles),
+    ...extractStyleStrings(record.styles),
+    ...extractStyleStrings(record.vibes),
+    ...extractStyleStrings(record.occasions)
+  ];
+}
+
+function productTokens(product: any) {
+  return normalizedTokens([
+    product.name,
+    product.category,
+    product.baseColor,
+    ...(product.secondaryColors ?? []),
+    ...(product.styleTags ?? []),
+    ...inferOccasionTags(product)
+  ]);
+}
+
+function overlapCount(left: string[], right: string[]) {
+  const rightSet = new Set(right);
+  return left.filter((item) => rightSet.has(item)).length;
+}
+
+function trendImage(product: any) {
+  return product.imageUrl ?? product.variants?.[0]?.imageUrl ?? null;
+}
+
+function clampScore(score: number) {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 @Injectable()
 class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly socialService: SocialService
+  ) {}
 
   list(category?: string) {
     return this.prisma.product.findMany({
@@ -104,6 +180,142 @@ class ProductsService {
       },
       take: limit
     });
+  }
+
+  async personalizedTrending(userId: string, limit: number): Promise<PersonalizedTrendingResponse> {
+    const cacheKey = `${userId}:${limit}`;
+    const cached = trendCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
+    const [profile, savedLooks, tryOnRequests, products, pins] = await Promise.all([
+      this.prisma.profile.findUnique({ where: { userId } }),
+      this.prisma.savedLook.findMany({
+        where: { userId },
+        include: { items: { include: { product: true } } },
+        orderBy: { updatedAt: "desc" },
+        take: 25
+      }),
+      (this.prisma.tryOnRequest as any).findMany({
+        where: { userId },
+        include: { variant: { include: { product: true } } },
+        orderBy: { requestedAt: "desc" },
+        take: 25
+      }),
+      this.prisma.product.findMany({
+        include: {
+          brand: true,
+          variants: {
+            include: {
+              inventoryOffers: { include: { shop: true } },
+              sizeChartEntries: true,
+              _count: { select: { tryOnRequests: true } }
+            }
+          },
+          _count: { select: { savedLookItems: true, lookRatings: true } }
+        }
+      }),
+      this.socialService.getTrending(Math.max(limit, 8))
+    ]);
+
+    const savedProducts = savedLooks.flatMap((look) => look.items.map((item) => item.product));
+    const triedProducts = tryOnRequests.map((request: any) => request.variant?.product).filter(Boolean);
+    const userStyles = normalizedTokens([
+      ...extractStyleStrings(profile?.stylePreference),
+      ...savedProducts.flatMap((product) => product.styleTags ?? []),
+      ...triedProducts.flatMap((product: any) => product.styleTags ?? [])
+    ]);
+    const userColors = normalizedTokens([
+      ...(profile?.preferredColors ?? []),
+      ...savedProducts.flatMap((product) => [product.baseColor, ...(product.secondaryColors ?? [])]),
+      ...triedProducts.flatMap((product: any) => [product.baseColor, ...(product.secondaryColors ?? [])])
+    ]);
+    const userCategories = normalizedTokens([
+      ...savedProducts.map((product) => product.category),
+      ...triedProducts.map((product: any) => product.category)
+    ]);
+    const hasUserSignals = userStyles.length > 0 || userColors.length > 0 || userCategories.length > 0;
+
+    const pinText = pins
+      .map((pin) => `${pin.title} ${pin.description} ${pin.boardName}`)
+      .join(" ")
+      .toLowerCase();
+    const maxInternal = Math.max(
+      1,
+      ...products.map((product: any) =>
+        (product._count?.savedLookItems ?? 0) +
+        (product._count?.lookRatings ?? 0) +
+        (product.variants ?? []).reduce((sum: number, variant: any) => sum + (variant._count?.tryOnRequests ?? 0), 0)
+      )
+    );
+
+    const ranked = products
+      .map((product: any) => {
+        const tokens = productTokens(product);
+        const styleHits = overlapCount(tokens, userStyles);
+        const colorHits = overlapCount(tokens, userColors);
+        const categoryHits = userCategories.includes(normalizedToken(product.category)) ? 1 : 0;
+        const internalCount =
+          (product._count?.savedLookItems ?? 0) +
+          (product._count?.lookRatings ?? 0) +
+          (product.variants ?? []).reduce((sum: number, variant: any) => sum + (variant._count?.tryOnRequests ?? 0), 0);
+        const pinHits = tokens.filter((token) => pinText.includes(token)).length;
+        const popularityScore = Math.min(20, Math.round((internalCount / maxInternal) * 14) + Math.min(6, pinHits * 2));
+        const score = clampScore(
+          Math.min(40, styleHits * 18) +
+          Math.min(20, colorHits * 10) +
+          (categoryHits ? 20 : 0) +
+          popularityScore
+        );
+        const source: TrendSource =
+          internalCount > 0 && pinHits > 0 ? "hybrid" :
+          internalCount > 0 ? "internal" :
+          pinHits > 0 ? "pinterest" : "internal";
+        const reasons = [
+          styleHits > 0 ? "Matches your saved style signals" : null,
+          colorHits > 0 ? "Fits your preferred color palette" : null,
+          categoryHits > 0 ? "Similar to items you saved or tried on" : null,
+          internalCount > 0 ? "Popular with Outfit App users" : null,
+          pinHits > 0 ? "Aligned with Pinterest trend seeds" : null
+        ].filter(Boolean) as string[];
+        const serialized = serializeProductCard(product);
+
+        return {
+          name: product.name,
+          score: hasUserSignals ? score : clampScore(popularityScore),
+          source,
+          image: trendImage(serialized),
+          cta: "Try this look",
+          reasons: reasons.length ? reasons : ["Trending from current product activity"],
+          product: serialized
+        };
+      })
+      .sort((left, right) => right.score - left.score);
+
+    const popularInApp = [...ranked]
+      .filter((item) => item.source === "internal" || item.source === "hybrid")
+      .slice(0, limit);
+    const globalTrends = [...ranked]
+      .sort((left, right) => {
+        const leftInternal =
+          (left.product._count?.savedLookItems ?? 0) +
+          (left.product._count?.lookRatings ?? 0);
+        const rightInternal =
+          (right.product._count?.savedLookItems ?? 0) +
+          (right.product._count?.lookRatings ?? 0);
+        return rightInternal - leftInternal || right.score - left.score;
+      })
+      .slice(0, limit);
+
+    const data = {
+      trendingForYou: hasUserSignals ? ranked.slice(0, limit) : [],
+      popularInApp: popularInApp.length ? popularInApp : ranked.slice(0, limit),
+      globalTrends: globalTrends.length ? globalTrends : ranked.slice(0, limit)
+    };
+
+    trendCache.set(cacheKey, { expiresAt: Date.now() + TREND_CACHE_TTL_MS, data });
+    return data;
   }
 
   get(id: string) {
@@ -167,7 +379,8 @@ class ProductsService {
 class ProductsController {
   constructor(
     private readonly service: ProductsService,
-    private readonly fitService: FitService
+    private readonly fitService: FitService,
+    private readonly authorizationService: AuthorizationService
   ) {}
 
   @Get()
@@ -177,8 +390,18 @@ class ProductsController {
   }
 
   @Get("trending")
-  async trending(@Query("limit") limit = "4") {
-    const products = await this.service.trending(Number(limit));
+  async trending(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("limit") limit = "4",
+    @Query("userId") userId?: string
+  ) {
+    const parsedLimit = Math.min(Math.max(Number(limit) || 4, 1), 20);
+    if (userId) {
+      this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot view these personalized trends");
+      return this.service.personalizedTrending(userId, parsedLimit);
+    }
+
+    const products = await this.service.trending(parsedLimit);
     return products.map((product) => serializeProductCard(product));
   }
 
@@ -253,7 +476,7 @@ class ProductsController {
 }
 
 @Module({
-  imports: [FitModule],
+  imports: [FitModule, SocialModule],
   controllers: [ProductsController],
   providers: [ProductsService, PrismaService],
   exports: [ProductsService]

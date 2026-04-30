@@ -39,7 +39,7 @@ export function RecommendationsScreen() {
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>
-          📸 Trending on Instagram
+          Trending Products
         </Text>
       </View>
       <View style={styles.grid}>

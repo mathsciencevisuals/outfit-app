@@ -89,7 +89,7 @@ const STUB_PINS: TrendingPin[] = [
 ];
 
 @Injectable()
-class SocialService {
+export class SocialService {
   constructor(private readonly configService: ConfigService) {}
 
   async getTrending(limit: number): Promise<TrendingPin[]> {
@@ -152,5 +152,6 @@ class SocialController {
 @Module({
   controllers: [SocialController],
   providers: [SocialService],
+  exports: [SocialService],
 })
 export class SocialModule {}
