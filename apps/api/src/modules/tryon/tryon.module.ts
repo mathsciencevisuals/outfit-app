@@ -657,20 +657,31 @@ export class TryOnService {
     const personMime  = personRes.headers.get('content-type')  ?? 'image/jpeg';
     const garmentMime = garmentRes.headers.get('content-type') ?? 'image/jpeg';
 
+    const imageModel = this.configService.get<string>('GEMINI_IMAGE_MODEL') ?? 'gemini-2.5-flash-image';
+    const prompt = [
+      'Create a realistic virtual try-on image.',
+      'Image 1 is the person. Image 2 is the garment reference.',
+      'Replace the visible garment on the person with the garment from image 2.',
+      'Preserve the person identity, face, hair, skin tone, pose, body shape, background, camera angle, and lighting.',
+      'Keep the garment color, pattern, neckline, sleeve shape, fabric texture, and silhouette from image 2.',
+      'Make the result look like a real worn outfit with natural folds, shadows, and body drape.',
+      'Do not show the garment as a separate object. Do not create a collage. Return only the final edited try-on image.'
+    ].join(' ');
+
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: 'Dress the person in image 1 with the garment in image 2. Preserve the person\'s face, body shape, and skin tone. Make the fabric drape realistically. Show the full outfit.' },
+              { text: prompt },
               { inlineData: { mimeType: personMime,  data: personB64  } },
               { inlineData: { mimeType: garmentMime, data: garmentB64 } },
             ],
           }],
-          generationConfig: { responseModalities: ['IMAGE'] },
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
         }),
       },
     );
