@@ -189,16 +189,6 @@ export class TryOnService {
       throw new BadRequestException("Garment upload is missing or does not belong to the user");
     }
 
-    const selectedVariant = dto.variantId
-      ? await (this.prisma.productVariant as any).findUnique({ where: { id: dto.variantId } })
-      : await (this.prisma.productVariant as any).findFirst({
-          orderBy: [{ productId: "asc" }, { sku: "asc" }]
-        });
-
-    if (!selectedVariant) {
-      throw new BadRequestException("No product variant is available for try-on generation");
-    }
-
     // Accept inline file uploads when no pre-signed upload is provided
     const userPhotoFile = files?.userPhoto?.[0];
     let imageUrl = upload?.publicUrl ?? dto.imageUrl;
@@ -220,6 +210,8 @@ export class TryOnService {
     if (!inlineGarmentUrl && !dto.variantId) {
       throw new BadRequestException("A garment image or store item is required");
     }
+
+    const selectedVariant = await this.resolveTryOnVariant(dto.variantId, inlineGarmentUrl);
 
     // Encode selected view angles in comparisonLabel (parsed back during processing)
     const viewAnglesStr = dto.viewAngles ?? "front";
@@ -263,6 +255,69 @@ export class TryOnService {
 
     await this.rewardsService.awardFirstTryOn(dto.userId);
     return this.serializeRequest(request);
+  }
+
+  private async resolveTryOnVariant(variantId?: string, garmentImageUrl?: string | null) {
+    if (variantId) {
+      const selectedVariant = await (this.prisma.productVariant as any).findUnique({ where: { id: variantId } });
+      if (!selectedVariant) {
+        throw new BadRequestException("Selected product variant is not available for try-on generation");
+      }
+      return selectedVariant;
+    }
+
+    const existingVariant = await (this.prisma.productVariant as any).findFirst({
+      orderBy: [{ productId: "asc" }, { sku: "asc" }]
+    });
+    if (existingVariant) {
+      return existingVariant;
+    }
+
+    if (!garmentImageUrl) {
+      throw new BadRequestException("No product variant is available for try-on generation");
+    }
+
+    const brand = await (this.prisma.brand as any).upsert({
+      where: { slug: "user-uploaded-garments" },
+      update: {},
+      create: {
+        name: "User Uploaded Garments",
+        slug: "user-uploaded-garments",
+        countryCode: "IN",
+        sizingNotes: "System fallback for direct garment uploads."
+      }
+    });
+
+    const product = await (this.prisma.product as any).upsert({
+      where: { slug: "uploaded-garment-try-on" },
+      update: { imageUrl: garmentImageUrl },
+      create: {
+        brandId: brand.id,
+        name: "Uploaded Garment",
+        slug: "uploaded-garment-try-on",
+        category: "uploaded",
+        description: "User-uploaded garment used for virtual try-on.",
+        baseColor: "unknown",
+        secondaryColors: [],
+        materials: [],
+        styleTags: ["uploaded"],
+        imageUrl: garmentImageUrl
+      }
+    });
+
+    return (this.prisma.productVariant as any).upsert({
+      where: { sku: "uploaded-garment-try-on-default" },
+      update: { imageUrl: garmentImageUrl },
+      create: {
+        productId: product.id,
+        sku: "uploaded-garment-try-on-default",
+        sizeLabel: "One Size",
+        color: "Uploaded",
+        price: new Prisma.Decimal(0),
+        currency: "USD",
+        imageUrl: garmentImageUrl
+      }
+    });
   }
 
   async process(user: AuthenticatedUser, id: string) {
