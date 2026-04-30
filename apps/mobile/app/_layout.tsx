@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -17,14 +17,13 @@ const AUTH_SCREENS = ['auth'];
 function StartupRedirector({ onReady }: { onReady: () => void }) {
   const router   = useRouter();
   const segments = useSegments();
-  const navigationState = useRootNavigationState();
   const hasInitialized = useRef(false);
 
+  // Run once on mount — expo-router 3.5 queues replace() safely if called early.
+  // Removing the navigationState?.key dependency which could stay undefined
+  // indefinitely on Android, keeping the spinner up forever.
   useEffect(() => {
-    if (!navigationState?.key || hasInitialized.current) {
-      return;
-    }
-
+    if (hasInitialized.current) return;
     hasInitialized.current = true;
 
     let mounted = true;
@@ -77,8 +76,6 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
         router.replace('/auth');
         didNavigate = true;
       } finally {
-        // If we navigated, wait for the transition to paint before removing the
-        // loading overlay — prevents a flash of the wrong screen.
         if (mounted) {
           if (didNavigate) {
             setTimeout(() => { if (mounted) onReady(); }, 300);
@@ -91,10 +88,9 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
 
     checkNavigation();
 
-    return () => {
-      mounted = false;
-    };
-  }, [navigationState?.key, onReady, router, segments]);
+    return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return null;
 }
@@ -104,9 +100,7 @@ export default function RootLayout() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (hydrated) {
-      return;
-    }
+    if (hydrated) return;
 
     const unsubscribe = useAppStore.persist.onFinishHydration(() => {
       setHydrated(true);
@@ -115,6 +109,13 @@ export default function RootLayout() {
     setHydrated(useAppStore.persist.hasHydrated());
     return unsubscribe;
   }, [hydrated]);
+
+  // Hard fallback — spinner always clears within 8 s even if StartupRedirector
+  // fails to call onReady (e.g. navigation container slow to init on Android).
+  useEffect(() => {
+    const t = setTimeout(() => setChecked(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <SafeAreaProvider>
