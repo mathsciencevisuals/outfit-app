@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Injectable, Module, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { ConfigService } from "@nestjs/config";
 import { IsIn, IsOptional, IsString } from "class-validator";
 
 import { Occasion, rankProducts } from "@fitme/recommendation-engine";
@@ -137,8 +138,82 @@ class RecommendationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
-    private readonly fitService: FitService
+    private readonly fitService: FitService,
+    private readonly configService: ConfigService,
   ) {}
+
+  // ── Claude re-ranking ────────────────────────────────────────────────────────
+  // Takes top results from the rule engine and re-scores them in one Claude call.
+  // Returns original list unchanged if ANTHROPIC_API_KEY is not set.
+
+  private async reRankWithClaude(
+    candidates: { productId: string; product: any; score: number; explanation: string }[],
+    profile: any,
+  ): Promise<{ productId: string; score: number; reason: string }[] | null> {
+    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    if (!apiKey || candidates.length === 0) return null;
+
+    const budgetRange = profile?.budgetMin != null && profile?.budgetMax != null
+      ? `₹${profile.budgetMin}–₹${profile.budgetMax}`
+      : profile?.budgetLabel ?? 'open';
+
+    const preferredStyles: string[] = Array.isArray(profile?.stylePreference?.preferredStyles)
+      ? profile.stylePreference.preferredStyles
+      : [];
+
+    const candidateList = candidates
+      .map((c, i) =>
+        `${i + 1}. ID:${c.productId} | "${c.product.name}" | ${c.product.category} | ` +
+        `₹${c.product.offerSummary?.lowestPrice ?? 0} | Tags: ${(c.product.styleTags ?? []).join(', ')}`
+      )
+      .join('\n');
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: `You are a fashion recommendation AI for Indian college students.
+
+User profile:
+- Style preferences: ${preferredStyles.join(', ') || 'not set'}
+- Preferred colours: ${(profile?.preferredColors ?? []).join(', ') || 'none'}
+- Budget: ${budgetRange}
+- Body shape: ${profile?.bodyShape ?? 'not set'}
+
+Score each product below for this user (0–100).
+Consider: style compatibility, colour match, occasion fit, Indian fashion context, value for budget.
+
+Products:
+${candidateList}
+
+Return ONLY a JSON array — no markdown, no explanation:
+[{"productId":"ID","score":85,"reason":"one sentence why"},...]
+Sort by score descending. Include all ${candidates.length} products.`,
+          }],
+        }),
+      });
+
+      if (!res.ok) return null;
+      const data = await res.json() as { content?: Array<{ text?: string }> };
+      const raw = data.content?.[0]?.text ?? '[]';
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return JSON.parse(raw.replace(/```json?/g, '').replace(/```/g, '').trim());
+      }
+    } catch {
+      return null;
+    }
+  }
 
   private async getContext(userId: string) {
     const [profile, products, savedLooks] = await Promise.all([
@@ -256,7 +331,7 @@ class RecommendationsService {
 
     const serializedProducts = new Map(products.map((product) => [product.id, serializeProductCard(product)]));
 
-    return ranked.slice(0, 12).map((item, index) => {
+    const baseResults = ranked.slice(0, 12).map((item, index) => {
       const product = serializedProducts.get(item.productId)!;
       const fitPreview = fitPreviewMap.get(item.productId) ?? null;
       const breakdown = colorBreakdown(product, profile);
@@ -301,6 +376,23 @@ class RecommendationsService {
         cheaperAlternative: sameCategoryCheaper
       };
     });
+
+    // Re-rank with Claude if API key is available
+    const claudeScores = await this.reRankWithClaude(baseResults, profile);
+    if (!claudeScores) return baseResults;
+
+    const scoreMap = new Map(claudeScores.map(s => [s.productId, s]));
+    return [...baseResults]
+      .sort((a, b) => (scoreMap.get(b.productId)?.score ?? b.score) - (scoreMap.get(a.productId)?.score ?? a.score))
+      .map(item => {
+        const claudeItem = scoreMap.get(item.productId);
+        if (!claudeItem) return item;
+        return {
+          ...item,
+          score: claudeItem.score,
+          explanation: claudeItem.reason || item.explanation,
+        };
+      });
   }
 
   async list(user: AuthenticatedUser, query: RecommendationQueryDto) {
@@ -366,7 +458,7 @@ class RecommendationsController {
 @Module({
   imports: [FitModule],
   controllers: [RecommendationsController],
-  providers: [RecommendationsService, PrismaService],
+  providers: [RecommendationsService, PrismaService, ConfigService],
   exports: [RecommendationsService]
 })
 export class RecommendationsModule {}
