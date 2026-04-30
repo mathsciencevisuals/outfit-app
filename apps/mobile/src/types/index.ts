@@ -163,6 +163,18 @@ export interface SavedLook {
   createdAt: string;
 }
 
+// ─── Social / Trending ────────────────────────────────────────────────────────
+
+export interface TrendingPin {
+  id: string;
+  imageUrl: string;
+  title: string;
+  description: string;
+  sourceUrl: string;
+  boardName: string;
+  pinCount: number;
+}
+
 // ─── API Response Wrapper ─────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {

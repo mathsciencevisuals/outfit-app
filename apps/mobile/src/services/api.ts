@@ -3,7 +3,7 @@ import { useAppStore } from '../store/app-store';
 import type {
   UserProfile, UserStats, Measurement, Product,
   Recommendation, SavedLook, Shop,
-  TryOnRequest, TryOnResult, ViewAngle,
+  TryOnRequest, TryOnResult, TrendingPin, ViewAngle,
 } from '../types';
 import type { AuthResponse, SessionResponse, UploadSession } from '../types/api';
 
@@ -95,6 +95,7 @@ export const mobileApi = {
         useAppStore.getState().setSession({
           userId: session.user.id,
           accessToken: store.accessToken,
+          userRole: session.user.role,
           authEmail: preferredEmail,
           authPassword: preferredPassword,
         });
@@ -109,6 +110,7 @@ export const mobileApi = {
       useAppStore.getState().setSession({
         userId: auth.user.id,
         accessToken: auth.accessToken,
+        userRole: auth.user.role,
         authEmail: preferredEmail,
         authPassword: preferredPassword,
       });
@@ -129,6 +131,7 @@ export const mobileApi = {
       useAppStore.getState().setSession({
         userId: auth.user.id,
         accessToken: auth.accessToken,
+        userRole: auth.user.role,
         authEmail: fallbackAccount.email,
         authPassword: fallbackAccount.password,
       });
@@ -142,7 +145,7 @@ export const mobileApi = {
 
   updateProfile: (userId: string, updates: Partial<UserProfile>): Promise<UserProfile> =>
     apiFetch<UserProfile>(`/profile/${userId}`, {
-      method: 'PATCH', body: JSON.stringify(updates),
+      method: 'PUT', body: JSON.stringify(updates),
     }),
 
   uploadProfilePhoto: (userId: string, localImageUri: string): Promise<{ avatarUrl: string }> => {
@@ -239,6 +242,22 @@ export const mobileApi = {
     apiFetch<void>(`/saved-looks/${lookId}`, { method: 'DELETE' }),
 
   // ── Style Preferences ─────────────────────────────────────────────────────
+  updateStylePreferences: (
+    userId: string,
+    data: {
+      stylePreference: Record<string, unknown>;
+      preferredColors: string[];
+      avoidedColors: string[];
+      budgetMin?: number | null;
+      budgetMax?: number | null;
+      budgetLabel?: string | null;
+    },
+  ): Promise<void> =>
+    apiFetch<void>(`/style-preferences/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   // PUT /style-preferences/:userId
   saveStylePreferences: (
     userId: string,
@@ -265,6 +284,84 @@ export const mobileApi = {
       }),
     });
   },
+
+  // ── Referrals & Share ─────────────────────────────────────────────────────
+  referralCode: (): Promise<{ id: string; code: string; userId: string }> =>
+    apiFetch('/referrals/code'),
+
+  recordShare: (data: { tryOnRequestId?: string; savedLookId?: string; channel: string }): Promise<void> =>
+    apiFetch('/engagement/share-events', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ── Merchant Portal ───────────────────────────────────────────────────────
+  merchantRegister: (data: { name: string; url: string; region: string; description?: string }): Promise<{ id: string; name: string; slug: string }> =>
+    apiFetch('/merchant/register', { method: 'POST', body: JSON.stringify(data) }),
+
+  merchantShop: (): Promise<{
+    id: string; name: string; slug: string; url: string; region: string;
+    description: string | null;
+    inventoryOffers: Array<{ id: string; price: number; stock: number; externalUrl: string; variantId: string; variant?: { id: string; product?: { id: string; name: string } } }>;
+  }> =>
+    apiFetch('/merchant/shop'),
+
+  merchantUpdateShop: (data: { name?: string; url?: string; region?: string; description?: string }): Promise<void> =>
+    apiFetch('/merchant/shop', { method: 'PUT', body: JSON.stringify(data) }),
+
+  merchantCreateOffer: (data: { variantId: string; externalUrl: string; price: number; stock: number; currency?: string }): Promise<{ id: string }> =>
+    apiFetch('/merchant/offers', { method: 'POST', body: JSON.stringify(data) }),
+
+  merchantUpdateOffer: (offerId: string, data: { price?: number; stock?: number; externalUrl?: string }): Promise<void> =>
+    apiFetch(`/merchant/offers/${offerId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  merchantDeleteOffer: (offerId: string): Promise<void> =>
+    apiFetch(`/merchant/offers/${offerId}`, { method: 'DELETE' }),
+
+  merchantAnalytics: (): Promise<{
+    shopName: string; productCount: number; offerCount: number;
+    tryOnCount: number; completedTryOns: number; conversionRate: number;
+  }> =>
+    apiFetch('/merchant/analytics'),
+
+  // ── Social Trending ───────────────────────────────────────────────────────
+  socialTrending: (limit = 8): Promise<TrendingPin[]> =>
+    apiFetch<TrendingPin[]>(`/social/trending?limit=${limit}`),
+
+  // ── Onboarding / Style Quiz ───────────────────────────────────────────────
+  styleQuiz: (data: {
+    userId: string;
+    question: string;
+    answer: string;
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }): Promise<{
+    nextQuestion: string | null;
+    extractedPrefs: Record<string, unknown> | null;
+    isComplete: boolean;
+  }> =>
+    apiFetch('/onboarding/style-quiz', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ── Garment Identification ────────────────────────────────────────────────
+  identifyGarment: (garmentUrl: string): Promise<{
+    category: string;
+    fabric: string;
+    occasions: string[];
+    color: string;
+    description: string;
+  }> =>
+    apiFetch('/try-on/identify-garment', { method: 'POST', body: JSON.stringify({ garmentUrl }) }),
+
+  // ── Affiliate ─────────────────────────────────────────────────────────────
+  affiliateLink: (productId: string): Promise<{
+    affiliateUrl: string;
+    shopName: string | null;
+    price: number | null;
+  }> =>
+    apiFetch(`/affiliate/product-link?productId=${productId}`),
+
+  // ── Post-try-on recommendations ───────────────────────────────────────────
+  afterTryOnRecs: (userId: string, tryOnRequestId: string): Promise<Recommendation[]> =>
+    apiFetch<Recommendation[]>('/recommendations/after-tryon', {
+      method: 'POST',
+      body: JSON.stringify({ userId, tryOnRequestId }),
+    }),
 
   // ── Uploads ───────────────────────────────────────────────────────────────
   createUploadSession: (userId: string, mimeType: string, purpose: string): Promise<UploadSession> =>

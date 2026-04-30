@@ -3,26 +3,36 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing } from '../utils/theme';
 
-interface ScreenProps {
-  /** Disable scroll for full-screen camera/result views */
+export interface ScreenProps {
   scrollable?: boolean;
+  /** alias for scrollable, used by some older screens */
+  scroll?: boolean;
   noPadding?: boolean;
+  /** 'dark' gives onboarding screens a deep navy background */
+  tone?: 'light' | 'dark';
+  /** accepted but unused — profile strip lives in AppShell */
+  showProfileStrip?: boolean;
 }
 
-/**
- * Root screen wrapper.
- * - SafeAreaView on all edges (handles notch + home bar on both platforms)
- * - KeyboardAvoidingView so inputs don't get hidden
- * - ScrollView (opt-out with scrollable=false)
- */
-export function Screen({ children, scrollable = true, noPadding = false }: PropsWithChildren<ScreenProps>) {
+const DARK_BG = '#0d0f1a';
+
+export function Screen({
+  children,
+  scrollable,
+  scroll,
+  noPadding = false,
+  tone = 'light',
+}: PropsWithChildren<ScreenProps>) {
+  const isScrollable = scrollable ?? scroll ?? true;
+  const bg = tone === 'dark' ? DARK_BG : Colors.bg;
+
   const inner = (
     <KeyboardAvoidingView
       style={styles.kav}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      {scrollable ? (
+      {isScrollable ? (
         <ScrollView
           contentContainerStyle={[styles.content, noPadding && styles.noPadding]}
           keyboardShouldPersistTaps="handled"
@@ -37,16 +47,16 @@ export function Screen({ children, scrollable = true, noPadding = false }: Props
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: bg }]} edges={['top', 'left', 'right']}>
       {inner}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe:     { flex: 1, backgroundColor: Colors.bg },
-  kav:      { flex: 1 },
-  fill:     { flex: 1, padding: Spacing.base },
-  content:  { padding: Spacing.base, gap: Spacing.base },
-  noPadding:{ padding: 0 },
+  safe:      { flex: 1 },
+  kav:       { flex: 1 },
+  fill:      { flex: 1, padding: Spacing.base },
+  content:   { padding: Spacing.base, gap: Spacing.base },
+  noPadding: { padding: 0 },
 });

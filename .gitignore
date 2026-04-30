@@ -10,3 +10,4 @@ apps/api/prisma/dev.db
 postgres_data
 redis_data
 minio_data
+.env

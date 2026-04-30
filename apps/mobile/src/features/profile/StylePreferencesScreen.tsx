@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
+import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { mobileApi } from "../../services/api";
 import { useAppStore } from "../../store/app-store";
 import { colors, radius } from "../../theme/design";
@@ -20,7 +21,11 @@ function normalizeArray(value: unknown) {
 export function StylePreferencesScreen() {
   const router = useRouter();
   const userId = useAppStore((state) => state.userId);
-  const profile = useAppStore((state) => state.profile);
+
+  const { data: profileData } = useAsyncResource(
+    () => mobileApi.profile(userId),
+    [userId],
+  );
 
   const [occasions, setOccasions] = useState<string[]>(["Casual", "Formal"]);
   const [colorsSelected, setColorsSelected] = useState<string[]>(["Black", "Navy"]);
@@ -29,27 +34,24 @@ export function StylePreferencesScreen() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const stylePreference = profile?.stylePreference ?? {};
+    if (!profileData) return;
+    const stylePreference = (profileData.stylePreference ?? {}) as Record<string, unknown>;
     const nextOccasions = normalizeArray(stylePreference.occasions);
-    const nextColors = (profile?.preferredColors ?? []).map(String);
-    const fitLabel = String(stylePreference.fitPreferenceLabel ?? profile?.fitPreference ?? "Regular");
+    const nextColors = (profileData.preferredColors ?? []).map(String);
+    const fitLabel = String(stylePreference.fitPreferenceLabel ?? profileData.fitPreference ?? "Regular");
 
-    if (nextOccasions.length > 0) {
-      setOccasions(nextOccasions);
-    }
-    if (nextColors.length > 0) {
-      setColorsSelected(nextColors);
-    }
-    setFit((fitOptions.find((entry) => entry.toLowerCase() === fitLabel.toLowerCase()) ?? "Regular"));
-  }, [profile]);
+    if (nextOccasions.length > 0) setOccasions(nextOccasions);
+    if (nextColors.length > 0) setColorsSelected(nextColors);
+    setFit(fitOptions.find((o) => o.toLowerCase() === fitLabel.toLowerCase()) ?? "Regular");
+  }, [profileData]);
 
   const fitPreferenceValue = useMemo(
     () => (fit === "Slim" ? "slim" : fit === "Loose" ? "relaxed" : "regular"),
-    [fit]
+    [fit],
   );
 
-  const toggleItem = (value: string, collection: string[], setCollection: (value: string[]) => void) => {
-    setCollection(collection.includes(value) ? collection.filter((entry) => entry !== value) : [...collection, value]);
+  const toggleItem = (value: string, collection: string[], setCollection: (v: string[]) => void) => {
+    setCollection(collection.includes(value) ? collection.filter((e) => e !== value) : [...collection, value]);
   };
 
   const save = async () => {
@@ -58,44 +60,35 @@ export function StylePreferencesScreen() {
     try {
       await mobileApi.updateStylePreferences(userId, {
         stylePreference: {
-          ...(profile?.stylePreference ?? {}),
+          ...(profileData?.stylePreference ?? {}),
           occasions,
           preferredStyles: occasions,
-          fitPreferenceLabel: fit
+          fitPreferenceLabel: fit,
         },
         preferredColors: colorsSelected,
-        avoidedColors: profile?.avoidedColors ?? [],
-        budgetMin: profile?.budgetMin ?? null,
-        budgetMax: profile?.budgetMax ?? null,
-        budgetLabel: profile?.budgetLabel ?? null
+        avoidedColors: profileData?.avoidedColors ?? [],
+        budgetMin: profileData?.budgetMin ?? null,
+        budgetMax: profileData?.budgetMax ?? null,
+        budgetLabel: profileData?.budgetLabel ?? null,
       });
 
-      if (profile) {
-        await mobileApi.updateProfile(userId, {
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          avatarUploadId: profile.avatarUploadId ?? null,
-          avatarUrl: profile.avatarUrl ?? null,
-          gender: profile.gender ?? null,
-          age: profile.age ?? null,
-          heightCm: profile.heightCm ?? null,
-          weightKg: profile.weightKg ?? null,
-          bodyShape: profile.bodyShape ?? null,
-          fitPreference: fitPreferenceValue,
-          budgetMin: profile.budgetMin ?? null,
-          budgetMax: profile.budgetMax ?? null,
-          budgetLabel: profile.budgetLabel ?? null,
-          closetStatus: profile.closetStatus ?? "ACTIVE",
-          stylePreference: {
-            ...(profile.stylePreference ?? {}),
-            occasions,
-            preferredStyles: occasions,
-            fitPreferenceLabel: fit
-          },
-          preferredColors: colorsSelected,
-          avoidedColors: profile.avoidedColors ?? []
-        });
-      }
+      await mobileApi.updateProfile(userId, {
+        firstName: profileData?.firstName ?? "FitMe",
+        lastName: profileData?.lastName ?? "Member",
+        fitPreference: fitPreferenceValue,
+        preferredColors: colorsSelected,
+        avoidedColors: profileData?.avoidedColors ?? [],
+        stylePreference: {
+          ...(profileData?.stylePreference ?? {}),
+          occasions,
+          preferredStyles: occasions,
+          fitPreferenceLabel: fit,
+        },
+        budgetMin: profileData?.budgetMin ?? null,
+        budgetMax: profileData?.budgetMax ?? null,
+        budgetLabel: profileData?.budgetLabel ?? null,
+        closetStatus: profileData?.closetStatus ?? "ACTIVE",
+      });
 
       router.push("/budget" as never);
     } catch (nextError: unknown) {
@@ -164,44 +157,21 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
 }
 
 const styles = StyleSheet.create({
-  shell: {
-    gap: 16
-  },
-  header: {
-    gap: 4
-  },
-  title: {
-    color: colors.inkOnDark,
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "800"
-  },
-  step: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14
-  },
+  shell: { gap: 16 },
+  header: { gap: 4 },
+  title: { color: colors.inkOnDark, fontSize: 30, lineHeight: 34, fontWeight: "800" },
+  step: { color: colors.inkOnDarkSoft, fontSize: 14 },
   card: {
     gap: 14,
     padding: 18,
     borderRadius: radius.xl,
     backgroundColor: "rgba(19,21,34,0.86)",
     borderWidth: 1,
-    borderColor: colors.lineDark
+    borderColor: colors.lineDark,
   },
-  cardTitle: {
-    color: colors.inkOnDark,
-    fontSize: 16,
-    fontWeight: "700"
-  },
-  wrapRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10
-  },
-  fitRow: {
-    flexDirection: "row",
-    gap: 10
-  },
+  cardTitle: { color: colors.inkOnDark, fontSize: 16, fontWeight: "700" },
+  wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  fitRow: { flexDirection: "row", gap: 10 },
   chip: {
     minHeight: 44,
     paddingHorizontal: 16,
@@ -209,25 +179,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.lineDark,
-    backgroundColor: "rgba(255,255,255,0.04)"
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
-  chipSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accentStrong
-  },
-  chipText: {
-    color: colors.inkOnDarkSoft,
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  chipTextSelected: {
-    color: colors.inkOnDark
-  },
-  message: {
-    color: "#fda4af",
-    fontSize: 14
-  },
-  pressed: {
-    opacity: 0.92
-  }
+  chipSelected: { backgroundColor: colors.accent, borderColor: colors.accentStrong },
+  chipText: { color: colors.inkOnDarkSoft, fontSize: 14, fontWeight: "700" },
+  chipTextSelected: { color: colors.inkOnDark },
+  message: { color: "#fda4af", fontSize: 14 },
+  pressed: { opacity: 0.92 },
 });

@@ -30,6 +30,7 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
     let mounted = true;
 
     const checkNavigation = async () => {
+      let didNavigate = false;
       try {
         const first = segments[0] as string | undefined;
         const inAuth = AUTH_SCREENS.includes(first ?? '');
@@ -54,6 +55,7 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
         if (!isAuthenticated) {
           if (!inAuth) {
             router.replace('/auth');
+            didNavigate = true;
           }
           return;
         }
@@ -62,15 +64,24 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
 
         if (!value && !inOnboarding) {
           router.replace('/onboarding');
+          didNavigate = true;
         } else if (value && (inAuth || first === 'onboarding' || first === undefined || first === 'index')) {
           router.replace('/dashboard');
+          didNavigate = true;
         }
       } catch (error) {
         console.warn('[FitMe] Failed to read onboarding state during app startup.', error);
         router.replace('/auth');
+        didNavigate = true;
       } finally {
+        // If we navigated, wait for the transition to paint before removing the
+        // loading overlay — prevents a flash of the wrong screen.
         if (mounted) {
-          onReady();
+          if (didNavigate) {
+            setTimeout(() => { if (mounted) onReady(); }, 300);
+          } else {
+            onReady();
+          }
         }
       }
     };

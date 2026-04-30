@@ -8,6 +8,7 @@ export type ThemeMode  = 'light' | 'dark';
 
 interface AppState {
   userId:            string;
+  userRole:          string;
   accessToken:       string | null;
   authEmail:         string | null;
   authPassword:      string | null;
@@ -27,7 +28,7 @@ interface AppState {
 
   setUserId:              (id: string) => void;
   setAccessToken:         (token: string | null) => void;
-  setSession:             (session: { userId: string; accessToken: string | null; authEmail?: string | null; authPassword?: string | null }) => void;
+  setSession:             (session: { userId: string; accessToken: string | null; userRole?: string; authEmail?: string | null; authPassword?: string | null }) => void;
   setTheme:               (t: ThemeMode) => void;
   setAccent:              (a: AccentColor) => void;
   toggleSavedProduct:     (id: string) => void;
@@ -47,6 +48,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       userId:             'user-demo',
+      userRole:           'USER',
       accessToken:        null,
       authEmail:          null,
       authPassword:       null,
@@ -64,10 +66,11 @@ export const useAppStore = create<AppState>()(
 
       setUserId:  (id)  => set({ userId: id }),
       setAccessToken: (token) => set({ accessToken: token }),
-      setSession: ({ userId, accessToken, authEmail, authPassword }) =>
+      setSession: ({ userId, accessToken, userRole, authEmail, authPassword }) =>
         set((state) => ({
           userId,
           accessToken,
+          userRole:     userRole     ?? state.userRole,
           authEmail:    authEmail    ?? state.authEmail,
           authPassword: authPassword ?? state.authPassword,
         })),
@@ -110,6 +113,7 @@ export const useAppStore = create<AppState>()(
       skipHydration: false,
       partialize: (state) => ({
         userId:             state.userId,
+        userRole:           state.userRole,
         accessToken:        state.accessToken,
         authEmail:          state.authEmail,
         authPassword:       state.authPassword,

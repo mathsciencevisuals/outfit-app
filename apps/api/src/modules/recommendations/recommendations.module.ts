@@ -28,6 +28,14 @@ class RecommendationQueryDto {
   occasion?: Occasion;
 }
 
+class AfterTryOnDto {
+  @IsString()
+  userId!: string;
+
+  @IsString()
+  tryOnRequestId!: string;
+}
+
 class GenerateRecommendationsDto {
   @IsString()
   userId!: string;
@@ -301,6 +309,18 @@ class RecommendationsService {
     return this.buildRecommendations(targetUserId, query);
   }
 
+  async afterTryOn(user: AuthenticatedUser, dto: AfterTryOnDto) {
+    this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot get these recommendations");
+
+    const tryOnRequest = await (this.prisma.tryOnRequest as any).findUnique({
+      where: { id: dto.tryOnRequestId },
+      include: { variant: { include: { product: true } } },
+    });
+
+    const productId: string | undefined = tryOnRequest?.variant?.product?.id;
+    return this.buildRecommendations(dto.userId, { productId });
+  }
+
   async generate(user: AuthenticatedUser, dto: GenerateRecommendationsDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot generate these recommendations");
 
@@ -335,6 +355,11 @@ class RecommendationsController {
   @Post("generate")
   generate(@CurrentUser() user: AuthenticatedUser, @Body() dto: GenerateRecommendationsDto) {
     return this.service.generate(user, dto);
+  }
+
+  @Post("after-tryon")
+  afterTryOn(@CurrentUser() user: AuthenticatedUser, @Body() dto: AfterTryOnDto) {
+    return this.service.afterTryOn(user, dto);
   }
 }
 

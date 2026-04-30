@@ -69,9 +69,9 @@ export function DashboardScreen() {
 
       {/* Trending */}
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>Trending on Instagram 🔥</Text>
+        <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>Trending 🔥</Text>
         <Pressable onPress={() => router.push('/recommendations' as never)}>
-          <Text style={[styles.viewAll, { color: C.primary }]}>View All</Text>
+          <Text style={[styles.viewAll, { color: C.primary }]}>See all →</Text>
         </Pressable>
       </View>
       <View style={styles.grid2}>

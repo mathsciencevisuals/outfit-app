@@ -1,4 +1,4 @@
-export type UserRole = "USER" | "ADMIN" | "OPERATOR";
+export type UserRole = "USER" | "ADMIN" | "OPERATOR" | "MERCHANT";
 export type FitPreference = "slim" | "regular" | "relaxed";
 export type FitLabel = "slim" | "regular" | "relaxed";
 export type Occasion = "casual" | "streetwear" | "formal" | "college" | "interview" | "date" | "fest";

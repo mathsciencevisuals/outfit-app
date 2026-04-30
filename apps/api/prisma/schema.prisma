@@ -11,6 +11,7 @@ enum UserRole {
   USER
   ADMIN
   OPERATOR
+  MERCHANT
 }
 
 enum TryOnStatus {
@@ -91,6 +92,7 @@ model User {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   profile                 Profile?
+  ownedShop               Shop?                    @relation("ShopOwner")
   measurements            Measurement[]
   tryOnRequests           TryOnRequest[]
   fitAssessments          FitAssessment[]
@@ -234,6 +236,9 @@ model Shop {
   slug              String           @unique
   url               String
   region            String
+  description       String?
+  ownerUserId       String?          @unique
+  owner             User?            @relation("ShopOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   inventoryOffers   InventoryOffer[]
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt

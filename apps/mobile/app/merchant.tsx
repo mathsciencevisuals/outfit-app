@@ -1,12 +1,12 @@
 import { View, StyleSheet } from 'react-native';
-import { DiscoverScreen } from '../src/features/catalog/DiscoverScreen';
+import { MerchantPortalScreen } from '../src/features/merchant/MerchantPortalScreen';
 import { BottomTabBar } from '../src/components/BottomTabBar';
 
-export default function DiscoverPage() {
+export default function MerchantPage() {
   return (
     <View style={styles.container}>
-      <View style={styles.content}><DiscoverScreen /></View>
-      <BottomTabBar active="dashboard" />
+      <View style={styles.content}><MerchantPortalScreen /></View>
+      <BottomTabBar active="profile" />
     </View>
   );
 }

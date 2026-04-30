@@ -72,6 +72,11 @@ class CreateTryOnRequestDto {
   viewAngles?: string;
 }
 
+class IdentifyGarmentDto {
+  @IsString()
+  garmentUrl!: string;
+}
+
 class UpdateProviderConfigDto {
   @IsString()
   displayName!: string;
@@ -262,7 +267,13 @@ export class TryOnService {
       include: {
         sourceUpload: true,
         garmentUpload: true,
-        variant: { include: { product: true } }
+        variant: { include: { product: true } },
+        user: {
+          include: {
+            profile: true,
+            measurements: { orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+        },
       }
     });
 
@@ -288,35 +299,85 @@ export class TryOnService {
       const viewAngles: ViewAngle[] = rawAngles.filter((a: string) => VALID_ANGLES.includes(a as ViewAngle)) as ViewAngle[];
       const selectedAngles: ViewAngle[] = viewAngles.length ? viewAngles : ["front"];
 
-      const providerMode: "mock" | "http" | "grok" =
-        request.provider === "http" ? "http" :
-        request.provider === "grok" ? "grok" : "mock";
-      const providerBaseUrl = this.configService.get<string>("TRYON_HTTP_BASE_URL") ?? "http://localhost:4010";
-      const grokApiKey = this.configService.get<string>("GROK_API_KEY");
-      const grokUsePro = this.configService.get<string>("GROK_USE_PRO") === "true";
+      const providerMode: "mock" | "http" | "grok" | "gemini" =
+        request.provider === "http"   ? "http"   :
+        request.provider === "grok"   ? "grok"   :
+        request.provider === "gemini" ? "gemini" : "mock";
 
-      const input = {
-        requestId: request.id,
-        personImageUrl: request.imageUrl,
-        garmentImageUrl:
-          request.garmentImageUrl ??
-          request.garmentUpload?.publicUrl ??
-          request.variant.imageUrl ??
-          request.variant.product.imageUrl ??
-          request.imageUrl,
-        prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color} with ${request.fitStyle ?? "balanced"} fit styling`,
-        viewAngles: selectedAngles,
-      };
+      const personImageUrl  = request.imageUrl;
+      const garmentImageUrl =
+        request.garmentImageUrl ??
+        request.garmentUpload?.publicUrl ??
+        request.variant.imageUrl ??
+        request.variant.product.imageUrl ??
+        request.imageUrl;
 
-      let result;
-      try {
-        const provider = createTryOnProvider(providerMode, providerBaseUrl, grokApiKey ?? undefined, grokUsePro);
-        result = await provider.generate(input);
-      } catch (providerError) {
-        if (providerMode === "mock") throw providerError;
-        // Fallback to mock on http/grok failures
-        const fallbackProvider = createTryOnProvider("mock", providerBaseUrl);
-        result = await fallbackProvider.generate(input);
+      let result: import("@fitme/ai-client").TryOnGenerationResult;
+
+      if (providerMode === "gemini") {
+        // Build user context for personalised Claude analysis
+        const profile     = request.user?.profile;
+        const measurement = request.user?.measurements?.[0];
+        const claudeCtx = profile ? {
+          fitPreference:   profile.fitPreference  as string | null,
+          stylePreference: profile.stylePreference as Record<string, unknown> | null,
+          budgetLabel:     profile.budgetLabel     as string | null,
+          chestCm:         measurement?.chestCm    as number | null ?? null,
+          heightCm:        (measurement?.heightCm ?? profile.heightCm) as number | null,
+        } : undefined;
+
+        // Fire Gemini image generation + Claude fit analysis in parallel
+        try {
+          const [outputImageUrl, fitAnalysis] = await Promise.all([
+            this.callGemini(personImageUrl, garmentImageUrl, request.userId),
+            this.callClaude(personImageUrl, garmentImageUrl, claudeCtx),
+          ]);
+
+          result = {
+            outputImageUrl,
+            confidence: fitAnalysis.fitScore / 100,
+            summary: `${fitAnalysis.sizeRecommendation} recommended. ${fitAnalysis.styleNotes}`,
+            metadata: {
+              fitScore:            fitAnalysis.fitScore,
+              sizeRecommendation:  fitAnalysis.sizeRecommendation,
+              colourMatch:         fitAnalysis.colourMatch,
+              styleNotes:          fitAnalysis.styleNotes,
+              occasion:            fitAnalysis.occasion,
+              stylistNote:         fitAnalysis.stylistNote,
+              provider:            'gemini+claude',
+            },
+          };
+        } catch (geminiError) {
+          // Fall back to mock if Gemini/Claude calls fail
+          const fallbackProvider = createTryOnProvider("mock", "http://localhost:4010");
+          const input = {
+            requestId: request.id, personImageUrl, garmentImageUrl,
+            prompt: `Virtual try-on for ${request.variant.product.name}`,
+            viewAngles: selectedAngles,
+          };
+          result = await fallbackProvider.generate(input);
+        }
+      } else {
+        const providerBaseUrl = this.configService.get<string>("TRYON_HTTP_BASE_URL") ?? "http://localhost:4010";
+        const grokApiKey = this.configService.get<string>("GROK_API_KEY");
+        const grokUsePro = this.configService.get<string>("GROK_USE_PRO") === "true";
+
+        const input = {
+          requestId: request.id,
+          personImageUrl,
+          garmentImageUrl,
+          prompt: `Virtual try-on for ${request.variant.product.name} in ${request.variant.color} with ${request.fitStyle ?? "balanced"} fit styling`,
+          viewAngles: selectedAngles,
+        };
+
+        try {
+          const provider = createTryOnProvider(providerMode as "mock" | "http" | "grok", providerBaseUrl, grokApiKey ?? undefined, grokUsePro);
+          result = await provider.generate(input);
+        } catch (providerError) {
+          if (providerMode === "mock") throw providerError;
+          const fallbackProvider = createTryOnProvider("mock", providerBaseUrl);
+          result = await fallbackProvider.generate(input);
+        }
       }
 
       const resultMetadata: Prisma.InputJsonValue = {
@@ -350,7 +411,8 @@ export class TryOnService {
         where: { id: request.id },
         data: {
           status: "COMPLETED",
-          statusMessage: providerMode === "grok" ? "Grok Aurora try-on completed"
+          statusMessage: providerMode === "gemini" ? "Gemini + Claude try-on completed"
+            : providerMode === "grok" ? "Grok Aurora try-on completed"
             : providerMode === "http" ? "Try-on completed"
             : "Try-on completed with preview renderer",
           processedAt: new Date()
@@ -385,6 +447,182 @@ export class TryOnService {
       update: data,
       create: { provider, ...data }
     });
+  }
+
+  // ── Claude fit analysis ──────────────────────────────────────────────────────
+
+  private async callClaude(
+    personImageUrl: string,
+    garmentImageUrl: string,
+    ctx?: {
+      fitPreference?: string | null;
+      stylePreference?: Record<string, unknown> | null;
+      budgetLabel?: string | null;
+      chestCm?: number | null;
+      heightCm?: number | null;
+    }
+  ): Promise<{
+    fitScore: number;
+    sizeRecommendation: string;
+    colourMatch: string;
+    styleNotes: string;
+    occasion: string;
+    stylistNote: string;
+  }> {
+    const stub = {
+      fitScore: 75, sizeRecommendation: 'M', colourMatch: 'Good',
+      styleNotes: 'Looks like a good fit for everyday wear.',
+      occasion: 'Casual', stylistNote: '',
+    };
+    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    if (!apiKey) return stub;
+
+    const ctxLines: string[] = [];
+    if (ctx?.fitPreference)  ctxLines.push(`Preferred fit: ${ctx.fitPreference}`);
+    if (ctx?.budgetLabel)    ctxLines.push(`Budget: ${ctx.budgetLabel}`);
+    if (ctx?.heightCm)       ctxLines.push(`Height: ${ctx.heightCm}cm`);
+    if (ctx?.chestCm)        ctxLines.push(`Chest: ${ctx.chestCm}cm`);
+    const styles = (ctx?.stylePreference as any)?.preferredStyles as string[] | undefined;
+    if (styles?.length)      ctxLines.push(`Preferred styles: ${styles.join(', ')}`);
+    const userCtxBlock = ctxLines.length ? `User context — ${ctxLines.join('; ')}.\n\n` : '';
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 640,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'url', url: personImageUrl } },
+              { type: 'image', source: { type: 'url', url: garmentImageUrl } },
+              {
+                type: 'text',
+                text: `${userCtxBlock}Analyze this garment on this person. Consider body shape, proportions, and Indian fashion context. Return ONLY valid JSON, no other text:\n{"fitScore":<0-100>,"sizeRecommendation":"<XS/S/M/L/XL/XXL>","colourMatch":"<Excellent/Good/Fair/Poor>","styleNotes":"<2-3 sentences about the fit and style>","occasion":"<Casual/College/Formal/Party/Ethnic>","stylistNote":"<personalized 2-3 sentence stylist message referencing the user context above, with Indian fashion tip>"}`,
+              },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) return stub;
+      const data = await res.json() as { content?: Array<{ text?: string }> };
+      const text = data.content?.[0]?.text ?? '{}';
+      return { ...stub, ...JSON.parse(text) };
+    } catch {
+      return stub;
+    }
+  }
+
+  // ── Garment identification ────────────────────────────────────────────────────
+
+  async identifyGarment(garmentUrl: string): Promise<{
+    category: string;
+    fabric: string;
+    occasions: string[];
+    color: string;
+    description: string;
+  }> {
+    const stub = {
+      category: 'top', fabric: 'cotton', occasions: ['casual', 'college'],
+      color: 'blue', description: 'A casual everyday garment suitable for college wear.',
+    };
+    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    if (!apiKey) return stub;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 256,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'url', url: garmentUrl } },
+              {
+                type: 'text',
+                text: 'Identify this garment. Return ONLY valid JSON:\n{"category":"<top|bottom|dress|outerwear|footwear|accessory>","fabric":"<cotton|silk|polyester|denim|linen|wool|synthetic>","occasions":["<casual|college|formal|party|ethnic|festive>"],"color":"<primary color>","description":"<one sentence description in Indian fashion context>"}',
+              },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) return stub;
+      const data = await res.json() as { content?: Array<{ text?: string }> };
+      const text = data.content?.[0]?.text ?? '{}';
+      return { ...stub, ...JSON.parse(text) };
+    } catch {
+      return stub;
+    }
+  }
+
+  // ── Gemini image generation ──────────────────────────────────────────────────
+
+  private async callGemini(personImageUrl: string, garmentImageUrl: string, userId: string): Promise<string> {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (!apiKey) {
+      return `https://picsum.photos/seed/${Date.now()}/600/800`;
+    }
+
+    const [personRes, garmentRes] = await Promise.all([
+      fetch(personImageUrl),
+      fetch(garmentImageUrl),
+    ]);
+
+    const [personB64, garmentB64] = await Promise.all([
+      personRes.arrayBuffer().then(b => Buffer.from(b).toString('base64')),
+      garmentRes.arrayBuffer().then(b => Buffer.from(b).toString('base64')),
+    ]);
+
+    const personMime  = personRes.headers.get('content-type')  ?? 'image/jpeg';
+    const garmentMime = garmentRes.headers.get('content-type') ?? 'image/jpeg';
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: 'Dress the person in image 1 with the garment in image 2. Preserve the person\'s face, body shape, and skin tone. Make the fabric drape realistically. Show the full outfit.' },
+              { inlineData: { mimeType: personMime,  data: personB64  } },
+              { inlineData: { mimeType: garmentMime, data: garmentB64 } },
+            ],
+          }],
+          generationConfig: { responseModalities: ['IMAGE'] },
+        }),
+      },
+    );
+
+    if (!geminiRes.ok) {
+      throw new Error(`Gemini API error: ${geminiRes.status}`);
+    }
+
+    const geminiData = await geminiRes.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> } }>;
+    };
+    const imagePart = geminiData.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.data);
+    if (!imagePart?.inlineData?.data) {
+      throw new Error('Gemini did not return an image in the response');
+    }
+
+    const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
+    const mimeType    = imagePart.inlineData.mimeType ?? 'image/png';
+    return this.uploadsService.storeFile(userId, imageBuffer, mimeType, 'tryon-result');
   }
 
   private serializeRequest(request: any) {
@@ -441,6 +679,11 @@ class TryOnController {
   @Post("requests/:id/process")
   process(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.service.process(user, id);
+  }
+
+  @Post("identify-garment")
+  identifyGarment(@Body() dto: IdentifyGarmentDto) {
+    return this.service.identifyGarment(dto.garmentUrl);
   }
 
   @Roles("ADMIN", "OPERATOR")

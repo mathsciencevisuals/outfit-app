@@ -33,6 +33,10 @@ import { ReferralsModule } from "./modules/referrals/referrals.module";
 import { CouponsModule } from "./modules/coupons/coupons.module";
 import { CampaignsModule } from "./modules/campaigns/campaigns.module";
 import { EngagementModule } from "./modules/engagement/engagement.module";
+import { AffiliateModule } from "./modules/affiliate/affiliate.module";
+import { MerchantModule } from "./modules/merchant/merchant.module";
+import { SocialModule } from "./modules/social/social.module";
+import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 import { TRYON_QUEUE } from "./jobs/queues/tryon.queue";
 import { TryOnWorker } from "./jobs/workers/tryon.worker";
 
@@ -78,7 +82,11 @@ import { TryOnWorker } from "./jobs/workers/tryon.worker";
     ReferralsModule,
     CouponsModule,
     CampaignsModule,
-    EngagementModule
+    EngagementModule,
+    AffiliateModule,
+    MerchantModule,
+    SocialModule,
+    OnboardingModule
   ],
   providers: [
     PrismaService,

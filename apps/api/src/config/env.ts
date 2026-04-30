@@ -22,10 +22,15 @@ const baseEnvSchema = z
     MINIO_REGION: z.string().default("us-east-1"),
     MINIO_USE_SSL: z.coerce.boolean().default(false),
     MINIO_PUBLIC_URL: z.string().url().optional(),
-    TRYON_PROVIDER: z.enum(["mock", "http", "grok"]).default("mock"),
+    TRYON_PROVIDER: z.enum(["mock", "http", "grok", "gemini"]).default("mock"),
     TRYON_HTTP_BASE_URL: z.string().optional(),
     GROK_API_KEY: z.string().optional(),
-    GROK_USE_PRO: z.coerce.boolean().default(false)
+    GROK_USE_PRO: z.coerce.boolean().default(false),
+    ANTHROPIC_API_KEY: z.string().optional(),
+    GEMINI_API_KEY: z.string().optional(),
+    CUELINKS_SOURCE_ID: z.string().optional(),
+    PINTEREST_ACCESS_TOKEN: z.string().optional(),
+    PINTEREST_BOARD_ID: z.string().optional()
   })
   .superRefine((config, ctx) => {
     if (config.STORAGE_PROVIDER === "gcs" && !config.GCS_BUCKET) {
@@ -50,6 +55,7 @@ const baseEnvSchema = z
     if (config.TRYON_PROVIDER === "grok" && !config.GROK_API_KEY) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["GROK_API_KEY"], message: "GROK_API_KEY is required when TRYON_PROVIDER=grok" });
     }
+    // gemini provider works without keys — falls back to mock image + stub analysis
 
     if (config.TRYON_HTTP_BASE_URL) {
       const result = z.string().url().safeParse(config.TRYON_HTTP_BASE_URL);

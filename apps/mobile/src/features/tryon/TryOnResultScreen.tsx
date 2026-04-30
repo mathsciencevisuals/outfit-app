@@ -1,10 +1,11 @@
 import { formatPrice } from '../../utils/currency';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
   Image,
+  Linking,
   ScrollView,
   Share,
   StyleSheet,
@@ -41,6 +42,8 @@ export function TryOnResultScreen() {
   // Result data — we poll here if the navigation happened before polling finished
   // (edge case: user is sent straight here by a notification / deep-link)
   const [result, setResult] = useResultState();
+  const [referralCode,  setReferralCode]  = useState<string | null>(null);
+  const [shareRewarded, setShareRewarded] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // ── Poll if we arrive here without a completed result ────────────────────────
@@ -74,29 +77,66 @@ export function TryOnResultScreen() {
     return () => { cancelled = true; };
   }, [requestId]);
 
+  const resultImageUrl = result?.result?.outputImageUrl ?? null;
+
   // Fade in if result already available on mount
   useEffect(() => {
-    if (result?.resultImageUrl) {
+    if (resultImageUrl) {
       Animated.timing(fadeAnim, {
         toValue: 1, duration: 400, useNativeDriver: true,
       }).start();
     }
-  }, [result]);
+  }, [resultImageUrl]);
+
+  // Fetch referral code once result is ready (for share caption)
+  useEffect(() => {
+    if (result && !referralCode) {
+      mobileApi.referralCode().then(r => setReferralCode(r.code)).catch(() => {});
+    }
+  }, [result, referralCode]);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   const handleShare = useCallback(async () => {
-    if (!result?.resultImageUrl) return;
+    if (!resultImageUrl) return;
+    const codeTag = referralCode ? `\n\nJoin FitMe free → use code ${referralCode}` : '';
+    const message = `Check out how I look in ${selectedProduct?.name ?? 'this outfit'} — styled with AI on FitMe${codeTag}`;
     try {
-      await Share.share({
-        message: `Check out how I look in ${selectedProduct?.name ?? 'this outfit'} — FitMe`,
-        url: result.resultImageUrl,          // iOS
-        title: 'My FitMe Try-On',
-      });
+      const shared = await Share.share({ message, url: resultImageUrl, title: 'My FitMe Try-On' });
+      if (shared.action === Share.sharedAction) {
+        const channel = shared.activityType ?? 'native';
+        mobileApi.recordShare({ tryOnRequestId: requestId ?? undefined, channel }).catch(() => {});
+        if (!shareRewarded) {
+          setShareRewarded(true);
+          Alert.alert('🎉 +20 Points!', 'You earned reward points for sharing your look.');
+        }
+      }
     } catch {
       // User cancelled share sheet — no-op
     }
-  }, [result, selectedProduct]);
+  }, [resultImageUrl, selectedProduct, referralCode, requestId, shareRewarded]);
+
+  const handlePinterestShare = useCallback(async () => {
+    if (!resultImageUrl) return;
+    const desc = `${selectedProduct?.name ?? 'My FitMe Try-On'} — styled with AI${referralCode ? `. Join free with code ${referralCode}` : ''}`;
+    const pinterestUrl = `https://pinterest.com/pin/create/button/?url=${encodeURIComponent('https://fitme.app')}&media=${encodeURIComponent(resultImageUrl)}&description=${encodeURIComponent(desc)}`;
+    try {
+      await Linking.openURL(pinterestUrl);
+      mobileApi.recordShare({ tryOnRequestId: requestId ?? undefined, channel: 'pinterest' }).catch(() => {});
+      if (!shareRewarded) {
+        setShareRewarded(true);
+        Alert.alert('🎉 +20 Points!', 'You earned reward points for sharing your look.');
+      }
+    } catch { /* no-op */ }
+  }, [resultImageUrl, selectedProduct, referralCode, requestId, shareRewarded]);
+
+  const handleBuyNow = useCallback(async () => {
+    if (!selectedProduct) return;
+    try {
+      const { affiliateUrl } = await mobileApi.affiliateLink(selectedProduct.id);
+      await Linking.openURL(affiliateUrl);
+    } catch { /* no-op */ }
+  }, [selectedProduct]);
 
   const handleSaveLook = useCallback(async () => {
     if (!selectedProduct || !result) return;
@@ -144,16 +184,16 @@ export function TryOnResultScreen() {
   // ── Result ───────────────────────────────────────────────────────────────────
 
   const confidence = result?.result?.confidence;
-  const fitNotes   = result?.result?.fitNotes ?? [];
+  const fitNotes: string[] = [];
 
   return (
     <>
       <Screen>
         {/* Result image */}
-        {result?.resultImageUrl ? (
+        {resultImageUrl ? (
           <Animated.View style={[styles.imageWrapper, { opacity: fadeAnim }]}>
             <Image
-              source={{ uri: result.resultImageUrl }}
+              source={{ uri: resultImageUrl }}
               style={styles.resultImage}
               resizeMode="cover"
             />
@@ -183,7 +223,7 @@ export function TryOnResultScreen() {
             <InfoRow label="Size"   value={selectedVariant.size} />
             <InfoRow
               label="Price"
-              value={`${selectedVariant.currency} ${selectedVariant.price}`}
+              value={formatPrice(selectedVariant.price)}
               last
             />
           </SectionCard>
@@ -212,15 +252,32 @@ export function TryOnResultScreen() {
           </SectionCard>
         )}
 
+        {/* Stylist's note */}
+        {result?.result?.metadata?.stylistNote ? (
+          <SectionCard title="Stylist's note ✨">
+            <Text style={styles.stylistNote}>
+              {result.result.metadata.stylistNote as string}
+            </Text>
+          </SectionCard>
+        ) : null}
+
         {/* Actions */}
         {result && (
           <SectionCard>
-            <PrimaryButton onPress={handleSaveLook}>
+            <PrimaryButton onPress={handleBuyNow}>
+              🛒  Buy Now
+            </PrimaryButton>
+            <PrimaryButton variant="secondary" onPress={handleSaveLook}>
               💾  Save this look
             </PrimaryButton>
             <PrimaryButton variant="secondary" onPress={handleShare}>
               📤  Share
             </PrimaryButton>
+            {resultImageUrl && (
+              <PrimaryButton variant="secondary" onPress={handlePinterestShare}>
+                📌  Pin to Pinterest
+              </PrimaryButton>
+            )}
             <PrimaryButton
               variant="outline"
               onPress={() => router.push('/recommendations')}
@@ -247,7 +304,6 @@ export function TryOnResultScreen() {
 // ─── Local result state hook ──────────────────────────────────────────────────
 // Kept separate so the main component stays readable
 
-import { useState } from 'react';
 import type { TryOnResult } from '../../types';
 
 function useResultState(): [TryOnResult | null, (r: TryOnResult) => void] {
@@ -299,6 +355,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
     lineHeight: 20,
+  },
+  stylistNote: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+    fontStyle: 'italic',
   },
   fitNotes: { gap: Spacing.xs },
   fitNote:  { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 20 },

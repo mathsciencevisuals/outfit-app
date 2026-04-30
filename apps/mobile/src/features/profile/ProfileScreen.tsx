@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View,
 } from 'react-native';
@@ -35,6 +35,11 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
     () => mobileApi.profile(userId),
     [userId],
   );
+
+  // Refetch whenever this screen gains focus so saved measurements/prefs appear immediately
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  useFocusEffect(useCallback(() => { refetchRef.current(); }, []));
 
   // ── Avatar upload ────────────────────────────────────────────────────────────
 
@@ -198,6 +203,14 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
               <Ionicons name="bookmark-outline" size={18} color={Colors.primary} />
             </View>
             <Text style={styles.navLabel}>Saved Looks</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+          </Pressable>
+          <View style={styles.navDivider} />
+          <Pressable style={styles.navRow} onPress={() => router.push('/merchant' as never)}>
+            <View style={styles.navIconBox}>
+              <Ionicons name="storefront-outline" size={18} color={Colors.primary} />
+            </View>
+            <Text style={styles.navLabel}>Merchant Portal</Text>
             <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
           </Pressable>
           <View style={styles.navDivider} />

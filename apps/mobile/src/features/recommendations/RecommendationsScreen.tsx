@@ -1,22 +1,31 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ProductCard } from '../../components/ProductCard';
 import { useTheme } from '../../hooks/useTheme';
 import { mobileApi } from '../../services/api';
 import { useAppStore } from '../../store/app-store';
-import { FontSize, FontWeight, Spacing } from '../../utils/theme';
-import type { Product, Recommendation } from '../../types';
+import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
+import type { Product, Recommendation, TrendingPin } from '../../types';
 
 export function RecommendationsScreen() {
   const { C }  = useTheme();
   const userId = useAppStore(s => s.userId);
   const [trending, setTrending] = useState<Product[]>([]);
   const [recs,     setRecs]     = useState<Recommendation[]>([]);
+  const [pins,     setPins]     = useState<TrendingPin[]>([]);
 
   useEffect(() => {
     mobileApi.trending(4).then(setTrending).catch(() => {});
     mobileApi.recommendations(userId).then(setRecs).catch(() => {});
+    mobileApi.socialTrending(8).then(setPins).catch(() => {});
   }, [userId]);
+
+  const handleBuy = useCallback(async (product: Product) => {
+    try {
+      const { affiliateUrl } = await mobileApi.affiliateLink(product.id);
+      await Linking.openURL(affiliateUrl);
+    } catch { /* no-op */ }
+  }, []);
 
   const recProducts = recs.map(r => r.product).filter(Boolean) as Product[];
 
@@ -36,10 +45,47 @@ export function RecommendationsScreen() {
       <View style={styles.grid}>
         {trending.map(p => (
           <View key={p.id} style={styles.gridCell}>
-            <ProductCard product={p} onBuy={() => {}} />
+            <ProductCard product={p} onBuy={handleBuy} />
           </View>
         ))}
       </View>
+
+      {/* Pinterest Trending */}
+      {pins.length > 0 && (
+        <>
+          <View style={[styles.sectionHeader, { marginTop: Spacing.lg }]}>
+            <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>📌 Trending on Pinterest</Text>
+          </View>
+          <View style={styles.grid}>
+            {pins.map((pin) => (
+              <Pressable
+                key={pin.id}
+                style={[styles.pinCard, { backgroundColor: C.surface }, Shadow.sm]}
+                onPress={() => Linking.openURL(pin.sourceUrl).catch(() => {})}
+              >
+                <Image
+                  source={{ uri: pin.imageUrl }}
+                  style={styles.pinImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.pinInfo}>
+                  <Text style={[styles.pinTitle, { color: C.textPrimary }]} numberOfLines={2}>
+                    {pin.title}
+                  </Text>
+                  <View style={styles.pinMeta}>
+                    <Text style={[styles.pinBoard, { color: C.primary }]} numberOfLines={1}>
+                      {pin.boardName}
+                    </Text>
+                    <Text style={[styles.pinCount, { color: C.textMuted }]}>
+                      ♥ {pin.pinCount >= 1000 ? `${(pin.pinCount / 1000).toFixed(1)}k` : pin.pinCount}
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
 
       <View style={[styles.sectionHeader, { marginTop: Spacing.lg }]}>
         <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>✨ Recommended for You</Text>
@@ -47,12 +93,12 @@ export function RecommendationsScreen() {
       <View style={styles.grid}>
         {recProducts.map(p => (
           <View key={p.id} style={styles.gridCell}>
-            <ProductCard product={p} onBuy={() => {}} />
+            <ProductCard product={p} onBuy={handleBuy} />
           </View>
         ))}
         {recProducts.length === 0 && trending.map(p => (
           <View key={p.id} style={styles.gridCell}>
-            <ProductCard product={p} onBuy={() => {}} />
+            <ProductCard product={p} onBuy={handleBuy} />
           </View>
         ))}
       </View>
@@ -68,4 +114,12 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
   grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridCell:    { width: '48%' },
+  // Pinterest pin cards
+  pinCard:     { width: '48%', borderRadius: Radius.lg, overflow: 'hidden' },
+  pinImage:    { width: '100%', aspectRatio: 3 / 4 },
+  pinInfo:     { padding: Spacing.sm, gap: 4 },
+  pinTitle:    { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, lineHeight: 16 },
+  pinMeta:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  pinBoard:    { fontSize: FontSize.xs, flex: 1 },
+  pinCount:    { fontSize: FontSize.xs },
 });
