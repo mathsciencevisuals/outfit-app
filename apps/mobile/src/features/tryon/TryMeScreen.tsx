@@ -65,7 +65,7 @@ export function TryMeScreen() {
   const [savingToDevice, setSavingToDevice] = useState(false);
 
   // ── View angle selection ─────────────────────────────────────────────────────
-  const [selectedAngles, setSelectedAngles] = useState<Set<ViewAngle>>(new Set(['front']));
+  const [selectedAngles, setSelectedAngles] = useState<Set<ViewAngle>>(new Set(ALL_ANGLES));
 
   // ── Products & compare ───────────────────────────────────────────────────────
   const [products,  setProducts]  = useState<Product[]>([]);
@@ -310,7 +310,10 @@ export function TryMeScreen() {
             <Text style={[styles.cardLabel, { color: C.textSecondary }]}>Your Photo</Text>
             {userPhoto ? (
               <>
-                <Image source={{ uri: userPhoto }} style={styles.cardImage} resizeMode="cover" />
+                <View style={styles.photoGuideWrap}>
+                  <Image source={{ uri: userPhoto }} style={styles.cardImage} resizeMode="cover" />
+                  <BodyGuide />
+                </View>
                 <View style={styles.cardBtns}>
                   <Pressable style={[styles.iconBtn, { backgroundColor: C.surface2, borderColor: C.border }]} onPress={handleUserCamera}>
                     <Ionicons name="camera-outline" size={14} color={C.textSecondary} />
@@ -332,8 +335,9 @@ export function TryMeScreen() {
             ) : (
               <>
                 <View style={[styles.cardPlaceholder, { backgroundColor: C.surface2 }]}>
+                  <BodyGuide />
                   <Text style={styles.placeholderEmoji}>🧍</Text>
-                  <Text style={[styles.placeholderTxt, { color: C.textMuted }]}>Add photo</Text>
+                  <Text style={[styles.placeholderTxt, { color: C.textMuted }]}>Fit full body inside guide</Text>
                 </View>
                 <View style={styles.cardBtns}>
                   <Pressable style={[styles.sourceBtn, { backgroundColor: C.primary }]} onPress={handleUserCamera}>
@@ -692,7 +696,38 @@ const styles = StyleSheet.create({
   cardRow:    { flexDirection: 'row', gap: Spacing.sm },
   uploadCard: { flex: 1, borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.sm, gap: Spacing.sm, overflow: 'hidden' },
   cardLabel:  { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
+  photoGuideWrap: { position: 'relative' },
   cardImage:  { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md },
+  bodyGuide: {
+    position: 'absolute',
+    top: '7%',
+    left: '18%',
+    right: '18%',
+    bottom: '6%',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.78)',
+    borderStyle: 'dashed',
+    borderRadius: 999,
+  },
+  bodyGuideHead: {
+    position: 'absolute',
+    top: '10%',
+    left: '40%',
+    width: '20%',
+    aspectRatio: 1,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 999,
+  },
+  bodyGuideLine: {
+    position: 'absolute',
+    left: '50%',
+    top: '28%',
+    bottom: '12%',
+    borderLeftWidth: 2,
+    borderColor: 'rgba(255,255,255,0.75)',
+    borderStyle: 'dashed',
+  },
   warningShell: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs, borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm },
   warningText: { flex: 1, fontSize: FontSize.xs, lineHeight: 16 },
   cardPlaceholder: { width: '100%', aspectRatio: 3 / 4, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', gap: 4 },
@@ -805,6 +840,15 @@ function buildFitInsight(metadata?: Record<string, unknown>, summary?: string): 
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function BodyGuide() {
+  return (
+    <View pointerEvents="none" style={styles.bodyGuide}>
+      <View style={styles.bodyGuideHead} />
+      <View style={styles.bodyGuideLine} />
+    </View>
+  );
 }
 
 function validateBodyFraming(width?: number, height?: number): string | null {

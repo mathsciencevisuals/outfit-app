@@ -36,14 +36,6 @@ class SavedLookDto {
   @IsBoolean()
   isWishlist?: boolean;
 
-  @IsOptional()
-  @IsString()
-  tryOnResultId?: string;
-
-  @IsOptional()
-  @IsString()
-  tryOnImageUrl?: string;
-
   @IsArray()
   productIds!: string[];
 }
@@ -67,8 +59,8 @@ class SavedLooksService {
     const lookId = randomUUID();
 
     await this.prisma.$executeRaw(Prisma.sql`
-      INSERT INTO "SavedLook" (id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt")
-      VALUES (${lookId}, ${dto.userId}, ${dto.name}, ${dto.note ?? null}, ${dto.isWishlist ?? false}, ${dto.tryOnResultId ?? null}, ${dto.tryOnImageUrl ?? null}, NOW(), NOW())
+      INSERT INTO "SavedLook" (id, "userId", name, note, "isWishlist", "createdAt", "updatedAt")
+      VALUES (${lookId}, ${dto.userId}, ${dto.name}, ${dto.note ?? null}, ${dto.isWishlist ?? false}, NOW(), NOW())
     `);
 
     if (dto.productIds.length > 0) {
@@ -99,8 +91,6 @@ class SavedLooksService {
       SET name = ${dto.name},
           note = ${dto.note ?? null},
           "isWishlist" = ${dto.isWishlist ?? false},
-          "tryOnResultId" = ${dto.tryOnResultId ?? null},
-          "tryOnImageUrl" = ${dto.tryOnImageUrl ?? null},
           "updatedAt" = NOW()
       WHERE id = ${id}
     `);
@@ -132,9 +122,9 @@ class SavedLooksService {
 
   private async readLookRecord(id: string) {
     const rows = await this.prisma.$queryRaw<
-      Array<{ id: string; userId: string; name: string; note: string | null; isWishlist: boolean; tryOnResultId: string | null; tryOnImageUrl: string | null; createdAt: Date; updatedAt: Date }>
+      Array<{ id: string; userId: string; name: string; note: string | null; isWishlist: boolean; createdAt: Date; updatedAt: Date }>
     >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, "isWishlist", "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE id = ${id}
       LIMIT 1
@@ -143,7 +133,7 @@ class SavedLooksService {
     return rows[0] ?? null;
   }
 
-  private async enrichLook(look: { id: string; userId: string; name: string; note: string | null; isWishlist: boolean; tryOnResultId: string | null; tryOnImageUrl: string | null; createdAt: Date; updatedAt: Date }) {
+  private async enrichLook(look: { id: string; userId: string; name: string; note: string | null; isWishlist: boolean; createdAt: Date; updatedAt: Date }) {
     const items = await this.prisma.savedLookItem.findMany({
       where: { savedLookId: look.id },
       include: {
@@ -230,9 +220,9 @@ class SavedLooksService {
 
   private async readLooks(userId: string) {
     const looks = await this.prisma.$queryRaw<
-      Array<{ id: string; userId: string; name: string; note: string | null; isWishlist: boolean; tryOnResultId: string | null; tryOnImageUrl: string | null; createdAt: Date; updatedAt: Date }>
+      Array<{ id: string; userId: string; name: string; note: string | null; isWishlist: boolean; createdAt: Date; updatedAt: Date }>
     >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, "isWishlist", "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE "userId" = ${userId}
       ORDER BY "updatedAt" DESC

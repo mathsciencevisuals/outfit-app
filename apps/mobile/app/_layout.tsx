@@ -123,7 +123,7 @@ export default function RootLayout() {
       <View style={styles.root}>
         {hydrated ? (
           <>
-            <Stack screenOptions={{ headerShown: false }}>
+            <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="auth" />
               <Stack.Screen name="onboarding" />
@@ -141,7 +141,7 @@ export default function RootLayout() {
               <Stack.Screen name="tryon-result"    options={{ presentation: 'modal' }} />
               <Stack.Screen name="shops" />
             </Stack>
-            <StartupRedirector onReady={() => setChecked(true)} />
+            {!checked ? <StartupRedirector onReady={() => setChecked(true)} /> : null}
           </>
         ) : null}
         {!hydrated || !checked ? (

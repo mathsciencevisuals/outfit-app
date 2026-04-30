@@ -393,15 +393,25 @@ export class TryOnService {
           heightCm:        (measurement?.heightCm ?? profile.heightCm) as number | null,
         } : undefined;
 
-        // Fire Gemini image generation + Claude fit analysis in parallel
+        // Fire Gemini image generation + Claude fit analysis in parallel.
+        // Gemini returns one edited image per call, so generate each requested
+        // angle explicitly and return them through metadata.views.
         try {
-          const [outputImageUrl, fitAnalysis] = await Promise.all([
-            this.callGemini(personImageUrl, garmentImageUrl, request.userId),
+          const [viewEntries, fitAnalysis] = await Promise.all([
+            Promise.all(
+              selectedAngles.map(async (angle) => [
+                angle,
+                await this.callGemini(personImageUrl, garmentImageUrl, request.userId, angle),
+              ] as const)
+            ),
             this.callClaude(personImageUrl, garmentImageUrl, claudeCtx),
           ]);
+          const views = Object.fromEntries(viewEntries) as Partial<Record<ViewAngle, string>>;
+          const outputImageUrl = views.front ?? views[selectedAngles[0]] ?? viewEntries[0]?.[1] ?? "";
 
           result = {
             outputImageUrl,
+            views,
             confidence: fitAnalysis.fitScore / 100,
             summary: `${fitAnalysis.sizeRecommendation} recommended. ${fitAnalysis.styleNotes}`,
             metadata: {
@@ -638,7 +648,12 @@ export class TryOnService {
 
   // ── Gemini image generation ──────────────────────────────────────────────────
 
-  private async callGemini(personImageUrl: string, garmentImageUrl: string, userId: string): Promise<string> {
+  private async callGemini(
+    personImageUrl: string,
+    garmentImageUrl: string,
+    userId: string,
+    viewAngle: ViewAngle = "front"
+  ): Promise<string> {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       return `https://picsum.photos/seed/${Date.now()}/600/800`;
@@ -658,8 +673,15 @@ export class TryOnService {
     const garmentMime = garmentRes.headers.get('content-type') ?? 'image/jpeg';
 
     const imageModel = this.configService.get<string>('GEMINI_IMAGE_MODEL') ?? 'gemini-2.5-flash-image';
+    const viewInstruction = {
+      front: 'Show a front-facing try-on view.',
+      back: 'Show a back-facing try-on view of the same person and outfit.',
+      side_left: 'Show a left-side try-on view of the same person and outfit.',
+      side_right: 'Show a right-side try-on view of the same person and outfit.',
+    }[viewAngle];
     const prompt = [
       'Create a realistic virtual try-on image.',
+      viewInstruction,
       'Image 1 is the person. Image 2 is the garment reference.',
       'Replace the visible garment on the person with the garment from image 2.',
       'Preserve the person identity, face, hair, skin tone, pose, body shape, background, camera angle, and lighting.',
