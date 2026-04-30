@@ -5,6 +5,12 @@ import type { Product, ProductVariant, TryOnStatus } from '../types';
 
 export type AccentColor = 'teal' | 'purple' | 'blue' | 'pink';
 export type ThemeMode  = 'light' | 'dark';
+export type LocalSavedLookPreview = {
+  lookId: string;
+  userId: string;
+  imageUri: string;
+  createdAt: string;
+};
 
 interface AppState {
   userId:            string;
@@ -17,6 +23,7 @@ interface AppState {
   savedProductIds:   string[];
   compareProductIds: string[];
   lastTryOnRequestId: string | null;
+  localSavedLookPreviews: Record<string, LocalSavedLookPreview>;
 
   // Try-on session state (not persisted — file URIs become stale between sessions)
   capturedPhotoUri:  string | undefined;
@@ -36,6 +43,7 @@ interface AppState {
   removeFromCompare:      (id: string) => void;
   clearCompare:           () => void;
   setLastTryOnRequestId:  (id: string | null) => void;
+  setLocalSavedLookPreview: (preview: LocalSavedLookPreview) => void;
   setCapturedPhoto:       (uri: string | undefined) => void;
   selectVariant:          (variant: ProductVariant, product: Product) => void;
   setTryOnStatus:         (s: TryOnStatus) => void;
@@ -57,6 +65,7 @@ export const useAppStore = create<AppState>()(
       savedProductIds:    [],
       compareProductIds:  [],
       lastTryOnRequestId: null,
+      localSavedLookPreviews: {},
       capturedPhotoUri:   undefined,
       selectedVariant:    undefined,
       selectedProduct:    undefined,
@@ -93,6 +102,13 @@ export const useAppStore = create<AppState>()(
       clearCompare: () => set({ compareProductIds: [] }),
 
       setLastTryOnRequestId: (id) => set({ lastTryOnRequestId: id }),
+      setLocalSavedLookPreview: (preview) =>
+        set((state) => ({
+          localSavedLookPreviews: {
+            ...state.localSavedLookPreviews,
+            [preview.lookId]: preview,
+          },
+        })),
       setCapturedPhoto:  (uri)           => set({ capturedPhotoUri: uri }),
       selectVariant:     (variant, product) => set({ selectedVariant: variant, selectedProduct: product }),
       setTryOnStatus:    (s)             => set({ tryOnStatus: s }),
@@ -122,6 +138,7 @@ export const useAppStore = create<AppState>()(
         savedProductIds:    state.savedProductIds,
         compareProductIds:  state.compareProductIds,
         lastTryOnRequestId: state.lastTryOnRequestId,
+        localSavedLookPreviews: state.localSavedLookPreviews,
       }),
     },
   ),

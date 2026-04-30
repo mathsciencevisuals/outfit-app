@@ -175,6 +175,12 @@ export interface PersonalizedTrendingResponse {
 
 // ─── Saved Look Types ─────────────────────────────────────────────────────────
 
+export interface SavedLookItem {
+  id: string;
+  productId: string;
+  product?: Product;
+}
+
 export interface SavedLook {
   id: string;
   userId: string;
@@ -182,7 +188,8 @@ export interface SavedLook {
   note?: string;
   tryOnResultId?: string;
   tryOnImageUrl?: string;
-  products: Product[];
+  products?: Product[];
+  items?: SavedLookItem[];
   createdAt: string;
 }
 

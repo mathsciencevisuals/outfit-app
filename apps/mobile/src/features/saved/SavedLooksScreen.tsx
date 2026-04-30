@@ -13,6 +13,7 @@ import type { SavedLook } from '../../types';
 export function SavedLooksScreen() {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
+  const localPreviews = useAppStore((s) => s.localSavedLookPreviews);
 
   const { data, loading, error, refetch } = useAsyncResource(
     () => mobileApi.savedLooks(userId),
@@ -45,35 +46,41 @@ export function SavedLooksScreen() {
             onAction={() => router.push('/tryon-upload')}
           />
         ) : (
-          looks.map((look) => (
-            <TouchableOpacity
-              key={look.id}
-              style={styles.lookCard}
-              onPress={() => {/* navigate to look detail */}}
-              activeOpacity={0.8}
-            >
-              {look.tryOnImageUrl || look.products[0]?.variants[0]?.imageUrl ? (
-                <Image
-                  source={{ uri: look.tryOnImageUrl ?? look.products[0]?.variants[0]?.imageUrl }}
-                  style={styles.lookImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[styles.lookImage, styles.lookImagePlaceholder]}>
-                  <Text style={styles.placeholderIcon}>👕</Text>
+          looks.map((look) => {
+            const localPreviewUri = localPreviews[look.id]?.imageUri;
+            const products = look.products ?? look.items?.map((item) => item.product).filter(Boolean) ?? [];
+            const previewUri = localPreviewUri ?? products[0]?.variants[0]?.imageUrl ?? look.tryOnImageUrl;
+
+            return (
+              <TouchableOpacity
+                key={look.id}
+                style={styles.lookCard}
+                onPress={() => {/* navigate to look detail */}}
+                activeOpacity={0.8}
+              >
+                {previewUri ? (
+                  <Image
+                    source={{ uri: previewUri }}
+                    style={styles.lookImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.lookImage, styles.lookImagePlaceholder]}>
+                    <Text style={styles.placeholderIcon}>👕</Text>
+                  </View>
+                )}
+                <View style={styles.lookInfo}>
+                  <Text style={styles.lookName}>{look.name}</Text>
+                  {look.note ? (
+                    <Text style={styles.lookNote} numberOfLines={2}>{look.note}</Text>
+                  ) : null}
+                  <Text style={styles.lookDate}>
+                    {new Date(look.createdAt).toLocaleDateString()}
+                  </Text>
                 </View>
-              )}
-              <View style={styles.lookInfo}>
-                <Text style={styles.lookName}>{look.name}</Text>
-                {look.note ? (
-                  <Text style={styles.lookNote} numberOfLines={2}>{look.note}</Text>
-                ) : null}
-                <Text style={styles.lookDate}>
-                  {new Date(look.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))
+              </TouchableOpacity>
+            );
+          })
         )}
       </SectionCard>
     </Screen>

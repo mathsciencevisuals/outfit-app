@@ -165,6 +165,7 @@ class SavedLooksService {
       ...item,
       product: item.product ? serializeProductCard(item.product) : item.product
     }));
+    const products = serializedItems.map((item) => item.product).filter(Boolean);
     const lookCategories = new Set(serializedItems.map((item) => item.product?.category).filter(Boolean));
     const allProducts = await this.prisma.product.findMany({
       include: {
@@ -201,6 +202,7 @@ class SavedLooksService {
     return {
       ...look,
       items: serializedItems,
+      products,
       offerSummary: {
         offerCount: allOffers.length,
         shopCount: new Set(allOffers.map((offer: any) => offer.shop?.id).filter(Boolean)).size,

@@ -44,6 +44,7 @@ export function TryMeScreen() {
   const addToCompare   = useAppStore(s => s.addToCompare);
   const removeCompare  = useAppStore(s => s.removeFromCompare);
   const setLastTryOnId = useAppStore(s => s.setLastTryOnRequestId);
+  const setLocalSavedLookPreview = useAppStore(s => s.setLocalSavedLookPreview);
 
   // ── Try-on state ─────────────────────────────────────────────────────────────
   const [userPhoto,      setUserPhoto]      = useState<string | null>(null);
@@ -223,13 +224,19 @@ export function TryMeScreen() {
     if (!primaryUrl) return;
     setSavingLook(true);
     try {
-      await mobileApi.saveLook({
+      const savedLook = await mobileApi.saveLook({
         userId,
         name: garmentProduct?.name ?? 'Uploaded garment try-on',
         note: garmentProduct ? undefined : 'Saved from an uploaded garment try-on.',
         tryOnResultId: requestId ?? undefined,
-        tryOnImageUrl: primaryUrl,
         products: garmentProduct ? [garmentProduct] : [],
+      });
+      const localUri = await saveImageToDevice(primaryUrl, `saved_${savedLook.id}`);
+      setLocalSavedLookPreview({
+        lookId: savedLook.id,
+        userId,
+        imageUri: localUri,
+        createdAt: new Date().toISOString(),
       });
       setLookSaved(true);
       showToast('Look saved!');
@@ -294,7 +301,7 @@ export function TryMeScreen() {
       >
         {/* Header */}
         <Text style={[styles.title, { color: C.textPrimary }]}>Try Me</Text>
-        <Text style={[styles.sub, { color: C.textSecondary }]}>Grok AI · See how clothes look on you</Text>
+        <Text style={[styles.sub, { color: C.textSecondary }]}>AI try-on · See how clothes look on you</Text>
 
         {/* ── Two-card row ── */}
         <View style={styles.cardRow}>
