@@ -92,6 +92,8 @@ Before deploying `fitme-api`, validate these items in this order:
 7. Secret Manager contains:
    - `fitme-database-url`
    - `fitme-jwt-secret`
+   - `fitme-gemini-api-key` if `TRYON_PROVIDER=gemini`
+   - `fitme-anthropic-api-key` optionally, if you want Claude fit/style analysis in Gemini try-on results
 8. The API deploy command includes:
    - `DATABASE_URL`
    - `JWT_SECRET`
@@ -137,7 +139,7 @@ Before running it, set substitutions that match your project:
 Current runtime assumptions in the build config:
 
 - `STORAGE_PROVIDER=gcs`
-- `TRYON_PROVIDER=mock`
+- `TRYON_PROVIDER=gemini`
 
 Recommended Cloud Run network setting for this repo:
 
@@ -159,9 +161,11 @@ gcloud run deploy fitme-api \
   --subnet VPC_SUBNET \
   --vpc-egress private-ranges-only \
   --add-cloudsql-instances PROJECT_ID:REGION:CLOUDSQL_INSTANCE \
-  --set-env-vars NODE_ENV=production,REDIS_URL=redis://REDIS_INTERNAL_IP:6379,STORAGE_PROVIDER=gcs,GCS_BUCKET=fitme-assets,GCS_PROJECT_ID=PROJECT_ID,GCS_PUBLIC_BASE_URL=https://storage.googleapis.com/fitme-assets,TRYON_PROVIDER=mock \
-  --set-secrets DATABASE_URL=fitme-database-url:latest,JWT_SECRET=fitme-jwt-secret:latest
+  --set-env-vars NODE_ENV=production,REDIS_URL=redis://REDIS_INTERNAL_IP:6379,STORAGE_PROVIDER=gcs,GCS_BUCKET=fitme-assets,GCS_PROJECT_ID=PROJECT_ID,GCS_PUBLIC_BASE_URL=https://storage.googleapis.com/fitme-assets,TRYON_PROVIDER=gemini \
+  --set-secrets DATABASE_URL=fitme-database-url:latest,JWT_SECRET=fitme-jwt-secret:latest,GEMINI_API_KEY=fitme-gemini-api-key:latest
 ```
+
+Add `ANTHROPIC_API_KEY=fitme-anthropic-api-key:latest` to `--set-secrets` when Claude fit/style analysis is configured.
 
 Run:
 

@@ -12,7 +12,7 @@ substitutions:
   _STORAGE_PROVIDER: gcs
   _GCS_BUCKET: fitme-assets
   _GCS_PUBLIC_BASE_URL: https://storage.googleapis.com/fitme-assets
-  _TRYON_PROVIDER: grok
+  _TRYON_PROVIDER: gemini
   _GROK_USE_PRO: "false"
 
 steps:
@@ -49,7 +49,7 @@ steps:
       - --subnet=${_VPC_SUBNET}
       - --vpc-egress=private-ranges-only
       - --set-env-vars=NODE_ENV=production,STORAGE_PROVIDER=${_STORAGE_PROVIDER},GCS_BUCKET=${_GCS_BUCKET},GCS_PROJECT_ID=${PROJECT_ID},GCS_PUBLIC_BASE_URL=${_GCS_PUBLIC_BASE_URL},REDIS_URL=${_REDIS_URL},TRYON_PROVIDER=${_TRYON_PROVIDER},GROK_USE_PRO=${_GROK_USE_PRO}
-      - --update-secrets=DATABASE_URL=fitme-database-url:latest,JWT_SECRET=fitme-jwt-secret:latest,GROK_API_KEY=fitme-grok-api-key:latest
+      - --update-secrets=DATABASE_URL=fitme-database-url:latest,JWT_SECRET=fitme-jwt-secret:latest,GEMINI_API_KEY=fitme-gemini-api-key:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_IMAGE_NAME}:${COMMIT_SHA}

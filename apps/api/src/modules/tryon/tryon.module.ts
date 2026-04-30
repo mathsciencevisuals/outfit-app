@@ -34,6 +34,16 @@ import { UploadsModule, UploadsService } from "../uploads/uploads.module";
 
 const { memoryStorage } = require("multer") as { memoryStorage: () => unknown };
 
+const TRYON_PROVIDERS = ["mock", "http", "grok", "gemini"] as const;
+type TryOnProviderMode = (typeof TRYON_PROVIDERS)[number];
+
+function normalizeTryOnProvider(provider?: string | null): TryOnProviderMode {
+  const normalized = provider?.trim().toLowerCase();
+  return TRYON_PROVIDERS.includes(normalized as TryOnProviderMode)
+    ? normalized as TryOnProviderMode
+    : "mock";
+}
+
 class CreateTryOnRequestDto {
   @IsString()
   userId!: string;
@@ -162,7 +172,7 @@ export class TryOnService {
   ) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this try-on request");
 
-    const provider = dto.provider ?? this.configService.getOrThrow<string>("TRYON_PROVIDER");
+    const provider = normalizeTryOnProvider(dto.provider ?? this.configService.getOrThrow<string>("TRYON_PROVIDER"));
     const garmentPhotoFile = files?.garmentPhoto?.[0];
     const upload = dto.uploadId
       ? await (this.prisma.upload as any).findUnique({ where: { id: dto.uploadId } })
@@ -299,10 +309,7 @@ export class TryOnService {
       const viewAngles: ViewAngle[] = rawAngles.filter((a: string) => VALID_ANGLES.includes(a as ViewAngle)) as ViewAngle[];
       const selectedAngles: ViewAngle[] = viewAngles.length ? viewAngles : ["front"];
 
-      const providerMode: "mock" | "http" | "grok" | "gemini" =
-        request.provider === "http"   ? "http"   :
-        request.provider === "grok"   ? "grok"   :
-        request.provider === "gemini" ? "gemini" : "mock";
+      const providerMode = normalizeTryOnProvider(request.provider);
 
       const personImageUrl  = request.imageUrl;
       const garmentImageUrl =
