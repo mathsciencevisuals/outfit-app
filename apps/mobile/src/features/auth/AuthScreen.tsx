@@ -43,6 +43,7 @@ export function AuthScreen() {
       setSession({
         userId: response.user.id,
         accessToken: response.accessToken,
+        userRole: response.user.role,
         authEmail: email.trim().toLowerCase(),
         authPassword: password,
       });

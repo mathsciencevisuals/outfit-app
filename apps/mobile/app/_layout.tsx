@@ -46,6 +46,7 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
             useAppStore.getState().setSession({
               userId: session.user.id,
               accessToken,
+              userRole: session.user.role,
             });
             isAuthenticated = true;
           } catch (error) {

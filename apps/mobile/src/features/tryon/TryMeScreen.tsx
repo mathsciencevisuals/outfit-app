@@ -75,8 +75,7 @@ export function TryMeScreen() {
   const [products,  setProducts]  = useState<Product[]>([]);
   const [category,  setCategory]  = useState('All');
   const [showPicker, setShowPicker] = useState(false);
-
-  const [isModelPhoto,   setIsModelPhoto]   = useState(false);
+  const [compareGarments, setCompareGarments] = useState<UserGarment[]>([]);
 
   // ── Toast ─────────────────────────────────────────────────────────────────────
   const [toast,    setToast]    = useState('');
@@ -137,7 +136,6 @@ export function TryMeScreen() {
       setGarmentUri(result.assets[0].uri);
       setGarmentProduct(null);
       setGarmentVariant(null);
-      setIsModelPhoto(false);
       resetResult();
     }
   };
@@ -150,26 +148,6 @@ export function TryMeScreen() {
       setGarmentUri(result.assets[0].uri);
       setGarmentProduct(null);
       setGarmentVariant(null);
-      setIsModelPhoto(false);
-      resetResult();
-    }
-  };
-
-  // Pick a fashion/model image from gallery — AI will automatically extract the outfit.
-  // Works with product photos, magazine shots, or any model-wearing-clothes image.
-  const handleGarmentFromModel = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Gallery permission needed'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.9,
-    });
-    if (!result.canceled) {
-      setGarmentUri(result.assets[0].uri);
-      setGarmentProduct(null);
-      setGarmentVariant(null);
-      setIsModelPhoto(true);
       resetResult();
     }
   };
@@ -192,10 +170,17 @@ export function TryMeScreen() {
     setGarmentUri(garment.uri);
     setGarmentProduct(null);
     setGarmentVariant(null);
-    setIsModelPhoto(true); // treat as model/unknown photo — AI will extract
     resetResult();
     scrollRef.current?.scrollTo({ y: 0, animated: true });
     showToast('Garment selected — add your photo and generate');
+  };
+
+  const handleRemoveMyGarment = (garment: UserGarment) => {
+    removeUserGarment(garment.id);
+    setCompareGarments(items => items.filter(item => item.id !== garment.id));
+    if (garmentUri === garment.uri) {
+      clearGarment();
+    }
   };
 
   const handleSelectFromStore = (product: Product) => {
@@ -209,7 +194,6 @@ export function TryMeScreen() {
 
   const clearGarment = () => {
     setGarmentUri(null); setGarmentProduct(null); setGarmentVariant(null);
-    setIsModelPhoto(false);
     resetResult();
   };
 
@@ -373,7 +357,24 @@ export function TryMeScreen() {
     }
   };
 
+  const handleCompareGarment = (garment: UserGarment) => {
+    const exists = compareGarments.some(item => item.id === garment.id);
+    if (exists) {
+      setCompareGarments(items => items.filter(item => item.id !== garment.id));
+      showToast('Removed from compare');
+    } else if (compareIds.length + compareGarments.length >= MAX_COMPARE) {
+      showToast(`Maximum ${MAX_COMPARE} items`);
+    } else {
+      setCompareGarments(items => [...items, garment]);
+      showToast('Added to compare');
+    }
+  };
+
   const compareProducts = products.filter(p => compareIds.includes(p.id));
+  const compareItems = [
+    ...compareProducts.map(product => ({ type: 'product' as const, id: product.id, product })),
+    ...compareGarments.map(garment => ({ type: 'garment' as const, id: garment.id, garment })),
+  ].slice(0, MAX_COMPARE);
   const filtered = category === 'All'
     ? products
     : products.filter(p => p.category.toLowerCase() === category.toLowerCase());
@@ -389,7 +390,6 @@ export function TryMeScreen() {
     setGarmentProduct(product);
     setGarmentVariant(variant ?? null);
     setGarmentUri(null);
-    setIsModelPhoto(false);
     resetResult();
     scrollRef.current?.scrollTo({ y: 0, animated: true });
     showToast(`${product.name} selected — add your photo to generate`);
@@ -479,10 +479,10 @@ export function TryMeScreen() {
               </>
             ) : (
               <>
-                <View style={[styles.cardPlaceholder, { backgroundColor: C.surface2 }]}>
+                <Pressable style={[styles.cardPlaceholder, { backgroundColor: C.surface2 }]} onPress={handleGarmentGallery}>
                   <Text style={styles.placeholderEmoji}>👕</Text>
                   <Text style={[styles.placeholderTxt, { color: C.textMuted }]}>Add garment</Text>
-                </View>
+                </Pressable>
                 <View style={styles.cardBtns}>
                   <Pressable style={[styles.sourceBtn, { backgroundColor: C.primary }]} onPress={() => setShowPicker(true)}>
                     <Ionicons name="storefront" size={12} color="#fff" />
@@ -497,16 +497,6 @@ export function TryMeScreen() {
                     <Text style={[styles.sourceTxt, { color: C.textSecondary }]}>Scan</Text>
                   </Pressable>
                 </View>
-                {/* Model photo option — extracts outfit from model-wearing-clothes images */}
-                <Pressable
-                  style={[styles.modelPhotoBtn, { backgroundColor: C.surface2, borderColor: C.border }]}
-                  onPress={handleGarmentFromModel}
-                >
-                  <Ionicons name="person-outline" size={12} color={C.primary} />
-                  <Text style={[styles.modelPhotoBtnTxt, { color: C.primary }]}>
-                    Scrape outfit from model photo
-                  </Text>
-                </Pressable>
               </>
             )}
           </View>
@@ -515,11 +505,9 @@ export function TryMeScreen() {
         {/* Gallery garment tip */}
         {garmentUri && !garmentVariant && (
           <View style={[styles.modelNoteRow, { backgroundColor: C.surface, borderColor: C.border }]}>
-            <Ionicons name={isModelPhoto ? 'sparkles-outline' : 'information-circle-outline'} size={14} color={C.primary} />
+            <Ionicons name="sparkles-outline" size={14} color={C.primary} />
             <Text style={[styles.noteText, { color: C.textSecondary, flex: 1 }]}>
-              {isModelPhoto
-                ? 'AI will automatically extract the outfit from the model photo and apply it to you.'
-                : 'Your uploaded garment image will be used directly for the try-on result.'}
+              We'll read the garment from your image automatically and use it for the try-on.
             </Text>
           </View>
         )}
@@ -698,25 +686,39 @@ export function TryMeScreen() {
         {/* Compare slots */}
         <View style={styles.slotsRow}>
           {[0, 1, 2].map((i) => {
-            const p = compareProducts[i];
-            return p ? (
-              <View key={p.id} style={[styles.slot, styles.slotFilled, { backgroundColor: C.surface, borderColor: C.primary }, Shadow.sm]}>
+            const item = compareItems[i];
+            if (!item) {
+              return (
+                <View key={`empty-${i}`} style={[styles.slot, styles.slotEmpty, { backgroundColor: C.surface2, borderColor: C.border }]}>
+                  <Ionicons name="add-circle-outline" size={28} color={C.textMuted} />
+                  <Text style={[styles.slotEmptyTxt, { color: C.textSecondary }]}>Add item</Text>
+                </View>
+              );
+            }
+
+            const imageUri = item.type === 'product'
+              ? item.product.variants[0]?.imageUrl ?? `https://picsum.photos/seed/${item.product.id}/200/267`
+              : item.garment.uri;
+            const title = item.type === 'product' ? item.product.name : item.garment.name;
+            const subtitle = item.type === 'product' ? formatPrice(item.product.variants[0]?.price ?? 0) : 'My garment';
+            const removeItem = () => {
+              if (item.type === 'product') removeCompare(item.product.id);
+              else setCompareGarments(items => items.filter(garment => garment.id !== item.garment.id));
+            };
+
+            return (
+              <View key={`${item.type}-${item.id}`} style={[styles.slot, styles.slotFilled, { backgroundColor: C.surface, borderColor: C.primary }, Shadow.sm]}>
                 <Image
-                  source={{ uri: p.variants[0]?.imageUrl ?? `https://picsum.photos/seed/${p.id}/200/267` }}
+                  source={{ uri: imageUri }}
                   style={styles.slotImage} resizeMode="cover"
                 />
-                <Pressable style={styles.slotRemove} onPress={() => removeCompare(p.id)}>
+                <Pressable style={styles.slotRemove} onPress={removeItem}>
                   <Ionicons name="close" size={12} color="#fff" />
                 </Pressable>
                 <View style={styles.slotInfo}>
-                  <Text style={[styles.slotName, { color: C.textPrimary }]} numberOfLines={1}>{p.name}</Text>
-                  <Text style={[styles.slotPrice, { color: C.primary }]}>{formatPrice(p.variants[0]?.price ?? 0)}</Text>
+                  <Text style={[styles.slotName, { color: C.textPrimary }]} numberOfLines={1}>{title}</Text>
+                  <Text style={[styles.slotPrice, { color: C.primary }]}>{subtitle}</Text>
                 </View>
-              </View>
-            ) : (
-              <View key={`empty-${i}`} style={[styles.slot, styles.slotEmpty, { backgroundColor: C.surface2, borderColor: C.border }]}>
-                <Ionicons name="add-circle-outline" size={28} color={C.textMuted} />
-                <Text style={[styles.slotEmptyTxt, { color: C.textSecondary }]}>Add item</Text>
               </View>
             );
           })}
@@ -740,17 +742,18 @@ export function TryMeScreen() {
           >
             <Ionicons name="add-circle-outline" size={28} color={C.textMuted} />
             <Text style={[styles.emptyGarmentTxt, { color: C.textMuted }]}>
-              Upload your own garments or model photos to try on
+              Upload your own garments to try on
             </Text>
           </Pressable>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.sm }}>
             {userGarments.map((g) => {
               const isActive = garmentUri === g.uri;
+              const inCompare = compareGarments.some(item => item.id === g.id);
               return (
                 <View key={g.id} style={[styles.myGarmentCard, { backgroundColor: C.surface, borderColor: isActive ? C.success : C.border, borderWidth: isActive ? 2 : 1 }]}>
                   <Image source={{ uri: g.uri }} style={styles.myGarmentImg} resizeMode="cover" />
-                  <Pressable style={styles.myGarmentRemove} onPress={() => removeUserGarment(g.id)}>
+                  <Pressable style={styles.myGarmentRemove} onPress={() => handleRemoveMyGarment(g)}>
                     <Ionicons name="close" size={10} color="#fff" />
                   </Pressable>
                   <Pressable
@@ -758,6 +761,15 @@ export function TryMeScreen() {
                     onPress={() => handleTryOnMyGarment(g)}
                   >
                     <Text style={styles.myGarmentTryTxt}>{isActive ? 'Selected' : 'Try On'}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.myGarmentCompareBtn, { backgroundColor: inCompare ? C.primaryDim : C.surface2, borderColor: inCompare ? C.primary : C.border }]}
+                    onPress={() => handleCompareGarment(g)}
+                  >
+                    <Ionicons name={inCompare ? 'checkmark' : 'add'} size={10} color={inCompare ? C.primary : C.textSecondary} />
+                    <Text style={[styles.myGarmentCompareTxt, { color: inCompare ? C.primary : C.textSecondary }]}>
+                      {inCompare ? 'Added' : 'Compare'}
+                    </Text>
                   </Pressable>
                 </View>
               );
@@ -992,9 +1004,6 @@ const styles = StyleSheet.create({
   pillTxt:   { fontSize: 10, fontWeight: FontWeight.semibold },
   gridActions: { flexDirection: 'row', gap: 4 },
   gridActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 5, paddingHorizontal: 6, borderRadius: Radius.full },
-  // Model photo source button
-  modelPhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 8, borderRadius: Radius.sm, borderWidth: 1, marginTop: 2 },
-  modelPhotoBtnTxt: { fontSize: 10, fontWeight: FontWeight.semibold },
   modelNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs, borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm },
   // My Garments section
   myGarmentsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },
@@ -1007,6 +1016,8 @@ const styles = StyleSheet.create({
   myGarmentRemove: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
   myGarmentTryBtn: { padding: 5, alignItems: 'center' },
   myGarmentTryTxt: { color: '#fff', fontSize: 10, fontWeight: FontWeight.bold },
+  myGarmentCompareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 5, borderTopWidth: 1 },
+  myGarmentCompareTxt: { fontSize: 10, fontWeight: FontWeight.bold },
 
   // Modal
   modal:       { flex: 1 },
