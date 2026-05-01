@@ -236,7 +236,7 @@ class ProductsService {
       return empty;
     }
 
-    const savedProducts = savedLooks.flatMap((look) => look.items.map((item) => item.product));
+    const savedProducts = savedLooks.flatMap((look) => look.items.map((item: any) => item.product));
     const triedProducts = tryOnRequestsResult.map((request: any) => request.variant?.product).filter(Boolean);
     const userStyles = normalizedTokens([
       ...extractStyleStrings(profile?.stylePreference),
