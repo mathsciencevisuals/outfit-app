@@ -42,7 +42,7 @@ import { TryOnWorker } from "./jobs/workers/tryon.worker";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv, envFilePath: ['.env', '../../.env'] }),
     SecurityModule,
     LoggerModule.forRoot({ pinoHttp: pinoLoggerConfig }),
     JwtModule.registerAsync({

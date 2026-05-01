@@ -189,38 +189,55 @@ class ProductsService {
       return cached.data;
     }
 
-    const [profile, savedLooks, tryOnRequests, products, pins] = await Promise.all([
-      this.prisma.profile.findUnique({ where: { userId } }),
-      this.prisma.savedLook.findMany({
-        where: { userId },
-        include: { items: { include: { product: true } } },
-        orderBy: { updatedAt: "desc" },
-        take: 25
-      }),
-      (this.prisma.tryOnRequest as any).findMany({
+    const empty: PersonalizedTrendingResponse = { trendingForYou: [], popularInApp: [], globalTrends: [] };
+
+    let tryOnRequestsResult: any[] = [];
+    try {
+      tryOnRequestsResult = await (this.prisma.tryOnRequest as any).findMany({
         where: { userId },
         include: { variant: { include: { product: true } } },
         orderBy: { requestedAt: "desc" },
         take: 25
-      }),
-      this.prisma.product.findMany({
-        include: {
-          brand: true,
-          variants: {
-            include: {
-              inventoryOffers: { include: { shop: true } },
-              sizeChartEntries: true,
-              _count: { select: { tryOnRequests: true } }
-            }
-          },
-          _count: { select: { savedLookItems: true, lookRatings: true } }
-        }
-      }),
-      this.socialService.getTrending(Math.max(limit, 8))
-    ]);
+      });
+    } catch {
+      // tryOnRequest relation may not be available; continue with no try-on history
+    }
+
+    let profile: any = null;
+    let savedLooks: any[] = [];
+    let products: any[] = [];
+    let pins: any[] = [];
+    try {
+      [profile, savedLooks, products, pins] = await Promise.all([
+        this.prisma.profile.findUnique({ where: { userId } }),
+        this.prisma.savedLook.findMany({
+          where: { userId },
+          include: { items: { include: { product: true } } },
+          orderBy: { updatedAt: "desc" },
+          take: 25
+        }),
+        this.prisma.product.findMany({
+          include: {
+            brand: true,
+            variants: {
+              include: {
+                inventoryOffers: { include: { shop: true } },
+                sizeChartEntries: true,
+                _count: { select: { tryOnRequests: true } }
+              }
+            },
+            _count: { select: { savedLookItems: true, lookRatings: true } }
+          }
+        }),
+        this.socialService.getTrending(Math.max(limit, 8))
+      ]);
+    } catch (err) {
+      console.error("[FitMe] personalizedTrending data fetch failed:", err);
+      return empty;
+    }
 
     const savedProducts = savedLooks.flatMap((look) => look.items.map((item) => item.product));
-    const triedProducts = tryOnRequests.map((request: any) => request.variant?.product).filter(Boolean);
+    const triedProducts = tryOnRequestsResult.map((request: any) => request.variant?.product).filter(Boolean);
     const userStyles = normalizedTokens([
       ...extractStyleStrings(profile?.stylePreference),
       ...savedProducts.flatMap((product) => product.styleTags ?? []),

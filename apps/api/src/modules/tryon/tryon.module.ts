@@ -638,11 +638,22 @@ export class TryOnService {
         }),
       });
 
-      if (!res.ok) return stub;
+      if (!res.ok) {
+        console.warn('[TryOn] Claude fit analysis returned non-OK:', res.status);
+        return stub;
+      }
       const data = await res.json() as { content?: Array<{ text?: string }> };
-      const text = data.content?.[0]?.text ?? '{}';
-      return { ...stub, ...JSON.parse(text) };
-    } catch {
+      const raw = data.content?.[0]?.text ?? '{}';
+      const text = raw.replace(/```json?/g, '').replace(/```/g, '').trim();
+      try {
+        return { ...stub, ...JSON.parse(text) };
+      } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) return { ...stub, ...JSON.parse(match[0]) };
+        return stub;
+      }
+    } catch (err) {
+      console.warn('[TryOn] Claude fit analysis failed:', err instanceof Error ? err.message : err);
       return stub;
     }
   }
@@ -689,8 +700,15 @@ export class TryOnService {
 
       if (!res.ok) return stub;
       const data = await res.json() as { content?: Array<{ text?: string }> };
-      const text = data.content?.[0]?.text ?? '{}';
-      return { ...stub, ...JSON.parse(text) };
+      const raw = data.content?.[0]?.text ?? '{}';
+      const text = raw.replace(/```json?/g, '').replace(/```/g, '').trim();
+      try {
+        return { ...stub, ...JSON.parse(text) };
+      } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) return { ...stub, ...JSON.parse(match[0]) };
+        return stub;
+      }
     } catch {
       return stub;
     }

@@ -449,4 +449,51 @@ export const mobileApi = {
     }
     throw new Error('Try-on timed out. Please try again.');
   },
+
+  // ── Admin: Brands ─────────────────────────────────────────────────────────
+  adminListBrands: (): Promise<any[]> => apiFetch<any[]>('/brands'),
+  adminCreateBrand: (data: { name: string; slug: string; countryCode: string; sizingNotes?: string }): Promise<any> =>
+    apiFetch<any>('/brands', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateBrand: (id: string, data: { name: string; slug: string; countryCode: string; sizingNotes?: string }): Promise<any> =>
+    apiFetch<any>(`/brands/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Admin: Products ───────────────────────────────────────────────────────
+  adminListProducts: (): Promise<any[]> => apiFetch<any[]>('/products'),
+  adminCreateProduct: (data: any): Promise<any> =>
+    apiFetch<any>('/products', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateProduct: (id: string, data: any): Promise<any> =>
+    apiFetch<any>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Admin: Users ──────────────────────────────────────────────────────────
+  adminListUsers: (): Promise<any[]> => apiFetch<any[]>('/users'),
+
+  // ── Admin: Shops ──────────────────────────────────────────────────────────
+  adminListShops: (): Promise<any[]> => apiFetch<any[]>('/shops'),
+  adminCreateShop: (data: { name: string; slug: string; url: string; region: string; description?: string }): Promise<any> =>
+    apiFetch<any>('/shops', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateShop: (id: string, data: any): Promise<any> =>
+    apiFetch<any>(`/shops/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Admin: Campaigns ──────────────────────────────────────────────────────
+  adminListCampaigns: (): Promise<any[]> => apiFetch<any[]>('/campaigns'),
+  adminCreateCampaign: (data: any): Promise<any> =>
+    apiFetch<any>('/campaigns', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateCampaign: (id: string, data: any): Promise<any> =>
+    apiFetch<any>(`/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Admin: Coupons ────────────────────────────────────────────────────────
+  adminListCoupons: (): Promise<any[]> => apiFetch<any[]>('/coupons'),
+  adminCreateCoupon: (data: any): Promise<any> =>
+    apiFetch<any>('/coupons', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateCoupon: (id: string, data: any): Promise<any> =>
+    apiFetch<any>(`/coupons/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Admin: Try-On Providers ───────────────────────────────────────────────
+  adminListProviderConfigs: (): Promise<any[]> => apiFetch<any[]>('/try-on/provider-configs'),
+  adminUpdateProviderConfig: (provider: string, data: { displayName: string; isEnabled: boolean; baseUrl?: string; apiKeyHint?: string }): Promise<any> =>
+    apiFetch<any>(`/try-on/provider-configs/${provider}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Admin: Rewards ────────────────────────────────────────────────────────
+  adminAdjustRewards: (userId: string, amount: number, reason: string): Promise<any> =>
+    apiFetch<any>('/rewards/transactions/adjust', { method: 'POST', body: JSON.stringify({ userId, amount, reason }) }),
 };

@@ -29,6 +29,7 @@ function getInitials(name: string): string {
 export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
+  const userRole = useAppStore((s) => s.userRole);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const { data, loading, error, refetch } = useAsyncResource(
@@ -223,6 +224,19 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
           </Pressable>
         </SectionCard>
 
+        {/* Admin Panel */}
+        {(userRole === 'ADMIN' || userRole === 'OPERATOR') && (
+          <SectionCard title="Admin Panel">
+            <Pressable style={styles.navRow} onPress={() => router.push('/admin' as never)}>
+              <View style={styles.navIconBox}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={Colors.primary} />
+              </View>
+              <Text style={styles.navLabel}>Admin Dashboard</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+            </Pressable>
+          </SectionCard>
+        )}
+
         {/* Profile details */}
         <SectionCard title="Profile details">
           <InfoRow label="Height"     value={heightValue} />
@@ -257,6 +271,27 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
 
   return (
     <Screen>
+      {/* Avatar – lets new users add a photo during onboarding */}
+      <View style={styles.avatarSection}>
+        <Pressable onPress={handleChangeAvatar} style={styles.avatarWrap}>
+          {uploadingAvatar ? (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <ActivityIndicator color={Colors.primary} />
+            </View>
+          ) : data?.avatarUrl ? (
+            <Image source={{ uri: data.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Text style={styles.avatarInitials}>{getInitials(fullName)}</Text>
+            </View>
+          )}
+          <View style={styles.avatarBadge}>
+            <Ionicons name="camera" size={12} color="#fff" />
+          </View>
+        </Pressable>
+        <Text style={styles.profileName}>{fullName}</Text>
+      </View>
+
       <SectionCard
         title="Your profile"
         subtitle="Foundational details that power fit and style recommendations."

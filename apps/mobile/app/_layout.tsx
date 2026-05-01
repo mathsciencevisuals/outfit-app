@@ -137,6 +137,16 @@ export default function RootLayout() {
               <Stack.Screen name="saved-looks" />
               <Stack.Screen name="profile-main" />
               <Stack.Screen name="settings" />
+              <Stack.Screen name="admin" />
+              <Stack.Screen name="admin-brands" />
+              <Stack.Screen name="admin-products" />
+              <Stack.Screen name="admin-product-form" />
+              <Stack.Screen name="admin-users" />
+              <Stack.Screen name="admin-shops" />
+              <Stack.Screen name="admin-campaigns" />
+              <Stack.Screen name="admin-coupons" />
+              <Stack.Screen name="admin-tryon" />
+              <Stack.Screen name="admin-rewards" />
               <Stack.Screen name="tryon-upload"    options={{ presentation: 'modal' }} />
               <Stack.Screen name="tryon-result"    options={{ presentation: 'modal' }} />
               <Stack.Screen name="shops" />
@@ -145,7 +155,7 @@ export default function RootLayout() {
           </>
         ) : null}
         {!hydrated || !checked ? (
-          <View style={styles.loadingScreen} pointerEvents="none">
+          <View style={styles.loadingScreen}>
             <ActivityIndicator size="large" color={Colors.primary} />
           </View>
         ) : null}
