@@ -5,7 +5,7 @@ substitutions:
   _IMAGE_NAME: admin-web
   _PLATFORM: managed
   _SERVICE_ACCOUNT: fitme-admin-runner@${PROJECT_ID}.iam.gserviceaccount.com
-  _API_URL: https://fitme-api-REPLACE.a.run.app
+  _API_URL: https://fitme-api-237152691367.asia-south1.run.app
 
 steps:
   - name: gcr.io/cloud-builders/docker

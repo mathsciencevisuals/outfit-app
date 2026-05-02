@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { PropsWithChildren } from "react";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { requireAdminSession } from "../lib/auth";
 
@@ -11,9 +13,17 @@ const links = [
   ["/shops", "Shops"],
   ["/campaigns", "Campaigns"],
   ["/coupons", "Coupons"],
+  ["/admin-pinterest", "Pinterest"],
   ["/tryon-requests", "Try-on requests"],
   ["/settings", "Provider settings"]
 ] as const;
+
+async function logout() {
+  "use server";
+
+  cookies().delete("fitme_access_token");
+  redirect("/");
+}
 
 export async function AdminShell({ children }: PropsWithChildren) {
   const session = await requireAdminSession();
@@ -29,6 +39,11 @@ export async function AdminShell({ children }: PropsWithChildren) {
               <div className="font-medium text-slate-800">{session.user.email}</div>
               <div>{session.user.role}</div>
             </div>
+            <form action={logout} className="mt-3">
+              <button className="w-full rounded-2xl border border-dune px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+                Log out
+              </button>
+            </form>
           </div>
           <nav className="space-y-2">
             {links.map(([href, label]) => (
