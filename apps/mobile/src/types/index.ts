@@ -72,16 +72,42 @@ export interface UserStats {
 export interface Measurement {
   id: string;
   userId: string;
+  heightCm?: number;
+  // Top wear
   chestCm?: number;
+  shoulderCm?: number;
+  shouldersCm?: number;
+  sleeveCm?: number;
+  neckCm?: number;
+  // Bottom wear
   waistCm?: number;
   hipsCm?: number;
   inseamCm?: number;
-  shoulderCm?: number;
-  shouldersCm?: number;
-  heightCm?: number;
+  thighCm?: number;
+  riseCm?: number;
   footLengthCm?: number;
   source?: string;
   createdAt: string;
+}
+
+export interface PinterestPin {
+  id: string;
+  imageUrl: string;
+  title: string;
+  description: string;
+  sourceUrl: string;
+  affiliateLink?: string;
+  boardName: string;
+  boardKey: string;
+  pinCount: number;
+  gender?: string | null;
+  sizeCategory?: string | null;
+  budgetRange?: string | null;
+  estimatedPrice?: number | null;
+  colours: string[];
+  styleCategories: string[];
+  occasion?: string | null;
+  isAnalysed: boolean;
 }
 
 export interface Shop {
@@ -201,8 +227,18 @@ export interface TrendingPin {
   title: string;
   description: string;
   sourceUrl: string;
+  affiliateLink?: string;
   boardName: string;
+  boardKey?: string;
   pinCount: number;
+  gender?: string | null;
+  sizeCategory?: string | null;
+  budgetRange?: string | null;
+  estimatedPrice?: number | null;
+  colours?: string[];
+  styleCategories?: string[];
+  occasion?: string | null;
+  isAnalysed?: boolean;
 }
 
 // ─── API Response Wrapper ─────────────────────────────────────────────────────

@@ -14,19 +14,29 @@ import { useAppStore }    from '../../store/app-store';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '../../utils/theme';
 import type { Measurement } from '../../types';
 
-type MeasurementKey = 'chestCm' | 'waistCm' | 'hipsCm' | 'inseamCm' | 'shouldersCm' | 'heightCm';
+type MeasurementKey =
+  | 'heightCm'
+  | 'chestCm' | 'shouldersCm' | 'sleeveCm' | 'neckCm'
+  | 'waistCm' | 'hipsCm' | 'inseamCm' | 'thighCm' | 'riseCm';
 
 type UnitSystem = 'cm' | 'inch';
 
 const CM_TO_INCH = 0.393701;
 
-const FIELDS: { key: MeasurementKey; label: string; hint: string }[] = [
-  { key: 'heightCm',    label: 'Height',    hint: 'Stand straight, feet together' },
-  { key: 'chestCm',     label: 'Chest',     hint: 'Fullest part of chest' },
-  { key: 'shouldersCm', label: 'Shoulders', hint: 'Shoulder tip to shoulder tip' },
-  { key: 'waistCm',     label: 'Waist',     hint: 'Narrowest part of torso' },
-  { key: 'hipsCm',      label: 'Hips',      hint: 'Fullest part of hips' },
-  { key: 'inseamCm',    label: 'Inseam',    hint: 'Crotch to ankle (inside leg)' },
+const TOP_FIELDS: { key: MeasurementKey; label: string; hint: string }[] = [
+  { key: 'chestCm',     label: 'Chest / Bust', hint: 'Fullest part of chest' },
+  { key: 'shouldersCm', label: 'Shoulders',    hint: 'Shoulder tip to shoulder tip' },
+  { key: 'sleeveCm',    label: 'Sleeve',       hint: 'Shoulder to wrist' },
+  { key: 'neckCm',      label: 'Neck',         hint: 'Around base of neck' },
+  { key: 'waistCm',     label: 'Waist (upper)', hint: 'Narrowest part of torso' },
+];
+
+const BOTTOM_FIELDS: { key: MeasurementKey; label: string; hint: string }[] = [
+  { key: 'waistCm',   label: 'Waist',   hint: 'Where you wear your waistband' },
+  { key: 'hipsCm',    label: 'Hips',    hint: 'Fullest part of hips' },
+  { key: 'inseamCm',  label: 'Inseam',  hint: 'Crotch to ankle (inside leg)' },
+  { key: 'thighCm',   label: 'Thigh',   hint: 'Fullest part of upper thigh' },
+  { key: 'riseCm',    label: 'Rise',    hint: 'Crotch point to waistband' },
 ];
 
 function toDisplay(valueCm: string, unit: UnitSystem): string {
@@ -43,6 +53,11 @@ function toCm(valueDisplay: string, unit: UnitSystem): number {
   return unit === 'inch' ? n / CM_TO_INCH : n;
 }
 
+const EMPTY_EDITS: Record<MeasurementKey, string> = {
+  heightCm: '', chestCm: '', shouldersCm: '', sleeveCm: '', neckCm: '',
+  waistCm:  '', hipsCm:  '', inseamCm:    '', thighCm:  '', riseCm: '',
+};
+
 export function MeasurementsScreen() {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
@@ -53,9 +68,7 @@ export function MeasurementsScreen() {
     [userId],
   );
 
-  const [edits, setEdits] = useState<Record<MeasurementKey, string>>({
-    heightCm:    '', chestCm: '', shouldersCm: '', waistCm: '', hipsCm: '', inseamCm: '',
-  });
+  const [edits, setEdits] = useState<Record<MeasurementKey, string>>(EMPTY_EDITS);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -64,24 +77,36 @@ export function MeasurementsScreen() {
     setEdits({
       heightCm:    m.heightCm    != null ? String(m.heightCm)    : '',
       chestCm:     m.chestCm     != null ? String(m.chestCm)     : '',
-      shouldersCm: m.shouldersCm != null ? String(m.shouldersCm) : '',
+      shouldersCm: (m.shouldersCm ?? m.shoulderCm) != null ? String(m.shouldersCm ?? m.shoulderCm) : '',
+      sleeveCm:    m.sleeveCm    != null ? String(m.sleeveCm)    : '',
+      neckCm:      m.neckCm      != null ? String(m.neckCm)      : '',
       waistCm:     m.waistCm     != null ? String(m.waistCm)     : '',
       hipsCm:      m.hipsCm      != null ? String(m.hipsCm)      : '',
       inseamCm:    m.inseamCm    != null ? String(m.inseamCm)    : '',
+      thighCm:     m.thighCm     != null ? String(m.thighCm)     : '',
+      riseCm:      m.riseCm      != null ? String(m.riseCm)      : '',
     });
   }, [data]);
 
   const handleChange = (key: MeasurementKey, raw: string) => {
-    // Store internally as display value; convert on save
     setEdits((prev) => ({ ...prev, [key]: raw }));
   };
 
   const handleSave = useCallback(async () => {
     const updates: Partial<Measurement> = {};
-    for (const { key } of FIELDS) {
+    const allFields = [...TOP_FIELDS, ...BOTTOM_FIELDS];
+    // de-dup waistCm which appears in both sections
+    const seen = new Set<string>();
+    for (const { key } of allFields) {
+      if (seen.has(key)) continue;
+      seen.add(key);
       const cm = toCm(edits[key], unit);
       if (!isNaN(cm) && cm > 0) (updates as Record<string, number>)[key] = cm;
     }
+    // height is separate
+    const h = toCm(edits.heightCm, unit);
+    if (!isNaN(h) && h > 0) updates.heightCm = h;
+
     Keyboard.dismiss();
     setSaving(true);
     try {
@@ -99,51 +124,84 @@ export function MeasurementsScreen() {
 
   const unitLabel = unit === 'cm' ? 'cm' : 'in';
 
+  const renderField = (
+    { key, label, hint }: { key: MeasurementKey; label: string; hint: string },
+    isLast: boolean,
+  ) => (
+    <View key={key} style={[styles.inputRow, !isLast && styles.inputRowBorder]}>
+      <View style={styles.inputMeta}>
+        <Text style={styles.inputLabel}>{label}</Text>
+        <Text style={styles.inputHint}>{hint}</Text>
+      </View>
+      <View style={styles.inputGroup}>
+        <TextInput
+          style={styles.input}
+          value={toDisplay(edits[key], unit)}
+          onChangeText={(v) => handleChange(key, v)}
+          keyboardType="decimal-pad"
+          placeholder="—"
+          placeholderTextColor={Colors.textMuted}
+          returnKeyType="next"
+        />
+        <Text style={styles.unitChip}>{unitLabel}</Text>
+      </View>
+    </View>
+  );
+
   return (
     <Screen scroll>
       {/* Unit toggle */}
       <View style={styles.unitRow}>
         <Text style={styles.unitLabel}>Unit</Text>
         <View style={styles.unitToggle}>
-          <View
-            style={[styles.unitOption, unit === 'cm' && styles.unitOptionActive]}
-            onTouchEnd={() => setUnit('cm')}
-          >
-            <Text style={[styles.unitOptionText, unit === 'cm' && styles.unitOptionTextActive]}>cm</Text>
-          </View>
-          <View
-            style={[styles.unitOption, unit === 'inch' && styles.unitOptionActive]}
-            onTouchEnd={() => setUnit('inch')}
-          >
-            <Text style={[styles.unitOptionText, unit === 'inch' && styles.unitOptionTextActive]}>inch</Text>
-          </View>
+          {(['cm', 'inch'] as UnitSystem[]).map((u) => (
+            <View
+              key={u}
+              style={[styles.unitOption, unit === u && styles.unitOptionActive]}
+              onTouchEnd={() => setUnit(u)}
+            >
+              <Text style={[styles.unitOptionText, unit === u && styles.unitOptionTextActive]}>{u}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
-      <SectionCard
-        title="Your measurements"
-        subtitle="Used for fit scoring and size recommendations. All values stored in cm internally."
-      >
-        {FIELDS.map(({ key, label, hint }, i) => (
-          <View key={key} style={[styles.inputRow, i < FIELDS.length - 1 && styles.inputRowBorder]}>
-            <View style={styles.inputMeta}>
-              <Text style={styles.inputLabel}>{label}</Text>
-              <Text style={styles.inputHint}>{hint}</Text>
-            </View>
-            <View style={styles.inputGroup}>
-              <TextInput
-                style={styles.input}
-                value={toDisplay(edits[key], unit)}
-                onChangeText={(v) => handleChange(key, v)}
-                keyboardType="decimal-pad"
-                placeholder="—"
-                placeholderTextColor={Colors.textMuted}
-                returnKeyType="next"
-              />
-              <Text style={styles.unitChip}>{unitLabel}</Text>
-            </View>
+      {/* Height */}
+      <SectionCard title="Height">
+        <View style={styles.inputRow}>
+          <View style={styles.inputMeta}>
+            <Text style={styles.inputLabel}>Height</Text>
+            <Text style={styles.inputHint}>Stand straight, feet together</Text>
           </View>
-        ))}
+          <View style={styles.inputGroup}>
+            <TextInput
+              style={styles.input}
+              value={toDisplay(edits.heightCm, unit)}
+              onChangeText={(v) => handleChange('heightCm', v)}
+              keyboardType="decimal-pad"
+              placeholder="—"
+              placeholderTextColor={Colors.textMuted}
+              returnKeyType="next"
+            />
+            <Text style={styles.unitChip}>{unitLabel}</Text>
+          </View>
+        </View>
+      </SectionCard>
+
+      {/* Top wear */}
+      <SectionCard
+        title="Top Wear"
+        subtitle="For shirts, kurtas, jackets, and upper-body garments"
+      >
+        {TOP_FIELDS.map((f, i) => renderField(f, i === TOP_FIELDS.length - 1))}
+      </SectionCard>
+
+      {/* Bottom wear */}
+      <SectionCard
+        title="Bottom Wear"
+        subtitle="For trousers, jeans, skirts, and lower-body garments"
+      >
+        {BOTTOM_FIELDS.map((f, i) => renderField(f, i === BOTTOM_FIELDS.length - 1))}
       </SectionCard>
 
       <Text style={styles.hint}>

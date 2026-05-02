@@ -273,7 +273,7 @@ export const mobileApi = {
   // PUT /style-preferences/:userId
   saveStylePreferences: (
     userId: string,
-    prefs: { styles?: string[]; colors?: string[]; budget?: string },
+    prefs: { styles?: string[]; colors?: string[]; budget?: string; gender?: string; size?: string },
   ): Promise<void> => {
     const BUDGET_RANGES: Record<string, { min?: number; max?: number; label: string }> = {
       under500:    {              max: 500,  label: 'Under ₹500' },
@@ -293,8 +293,25 @@ export const mobileApi = {
           budgetMax:   budget.max ?? null,
           budgetLabel: budget.label,
         }),
+        ...(prefs.gender && { gender: prefs.gender }),
+        ...(prefs.size   && { defaultSize: prefs.size }),
       }),
     });
+  },
+
+  // GET /social/pins — personalised Pinterest pins with gender/size/budget filtering
+  pinterestPins: (params: {
+    gender?: string; size?: string; budget?: string;
+    styles?: string[]; colors?: string[]; limit?: number;
+  }): Promise<{ data: TrendingPin[]; source: string; count: number }> => {
+    const qs = new URLSearchParams();
+    if (params.gender)            qs.set('gender',  params.gender);
+    if (params.size)              qs.set('size',    params.size);
+    if (params.budget)            qs.set('budget',  params.budget);
+    if (params.styles?.length)    qs.set('styles',  params.styles.join(','));
+    if (params.colors?.length)    qs.set('colors',  params.colors.join(','));
+    if (params.limit)             qs.set('limit',   String(params.limit));
+    return apiFetch(`/social/pins?${qs}`);
   },
 
   // ── Referrals & Share ─────────────────────────────────────────────────────

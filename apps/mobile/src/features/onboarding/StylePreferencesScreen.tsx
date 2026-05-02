@@ -45,12 +45,22 @@ const BUDGETS = [
   { key: 'above5000',   label: 'Above ₹5,000'    },
 ];
 
+const GENDERS = [
+  { key: 'male',   label: 'Male',   emoji: '👨' },
+  { key: 'female', label: 'Female', emoji: '👩' },
+  { key: 'other',  label: 'All',    emoji: '🧑' },
+];
+
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function StylePreferencesScreen() {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
 
+  const [gender,          setGender]  = useState<string>('');
+  const [size,            setSize]    = useState<string>('');
   const [selectedStyles,  setStyles]  = useState<Set<string>>(new Set());
   const [selectedColors,  setColors]  = useState<Set<string>>(new Set());
   const [selectedBudget,  setBudget]  = useState<string | null>(null);
@@ -69,6 +79,8 @@ export function StylePreferencesScreen() {
         styles:  Array.from(selectedStyles),
         colors:  Array.from(selectedColors),
         budget:  selectedBudget ?? undefined,
+        gender:  gender || undefined,
+        size:    size   || undefined,
       });
       await AsyncStorage.setItem(ONBOARDED_KEY, 'true');
       router.replace('/discover');
@@ -88,8 +100,39 @@ export function StylePreferencesScreen() {
 
   return (
     <Screen scroll>
+      {/* ── Gender ── */}
+      <Text style={styles.sectionTitle}>I am shopping for</Text>
+      <View style={styles.genderRow}>
+        {GENDERS.map((g) => (
+          <Pressable
+            key={g.key}
+            style={[styles.genderBtn, gender === g.key && styles.genderBtnActive]}
+            onPress={() => setGender(g.key)}
+          >
+            <Text style={styles.genderEmoji}>{g.emoji}</Text>
+            <Text style={[styles.genderLabel, gender === g.key && styles.genderLabelActive]}>
+              {g.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* ── Size ── */}
+      <Text style={[styles.sectionTitle, { marginTop: Spacing.lg }]}>My typical size</Text>
+      <View style={styles.sizeRow}>
+        {SIZES.map((s) => (
+          <Pressable
+            key={s}
+            style={[styles.sizeBtn, size === s && styles.sizeBtnActive]}
+            onPress={() => setSize(s)}
+          >
+            <Text style={[styles.sizeTxt, size === s && styles.sizeTxtActive]}>{s}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       {/* ── Style ── */}
-      <Text style={styles.sectionTitle}>Your style</Text>
+      <Text style={[styles.sectionTitle, { marginTop: Spacing.lg }]}>Your style</Text>
       <Text style={styles.sectionSub}>Pick all that apply</Text>
       <View style={styles.chipGrid}>
         {STYLES.map((s) => {
@@ -254,4 +297,19 @@ const styles = StyleSheet.create({
   radioDot:     { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary },
 
   actions: { gap: Spacing.sm, marginTop: Spacing.xl },
+
+  // Gender
+  genderRow:       { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
+  genderBtn:       { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface },
+  genderBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryDim },
+  genderEmoji:     { fontSize: 28, marginBottom: 4 },
+  genderLabel:     { fontSize: FontSize.sm, fontWeight: FontWeight.medium, color: Colors.textSecondary },
+  genderLabelActive: { color: Colors.primary },
+
+  // Size
+  sizeRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md },
+  sizeBtn:     { width: 52, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface },
+  sizeBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryDim },
+  sizeTxt:     { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: FontWeight.medium },
+  sizeTxtActive: { color: Colors.primary, fontWeight: FontWeight.bold },
 });

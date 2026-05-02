@@ -29,6 +29,7 @@ const baseEnvSchema = z
     ANTHROPIC_API_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_IMAGE_MODEL: z.string().default("gemini-2.5-flash-image"),
+    CUELINKS_API_KEY: z.string().optional(),
     CUELINKS_SOURCE_ID: z.string().optional(),
     PINTEREST_ACCESS_TOKEN: z.string().optional(),
     PINTEREST_BOARD_ID: z.string().optional()

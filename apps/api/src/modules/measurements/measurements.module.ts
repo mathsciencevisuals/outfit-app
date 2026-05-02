@@ -15,10 +15,28 @@ class MeasurementDto {
   @IsNumber()
   heightCm?: number;
 
+  // Top wear
   @IsOptional()
   @IsNumber()
   chestCm?: number;
 
+  @IsOptional()
+  @IsNumber()
+  shoulderCm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  shouldersCm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sleeveCm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  neckCm?: number;
+
+  // Bottom wear
   @IsOptional()
   @IsNumber()
   waistCm?: number;
@@ -33,11 +51,11 @@ class MeasurementDto {
 
   @IsOptional()
   @IsNumber()
-  shoulderCm?: number;
+  thighCm?: number;
 
   @IsOptional()
   @IsNumber()
-  shouldersCm?: number;
+  riseCm?: number;
 
   @IsOptional()
   @IsNumber()
@@ -71,8 +89,8 @@ class MeasurementsService {
     ]).then(([measurements, profile]) =>
       measurements.map((measurement) => ({
         ...measurement,
-        heightCm: profile?.heightCm ?? null,
-        shouldersCm: measurement.shoulderCm ?? null
+        heightCm:    measurement.heightCm    ?? profile?.heightCm ?? null,
+        shouldersCm: measurement.shoulderCm  ?? null,
       }))
     );
   }
@@ -100,13 +118,17 @@ class MeasurementsService {
 
     const measurementData = {
       userId: dto.userId,
-      chestCm: dto.chestCm,
-      waistCm: dto.waistCm,
-      hipsCm: dto.hipsCm,
-      inseamCm: dto.inseamCm,
-      shoulderCm: dto.shouldersCm ?? dto.shoulderCm,
+      chestCm:     dto.chestCm,
+      shoulderCm:  dto.shouldersCm ?? dto.shoulderCm,
+      sleeveCm:    dto.sleeveCm,
+      neckCm:      dto.neckCm,
+      waistCm:     dto.waistCm,
+      hipsCm:      dto.hipsCm,
+      inseamCm:    dto.inseamCm,
+      thighCm:     dto.thighCm,
+      riseCm:      dto.riseCm,
       footLengthCm: dto.footLengthCm,
-      source: dto.source
+      source:      dto.source,
     };
 
     if (latestMeasurement) {

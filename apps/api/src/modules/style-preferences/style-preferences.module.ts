@@ -29,6 +29,14 @@ class StylePreferenceDto {
   @IsOptional()
   @IsString()
   budgetLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  defaultSize?: string;
 }
 
 @Injectable()
@@ -45,27 +53,20 @@ class StylePreferencesService {
 
   update(user: AuthenticatedUser, userId: string, dto: StylePreferenceDto) {
     this.authorizationService.assertSelfOrPrivileged(user, userId, "You cannot update these style preferences");
+    const profileData = {
+      stylePreference: dto.stylePreference as Prisma.InputJsonValue,
+      preferredColors: dto.preferredColors,
+      avoidedColors: dto.avoidedColors,
+      budgetMin:   dto.budgetMin   ?? null,
+      budgetMax:   dto.budgetMax   ?? null,
+      budgetLabel: dto.budgetLabel ?? null,
+      ...(dto.gender      !== undefined && { gender: dto.gender }),
+      ...(dto.defaultSize !== undefined && { defaultSize: dto.defaultSize }),
+    };
     return (this.prisma.profile as any).upsert({
-      where: { userId },
-      update: {
-        stylePreference: dto.stylePreference as Prisma.InputJsonValue,
-        preferredColors: dto.preferredColors,
-        avoidedColors: dto.avoidedColors,
-        budgetMin: dto.budgetMin ?? null,
-        budgetMax: dto.budgetMax ?? null,
-        budgetLabel: dto.budgetLabel ?? null
-      },
-      create: {
-        userId,
-        firstName: "FitMe",
-        lastName: "Member",
-        stylePreference: dto.stylePreference as Prisma.InputJsonValue,
-        preferredColors: dto.preferredColors,
-        avoidedColors: dto.avoidedColors,
-        budgetMin: dto.budgetMin ?? null,
-        budgetMax: dto.budgetMax ?? null,
-        budgetLabel: dto.budgetLabel ?? null
-      }
+      where:  { userId },
+      update: profileData,
+      create: { userId, firstName: "FitMe", lastName: "Member", ...profileData },
     });
   }
 }

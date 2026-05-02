@@ -1,57 +1,126 @@
+import * as WebBrowser from 'expo-web-browser';
 import { formatPrice } from '../../utils/currency';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-import { EmptyState } from '../../components/EmptyState';
-import { PrimaryButton } from '../../components/PrimaryButton';
-import { Screen } from '../../components/Screen';
-import { SectionCard } from '../../components/SectionCard';
-import { useAsyncResource } from '../../hooks/useAsyncResource';
-import { mobileApi } from '../../services/api';
-import { useAppStore } from '../../store/app-store';
 import {
-  Colors, FontSize, FontWeight, Radius, Shadow, Spacing,
+  Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+} from 'react-native';
+
+import { EmptyState }       from '../../components/EmptyState';
+import { PrimaryButton }    from '../../components/PrimaryButton';
+import { Screen }           from '../../components/Screen';
+import { SectionCard }      from '../../components/SectionCard';
+import { useAsyncResource } from '../../hooks/useAsyncResource';
+import { mobileApi }        from '../../services/api';
+import { useAppStore }      from '../../store/app-store';
+import {
+  Colors, FontSize, FontWeight, Radius, Spacing,
 } from '../../utils/theme';
-import type { PersonalizedTrendItem, Product, ProductVariant } from '../../types';
+import type { PersonalizedTrendItem, Product, ProductVariant, TrendingPin } from '../../types';
+
+const GENDER_BADGE: Record<string, string> = { male: '👨 Male', female: '👩 Female', unisex: '🧑 Unisex' };
+const BUDGET_BADGE: Record<string, string> = {
+  under500:    '< ₹500',
+  '500_2000':  '₹500–2k',
+  '2000_5000': '₹2k–5k',
+  above5000:   '₹5k+',
+};
 
 export function DiscoverScreen() {
   const router      = useRouter();
-  const userId = useAppStore((s) => s.userId);
+  const userId      = useAppStore((s) => s.userId);
   const selectVariant = useAppStore((s) => s.selectVariant);
 
   const { data, loading, error, refetch } = useAsyncResource(
     () => mobileApi.personalizedTrending(userId, 8),
-    [userId]
+    [userId],
   );
+
+  // Fetch personalised Pinterest pins using stored profile prefs
+  const { data: pinsData } = useAsyncResource(
+    () => mobileApi.pinterestPins({ limit: 6 }),
+    [],
+  );
+  const trendingPins: TrendingPin[] = pinsData?.data ?? [];
+
   const trendingForYou = data?.trendingForYou ?? [];
-  const popularInApp = data?.popularInApp ?? [];
-  const globalTrends = data?.globalTrends ?? [];
+  const popularInApp   = data?.popularInApp   ?? [];
+  const globalTrends   = data?.globalTrends   ?? [];
   const hasTrends = trendingForYou.length > 0 || popularInApp.length > 0 || globalTrends.length > 0;
 
   const handleTryOn = (product: Product) => {
-    // Pre-select the first in-stock variant, then go straight to try-on
     const variant: ProductVariant | undefined =
       product.variants.find((v) => v.inStock) ?? product.variants[0];
     if (variant) selectVariant(variant, product);
     router.push('/tryon-upload');
   };
 
+  const handlePinTryOn = (pin: TrendingPin) => {
+    router.push({ pathname: '/tryon-upload', params: { garmentImageUrl: pin.imageUrl } });
+  };
+
+  const handleShopNow = (url: string) => {
+    WebBrowser.openBrowserAsync(url).catch(() => {});
+  };
+
   if (error) {
     return (
       <Screen>
-        <EmptyState
-          icon="⚠️"
-          title="Couldn't load products"
-          subtitle={error}
-          action="Retry"
-          onAction={refetch}
-        />
+        <EmptyState icon="⚠️" title="Couldn't load products" subtitle={error} action="Retry" onAction={refetch} />
       </Screen>
     );
   }
 
   return (
     <Screen>
+      {/* ── Pinterest Trending Now ── */}
+      {trendingPins.length > 0 && (
+        <SectionCard title="Trending Now" subtitle="Curated from Pinterest · filtered for you">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pinsScroll}>
+            {trendingPins.map((pin) => (
+              <View key={pin.id} style={styles.pinCard}>
+                <Image
+                  source={{ uri: pin.imageUrl }}
+                  style={styles.pinImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.pinBadgeRow}>
+                  {pin.gender && GENDER_BADGE[pin.gender] && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{GENDER_BADGE[pin.gender]}</Text>
+                    </View>
+                  )}
+                  {pin.budgetRange && BUDGET_BADGE[pin.budgetRange] && (
+                    <View style={[styles.badge, styles.badgeBudget]}>
+                      <Text style={styles.badgeText}>{BUDGET_BADGE[pin.budgetRange]}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.pinTitle} numberOfLines={1}>{pin.title}</Text>
+                <View style={styles.pinActions}>
+                  <TouchableOpacity
+                    style={styles.pinBtn}
+                    onPress={() => handlePinTryOn(pin)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.pinBtnText}>👗 Try on</Text>
+                  </TouchableOpacity>
+                  {pin.affiliateLink ? (
+                    <TouchableOpacity
+                      style={[styles.pinBtn, styles.pinBtnShop]}
+                      onPress={() => handleShopNow(pin.affiliateLink!)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.pinBtnText, styles.pinBtnShopText]}>🛍 Shop</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </SectionCard>
+      )}
+
+      {/* ── Product feed ── */}
       <SectionCard
         title="Discover"
         subtitle="A fit-aware feed blended from catalogue data and your preferences."
@@ -87,9 +156,7 @@ export function DiscoverScreen() {
 }
 
 function TrendSection({
-  title,
-  trends,
-  onTryOn,
+  title, trends, onTryOn,
 }: {
   title: string;
   trends: PersonalizedTrendItem[];
@@ -139,12 +206,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: Spacing.lg,
   },
-  sectionStack: {
-    gap: Spacing.lg,
-  },
-  trendSection: {
-    gap: Spacing.xs,
-  },
+  sectionStack: { gap: Spacing.lg },
+  trendSection: { gap: Spacing.xs },
   trendSectionTitle: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.bold,
@@ -161,11 +224,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   productInfo: { flex: 1, gap: 2 },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   productName: {
     flex: 1,
     fontSize: FontSize.base,
@@ -178,10 +237,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   productMeta: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  reasonText: {
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-  },
+  reasonText:  { fontSize: FontSize.xs, color: Colors.textMuted },
   productPrice: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.bold,
@@ -201,4 +257,52 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.primary,
   },
+
+  // Pinterest pins
+  pinsScroll: { marginHorizontal: -Spacing.md },
+  pinCard: {
+    width: 152,
+    marginLeft: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  pinImage: {
+    width: 152,
+    height: 192,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface2,
+  },
+  pinBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 6,
+  },
+  badge: {
+    backgroundColor: Colors.primaryDim,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  badgeBudget: { backgroundColor: '#fef3c7' },
+  badgeText: { fontSize: 10, color: Colors.textSecondary, fontWeight: FontWeight.medium },
+  pinTitle: {
+    fontSize: FontSize.xs,
+    color: Colors.textPrimary,
+    fontWeight: FontWeight.medium,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  pinActions: { flexDirection: 'row', gap: Spacing.xs },
+  pinBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 5,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.primaryDim,
+    borderWidth: 1,
+    borderColor: Colors.primaryLight,
+  },
+  pinBtnShop: { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
+  pinBtnText: { fontSize: 10, fontWeight: FontWeight.bold, color: Colors.primary },
+  pinBtnShopText: { color: '#92400e' },
 });

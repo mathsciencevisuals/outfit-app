@@ -123,6 +123,7 @@ model Profile {
   weightKg          Float?
   bodyShape         String?
   fitPreference     String?
+  defaultSize       String?
   budgetMin         Float?
   budgetMax         Float?
   budgetLabel       String?
@@ -139,11 +140,20 @@ model Profile {
 model Measurement {
   id                String   @id @default(cuid())
   userId            String
+  // General
+  heightCm          Float?
+  // Top wear
   chestCm           Float?
+  shoulderCm        Float?
+  sleeveCm          Float?
+  neckCm            Float?
+  // Bottom wear
   waistCm           Float?
   hipsCm            Float?
   inseamCm          Float?
-  shoulderCm        Float?
+  thighCm           Float?
+  riseCm            Float?
+  // Feet
   footLengthCm      Float?
   source            String   @default("manual")
   createdAt         DateTime @default(now())
@@ -537,4 +547,34 @@ model ChallengeParticipation {
   completedAt         DateTime?
   user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaign            Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
+
+model PinterestPin {
+  id              String    @id
+  boardKey        String
+  boardSection    String?
+  imageUrl        String
+  title           String    @default("")
+  description     String    @default("")
+  pinterestLink   String
+  affiliateLink   String?
+
+  gender          String?
+  sizeCategory    String?
+  estimatedPrice  Float?
+  budgetRange     String?
+  colours         String[]  @default([])
+  styleCategories String[]  @default([])
+  occasion        String?
+  isAnalysed      Boolean   @default(false)
+  saveCount       Int       @default(0)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([boardKey])
+  @@index([gender])
+  @@index([budgetRange])
+  @@index([sizeCategory])
+  @@index([isAnalysed])
 }
