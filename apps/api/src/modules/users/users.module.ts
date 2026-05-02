@@ -151,8 +151,13 @@ class UsersService {
       return null;
     }
 
-    const [profile, measurements, savedLooks] = await Promise.all([
-      this.getSafeProfile(userId),
+    const profile = await this.getSafeProfile(userId);
+
+    if (!profile) {
+      return null;
+    }
+
+    const [measurementsResult, savedLooksResult] = await Promise.allSettled([
       this.prisma.measurement.findMany({
         where: { userId },
         orderBy: { createdAt: "desc" }
@@ -160,14 +165,17 @@ class UsersService {
       this.getSafeSavedLooks(userId)
     ]);
 
-    if (!profile) {
-      return null;
+    if (measurementsResult.status === "rejected") {
+      console.warn("[Profile] Failed to load measurements", measurementsResult.reason);
+    }
+    if (savedLooksResult.status === "rejected") {
+      console.warn("[Profile] Failed to load saved looks", savedLooksResult.reason);
     }
 
     return {
       ...profile,
-      measurements: measurements ?? [],
-      savedLooks: savedLooks ?? []
+      measurements: measurementsResult.status === "fulfilled" ? measurementsResult.value ?? [] : [],
+      savedLooks: savedLooksResult.status === "fulfilled" ? savedLooksResult.value ?? [] : []
     };
   }
 
