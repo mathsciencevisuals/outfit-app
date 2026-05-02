@@ -25,6 +25,7 @@ const SECTIONS: AdminSection[] = [
   { title: 'Try-On',    subtitle: 'AI provider config',     icon: 'sparkles-outline',       route: '/admin-tryon' },
   { title: 'Users',     subtitle: 'Browse user accounts',   icon: 'people-outline',         route: '/admin-users' },
   { title: 'Rewards',   subtitle: 'Adjust point balances',  icon: 'star-outline',           route: '/admin-rewards', adminOnly: true },
+  { title: 'Pinterest', subtitle: 'Board IDs & affiliate',  icon: 'logo-pinterest',         route: '/admin-pinterest' },
 ];
 
 export function AdminDashboardScreen() {

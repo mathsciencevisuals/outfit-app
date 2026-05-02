@@ -1,7 +1,8 @@
-import { Controller, Get, Injectable, Module, Query } from "@nestjs/common";
+import { Body, Controller, Get, Injectable, Module, Put, Query } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 
+import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 import {
   FITME_BOARDS, GENDER_MAP, SIZE_MAP, BUDGET_MAP, BUDGET_BOARD_KEYS,
@@ -110,15 +111,55 @@ const FALLBACK_PINS: TrendingPin[] = [
   },
 ];
 
+const PINTEREST_BOARDS_PROVIDER = 'pinterest-boards';
+
 @Injectable()
 export class SocialService {
   // In-memory board fetch TTL cache: boardKey → expiry timestamp
   private readonly boardFetchExpiry = new Map<string, number>();
+  // Cached board map loaded from DB, null = not yet loaded
+  private cachedBoardMap: Record<string, string> | null = null;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {}
+
+  // ── Board management ─────────────────────────────��────────────────────────
+
+  async getBoardMap(): Promise<Record<string, string>> {
+    if (this.cachedBoardMap) return this.cachedBoardMap;
+    try {
+      const record = await this.prisma.providerConfig.findUnique({
+        where: { provider: PINTEREST_BOARDS_PROVIDER },
+      });
+      const stored = (record?.config as Record<string, unknown> | null)?.boards as Record<string, string> | undefined;
+      this.cachedBoardMap = { ...FITME_BOARDS, ...(stored ?? {}) };
+    } catch {
+      this.cachedBoardMap = { ...FITME_BOARDS };
+    }
+    return this.cachedBoardMap!;
+  }
+
+  async updateBoardMap(boards: Record<string, string>): Promise<void> {
+    await this.prisma.providerConfig.upsert({
+      where: { provider: PINTEREST_BOARDS_PROVIDER },
+      update: { config: { boards } as any },
+      create: {
+        provider: PINTEREST_BOARDS_PROVIDER,
+        displayName: 'Pinterest Boards',
+        isEnabled: true,
+        config: { boards } as any,
+      },
+    });
+    this.cachedBoardMap = { ...FITME_BOARDS, ...boards };
+    // Invalidate all board fetch caches so next request re-fetches
+    this.boardFetchExpiry.clear();
+  }
+
+  getBoardKeys(): string[] {
+    return Object.keys(FITME_BOARDS);
+  }
 
   async getTrending(limit: number): Promise<TrendingPin[]> {
     const token   = this.configService.get<string>("PINTEREST_ACCESS_TOKEN");
@@ -179,7 +220,7 @@ export class SocialService {
       return this.filterFallback(FALLBACK_PINS, styles, colors, limit);
     }
 
-    const boardKeys = this.resolveBoardKeys({ styles, colors, gender, budget });
+    const boardKeys = await this.resolveBoardKeys({ styles, colors, gender, budget });
 
     // Fetch boards that have expired cache
     await this.fetchAndCachePins(boardKeys, token);
@@ -234,38 +275,39 @@ export class SocialService {
     }));
   }
 
-  private resolveBoardKeys(params: {
+  private async resolveBoardKeys(params: {
     styles: string[]; colors: string[]; gender: string; budget: string;
-  }): string[] {
+  }): Promise<string[]> {
+    const boardMap = await this.getBoardMap();
+    const isValid  = (key: string) => {
+      const id = boardMap[key];
+      return !!id && id !== 'REPLACE_WITH_REAL_BOARD_ID';
+    };
     const keys = new Set<string>();
     const gKey = GENDER_MAP[params.gender];
-    if (gKey && this.boardExists(gKey)) keys.add(gKey);
+    if (gKey && isValid(gKey)) keys.add(gKey);
     const bKey = BUDGET_MAP[params.budget];
-    if (bKey && this.boardExists(bKey)) keys.add(bKey);
+    if (bKey && isValid(bKey)) keys.add(bKey);
     for (const s of params.styles) {
       const k = s.toLowerCase().replace(/[^a-z0-9_]/g, '');
-      if (this.boardExists(k)) keys.add(k);
+      if (isValid(k)) keys.add(k);
     }
     for (const c of params.colors) {
       const k = c.toLowerCase();
-      if (this.boardExists(k)) keys.add(k);
+      if (isValid(k)) keys.add(k);
     }
     if (keys.size === 0) { keys.add('casual'); keys.add('unisex'); }
     return Array.from(keys);
   }
 
-  private boardExists(key: string): boolean {
-    const id = FITME_BOARDS[key];
-    return !!id && id !== 'REPLACE_WITH_REAL_BOARD_ID';
-  }
-
   private async fetchAndCachePins(boardKeys: string[], token: string): Promise<void> {
+    const boardMap = await this.getBoardMap();
     const now = Date.now();
     await Promise.allSettled(boardKeys.map(async (key) => {
       const expiry = this.boardFetchExpiry.get(key) ?? 0;
       if (now < expiry) return; // still fresh (30 min TTL)
 
-      const boardId = FITME_BOARDS[key];
+      const boardId = boardMap[key];
       if (!boardId || boardId === 'REPLACE_WITH_REAL_BOARD_ID') return;
 
       try {
@@ -459,6 +501,30 @@ class SocialController {
       limit:   limit   ? Math.min(Number(limit), 20) : 12,
     });
     return { data: pins, source: 'pinterest', count: pins.length };
+  }
+
+  // ── Board management (admin only) ──────────────────────────────────────────
+
+  @Roles('ADMIN', 'OPERATOR')
+  @Get("boards")
+  async getBoards() {
+    const boardMap  = await this.service.getBoardMap();
+    const boardKeys = this.service.getBoardKeys();
+    return boardKeys.map((key) => ({
+      key,
+      boardId: boardMap[key] === 'REPLACE_WITH_REAL_BOARD_ID' ? '' : (boardMap[key] ?? ''),
+    }));
+  }
+
+  @Roles('ADMIN', 'OPERATOR')
+  @Put("boards")
+  async updateBoards(@Body() body: { boards: Array<{ key: string; boardId: string }> }) {
+    const map: Record<string, string> = {};
+    for (const { key, boardId } of body.boards ?? []) {
+      if (key && boardId) map[key] = boardId;
+    }
+    await this.service.updateBoardMap(map);
+    return { updated: Object.keys(map).length };
   }
 }
 

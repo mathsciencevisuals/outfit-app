@@ -513,4 +513,14 @@ export const mobileApi = {
   // ── Admin: Rewards ────────────────────────────────────────────────────────
   adminAdjustRewards: (userId: string, amount: number, reason: string): Promise<any> =>
     apiFetch<any>('/rewards/transactions/adjust', { method: 'POST', body: JSON.stringify({ userId, amount, reason }) }),
+
+  // ── Admin: Pinterest Boards ───────────────────────────────────────────────
+  adminGetPinterestBoards: (): Promise<Array<{ key: string; boardId: string }>> =>
+    apiFetch<Array<{ key: string; boardId: string }>>('/social/boards'),
+
+  adminUpdatePinterestBoards: (boards: Array<{ key: string; boardId: string }>): Promise<{ updated: number }> =>
+    apiFetch<{ updated: number }>('/social/boards', {
+      method: 'PUT',
+      body: JSON.stringify({ boards }),
+    }),
 };
