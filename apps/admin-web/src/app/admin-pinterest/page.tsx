@@ -7,73 +7,13 @@ import { Card } from "../../components/card";
 import { AdminShell } from "../../components/shell";
 import { fetchApi, writeApi } from "../../lib/api";
 import { requireAdminSession } from "../../lib/auth";
-
-type BoardEntry = { key: string; boardId: string };
-
-const boardGroups: Array<{ title: string; subtitle: string; keys: string[] }> = [
-  {
-    title: "Gender boards",
-    subtitle: "Primary audience segments.",
-    keys: ["men", "women", "unisex"]
-  },
-  {
-    title: "Style boards",
-    subtitle: "Mapped to style preferences and trend filters.",
-    keys: ["casual", "formal", "streetwear", "ethnic", "sports", "minimalist", "party", "bohemian"]
-  },
-  {
-    title: "Colour boards",
-    subtitle: "Used when matching preferred colours.",
-    keys: ["black", "white", "earthy", "blue", "navy", "pink", "red", "green", "brights"]
-  },
-  {
-    title: "Budget boards",
-    subtitle: "Used for price-filtered affiliate discovery.",
-    keys: ["under500", "500_2000", "2000_5000", "above5000"]
-  },
-  {
-    title: "Size boards",
-    subtitle: "Mapped to size groups for personalized feeds.",
-    keys: ["xs_s", "m_l", "xl_xxl", "plus"]
-  }
-];
-
-const boardLabels: Record<string, string> = {
-  men: "FitMe - Men",
-  women: "FitMe - Women",
-  unisex: "FitMe - Unisex",
-  casual: "FitMe - Casual",
-  formal: "FitMe - Formal",
-  streetwear: "FitMe - Streetwear",
-  ethnic: "FitMe - Ethnic Indian",
-  sports: "FitMe - Sports & Active",
-  minimalist: "FitMe - Minimalist",
-  party: "FitMe - Party & Festive",
-  bohemian: "FitMe - Bohemian",
-  black: "FitMe - Black Outfits",
-  white: "FitMe - White & Ivory",
-  earthy: "FitMe - Earth Tones",
-  blue: "FitMe - Blues",
-  navy: "FitMe - Navy & Denim",
-  pink: "FitMe - Pinks & Reds",
-  red: "FitMe - Pinks & Reds",
-  green: "FitMe - Greens",
-  brights: "FitMe - Brights & Neons",
-  under500: "FitMe - Under 500",
-  "500_2000": "FitMe - 500 to 2000",
-  "2000_5000": "FitMe - 2000 to 5000",
-  above5000: "FitMe - Above 5000",
-  xs_s: "FitMe - XS & S Sizes",
-  m_l: "FitMe - M & L Sizes",
-  xl_xxl: "FitMe - XL & XXL Sizes",
-  plus: "FitMe - Plus Size Fashion"
-};
+import { boardGroups, boardLabels, orderedBoardKeys, type BoardEntry } from "../../lib/pinterest-boards";
 
 async function saveBoards(formData: FormData) {
   "use server";
 
   const boards: BoardEntry[] = [];
-  for (const key of boardGroups.flatMap((group) => group.keys)) {
+  for (const key of orderedBoardKeys()) {
     const boardId = String(formData.get(`board-${key}`) ?? "").trim();
     boards.push({ key, boardId });
   }
@@ -121,6 +61,12 @@ export default async function AdminPinterestPage({
               Board IDs saved. The API cache was invalidated.
             </div>
           ) : null}
+          <a
+            href="/admin-pinterest/pins"
+            className="inline-flex w-fit rounded-2xl border border-dune px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Create pins
+          </a>
         </Card>
 
         <form action={saveBoards} className="space-y-6">
