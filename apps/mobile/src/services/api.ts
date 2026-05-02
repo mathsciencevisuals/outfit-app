@@ -523,4 +523,15 @@ export const mobileApi = {
       method: 'PUT',
       body: JSON.stringify({ boards }),
     }),
+
+  adminCreatePin: (pin: {
+    boardKey: string; imageUrl: string; title: string;
+    description?: string; link?: string; altText?: string;
+  }): Promise<{ pinId: string; pinterestUrl: string }> =>
+    apiFetch('/social/pins/create', { method: 'POST', body: JSON.stringify(pin) }),
+
+  adminCreatePinsBatch: (boardKey: string, pins: Array<{
+    imageUrl: string; title: string; description?: string; link?: string;
+  }>): Promise<{ created: number; failed: number; results: Array<{ title: string; pinId?: string; error?: string }> }> =>
+    apiFetch('/social/pins/batch', { method: 'POST', body: JSON.stringify({ boardKey, pins }) }),
 };

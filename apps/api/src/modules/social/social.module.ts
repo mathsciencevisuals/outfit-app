@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Injectable, Module, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpException, HttpStatus, Injectable, Module, Post, Put, Query } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 
@@ -430,6 +430,93 @@ export class SocialService {
     }
   }
 
+  // ── Pin creation ─────────────────────────────────────────────────────────
+
+  async createPin(params: {
+    boardKey:    string;
+    imageUrl:    string;
+    title:       string;
+    description?: string;
+    link?:       string;
+    altText?:    string;
+  }): Promise<{ pinId: string; pinterestUrl: string }> {
+    const token = this.configService.get<string>('PINTEREST_ACCESS_TOKEN');
+    if (!token) throw new HttpException('PINTEREST_ACCESS_TOKEN not configured', HttpStatus.SERVICE_UNAVAILABLE);
+
+    const boardMap = await this.getBoardMap();
+    const boardId  = boardMap[params.boardKey];
+    if (!boardId || boardId === 'REPLACE_WITH_REAL_BOARD_ID') {
+      throw new HttpException(`Board "${params.boardKey}" has no ID configured`, HttpStatus.BAD_REQUEST);
+    }
+
+    const res = await fetch('https://api.pinterest.com/v5/pins', {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        board_id:    boardId,
+        title:       params.title,
+        description: params.description ?? '',
+        link:        params.link ?? '',
+        alt_text:    params.altText ?? params.title,
+        media_source: { source_type: 'image_url', url: params.imageUrl },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText);
+      throw new HttpException(`Pinterest API error ${res.status}: ${err}`, res.status);
+    }
+
+    const data = await res.json() as { id: string };
+    const pinId = data.id;
+
+    // Cache pin locally so it appears in filtered feeds immediately
+    await this.prisma.pinterestPin.upsert({
+      where:  { id: pinId },
+      create: {
+        id: pinId, boardKey: params.boardKey,
+        imageUrl: params.imageUrl, title: params.title,
+        description: params.description ?? '',
+        pinterestLink: `https://pinterest.com/pin/${pinId}`,
+        saveCount: 0, isAnalysed: false,
+      },
+      update: { imageUrl: params.imageUrl, title: params.title },
+    });
+
+    // Kick off background Claude analysis for the new pin
+    this.analysePinsWithClaude([{
+      id: pinId, imageUrl: params.imageUrl,
+      title: params.title, description: params.description ?? '',
+    }]).catch(() => {});
+
+    return { pinId, pinterestUrl: `https://pinterest.com/pin/${pinId}` };
+  }
+
+  async createPins(boardKey: string, pins: Array<{
+    imageUrl: string; title: string; description?: string; link?: string;
+  }>): Promise<{ created: number; failed: number; results: Array<{ title: string; pinId?: string; error?: string }> }> {
+    let created = 0, failed = 0;
+    const results: Array<{ title: string; pinId?: string; error?: string }> = [];
+
+    for (const pin of pins) {
+      try {
+        const result = await this.createPin({ boardKey, ...pin });
+        results.push({ title: pin.title, pinId: result.pinId });
+        created++;
+        // Brief pause to respect Pinterest rate limits
+        await new Promise((r) => setTimeout(r, 400));
+      } catch (err) {
+        results.push({ title: pin.title, error: err instanceof Error ? err.message : String(err) });
+        failed++;
+      }
+    }
+
+    return { created, failed, results };
+  }
+
   private rankByStyleMatch(
     pins: Array<{
       id: string; imageUrl: string; title: string; description: string;
@@ -525,6 +612,30 @@ class SocialController {
     }
     await this.service.updateBoardMap(map);
     return { updated: Object.keys(map).length };
+  }
+
+  // ── Pin creation (admin only) ──────────────────────────────────────────────
+
+  @Roles('ADMIN', 'OPERATOR')
+  @Post("pins/create")
+  createPin(@Body() body: {
+    boardKey:    string;
+    imageUrl:    string;
+    title:       string;
+    description?: string;
+    link?:       string;
+    altText?:    string;
+  }) {
+    return this.service.createPin(body);
+  }
+
+  @Roles('ADMIN', 'OPERATOR')
+  @Post("pins/batch")
+  createPins(@Body() body: {
+    boardKey: string;
+    pins: Array<{ imageUrl: string; title: string; description?: string; link?: string }>;
+  }) {
+    return this.service.createPins(body.boardKey, body.pins);
   }
 }
 

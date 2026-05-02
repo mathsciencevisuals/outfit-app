@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert, ScrollView, StyleSheet, Text, TextInput, View,
@@ -56,6 +57,7 @@ const BOARD_LABELS: Record<string, string> = {
 };
 
 export function AdminPinterestScreen() {
+  const router = useRouter();
   const [entries, setEntries]   = useState<BoardEntry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [saving,  setSaving]    = useState(false);
@@ -130,9 +132,14 @@ export function AdminPinterestScreen() {
       )}
 
       {!loading && (
-        <PrimaryButton onPress={handleSave} loading={saving}>
-          Save all board IDs
-        </PrimaryButton>
+        <>
+          <PrimaryButton onPress={handleSave} loading={saving}>
+            Save all board IDs
+          </PrimaryButton>
+          <PrimaryButton variant="secondary" onPress={() => router.push('/admin-pinterest-pin' as never)}>
+            📌  Create / post pins
+          </PrimaryButton>
+        </>
       )}
     </Screen>
   );
