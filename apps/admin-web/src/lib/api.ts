@@ -12,7 +12,8 @@ export async function fetchApi<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed for ${path}`);
+    const text = await response.text().catch(() => "");
+    throw new Error(`API request failed for ${path}: ${response.status} ${text || response.statusText}`);
   }
 
   const payload = (await response.json()) as { data: T };

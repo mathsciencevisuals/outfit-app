@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { Card } from "../../components/card";
 import { AdminShell } from "../../components/shell";
 import { fetchApi, writeApi } from "../../lib/api";
+import { requireAdminSession } from "../../lib/auth";
 
 type BoardEntry = { key: string; boardId: string };
 
@@ -91,6 +92,8 @@ export default async function AdminPinterestPage({
 }: {
   searchParams?: { saved?: string };
 }) {
+  await requireAdminSession();
+
   const entries = await fetchApi<BoardEntry[]>("/social/boards");
   const entryMap = new Map(entries.map((entry) => [entry.key, entry.boardId]));
   const filledCount = entries.filter((entry) => entry.boardId.trim()).length;
