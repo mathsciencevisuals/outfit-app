@@ -116,6 +116,9 @@ const OPTIONAL_PROFILE_COLUMNS = [
 
 type OptionalProfileColumn = (typeof OPTIONAL_PROFILE_COLUMNS)[number];
 
+const OPTIONAL_SAVED_LOOK_COLUMNS = ["isWishlist"] as const;
+type OptionalSavedLookColumn = (typeof OPTIONAL_SAVED_LOOK_COLUMNS)[number];
+
 @Injectable()
 class UsersService {
   constructor(
@@ -483,7 +486,12 @@ class UsersService {
   }
 
   private async getSafeSavedLooks(userId: string) {
-    const looks = await this.prisma.$queryRaw<
+    const savedLookColumns = await this.getSavedLookColumns();
+    const optionalSelects: Record<OptionalSavedLookColumn, string> = {
+      isWishlist: savedLookColumns.has("isWishlist") ? `"isWishlist"` : `FALSE AS "isWishlist"`
+    };
+
+    const looks = await this.prisma.$queryRawUnsafe<
       Array<{
         id: string;
         userId: string;
@@ -493,12 +501,15 @@ class UsersService {
         createdAt: Date;
         updatedAt: Date;
       }>
-    >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "createdAt", "updatedAt"
+    >(
+      `
+      SELECT id, "userId", name, note, ${optionalSelects.isWishlist}, "createdAt", "updatedAt"
       FROM "SavedLook"
-      WHERE "userId" = ${userId}
+      WHERE "userId" = $1
       ORDER BY "updatedAt" DESC
-    `);
+    `,
+      userId
+    );
 
     if (looks.length === 0) {
       return [];
@@ -513,6 +524,17 @@ class UsersService {
       ...look,
       items: items.filter((item) => item.savedLookId === look.id)
     }));
+  }
+
+  private async getSavedLookColumns() {
+    const rows = await this.prisma.$queryRaw<Array<{ column_name: string }>>(Prisma.sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'SavedLook'
+    `);
+
+    return new Set(rows.map((row) => row.column_name));
   }
 
   private toTextArray(values: string[]) {

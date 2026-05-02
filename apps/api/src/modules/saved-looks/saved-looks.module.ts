@@ -48,6 +48,21 @@ class SavedLookDto {
   productIds!: string[];
 }
 
+const OPTIONAL_SAVED_LOOK_COLUMNS = ["isWishlist", "tryOnResultId", "tryOnImageUrl"] as const;
+type OptionalSavedLookColumn = (typeof OPTIONAL_SAVED_LOOK_COLUMNS)[number];
+
+type SavedLookRecord = {
+  id: string;
+  userId: string;
+  name: string;
+  note: string | null;
+  isWishlist: boolean;
+  tryOnResultId: string | null;
+  tryOnImageUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 class SavedLooksService {
   constructor(
@@ -153,39 +168,21 @@ class SavedLooksService {
   }
 
   private async readLookRecord(id: string) {
-    const rows = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        userId: string;
-        name: string;
-        note: string | null;
-        isWishlist: boolean;
-        tryOnResultId: string | null;
-        tryOnImageUrl: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }>
-    >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt"
+    const selects = await this.getSavedLookOptionalSelects();
+    const rows = await this.prisma.$queryRawUnsafe<Array<SavedLookRecord>>(
+      `
+      SELECT id, "userId", name, note, ${selects.isWishlist}, ${selects.tryOnResultId}, ${selects.tryOnImageUrl}, "createdAt", "updatedAt"
       FROM "SavedLook"
-      WHERE id = ${id}
+      WHERE id = $1
       LIMIT 1
-    `);
+    `,
+      id
+    );
 
     return rows[0] ?? null;
   }
 
-  private async enrichLook(look: {
-    id: string;
-    userId: string;
-    name: string;
-    note: string | null;
-    isWishlist: boolean;
-    tryOnResultId: string | null;
-    tryOnImageUrl: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }) {
+  private async enrichLook(look: SavedLookRecord) {
     const tryOnImageUrl = look.tryOnImageUrl ?? await this.resolveTryOnImageUrl(look.tryOnResultId ?? undefined);
     const items = await this.prisma.savedLookItem.findMany({
       where: { savedLookId: look.id },
@@ -273,26 +270,38 @@ class SavedLooksService {
   }
 
   private async readLooks(userId: string) {
-    const looks = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        userId: string;
-        name: string;
-        note: string | null;
-        isWishlist: boolean;
-        tryOnResultId: string | null;
-        tryOnImageUrl: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }>
-    >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt"
+    const selects = await this.getSavedLookOptionalSelects();
+    const looks = await this.prisma.$queryRawUnsafe<Array<SavedLookRecord>>(
+      `
+      SELECT id, "userId", name, note, ${selects.isWishlist}, ${selects.tryOnResultId}, ${selects.tryOnImageUrl}, "createdAt", "updatedAt"
       FROM "SavedLook"
-      WHERE "userId" = ${userId}
+      WHERE "userId" = $1
       ORDER BY "updatedAt" DESC
-    `);
+    `,
+      userId
+    );
 
     return Promise.all(looks.map((look) => this.enrichLook(look)));
+  }
+
+  private async getSavedLookOptionalSelects(): Promise<Record<OptionalSavedLookColumn, string>> {
+    const columns = await this.getSavedLookColumns();
+    return {
+      isWishlist: columns.has("isWishlist") ? `"isWishlist"` : `FALSE AS "isWishlist"`,
+      tryOnResultId: columns.has("tryOnResultId") ? `"tryOnResultId"` : `NULL::text AS "tryOnResultId"`,
+      tryOnImageUrl: columns.has("tryOnImageUrl") ? `"tryOnImageUrl"` : `NULL::text AS "tryOnImageUrl"`
+    };
+  }
+
+  private async getSavedLookColumns() {
+    const rows = await this.prisma.$queryRaw<Array<{ column_name: string }>>(Prisma.sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'SavedLook'
+    `);
+
+    return new Set(rows.map((row) => row.column_name));
   }
 
   private async resolveTryOnImageUrl(tryOnResultId?: string, explicitImageUrl?: string) {
