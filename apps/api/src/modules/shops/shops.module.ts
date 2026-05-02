@@ -54,12 +54,17 @@ class ShopDto {
 class ShopsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.shop.findMany({
-      include: {
-        inventoryOffers: { include: { variant: { include: { product: true } }, shop: true } }
-      }
-    });
+  async list(): Promise<any[]> {
+    try {
+      return await this.prisma.shop.findMany({
+        include: {
+          inventoryOffers: { include: { variant: { include: { product: true } }, shop: true } }
+        }
+      });
+    } catch (error) {
+      console.warn("[Shops] Falling back to shop list without inventory offers", error);
+      return this.prisma.shop.findMany();
+    }
   }
 
   get(id: string) {
