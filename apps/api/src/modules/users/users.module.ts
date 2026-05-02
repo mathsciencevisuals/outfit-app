@@ -104,6 +104,18 @@ type SafeProfileRow = {
   updatedAt: Date;
 };
 
+const OPTIONAL_PROFILE_COLUMNS = [
+  "avatarUploadId",
+  "avatarUrl",
+  "fitPreference",
+  "budgetMin",
+  "budgetMax",
+  "budgetLabel",
+  "closetStatus"
+] as const;
+
+type OptionalProfileColumn = (typeof OPTIONAL_PROFILE_COLUMNS)[number];
+
 @Injectable()
 class UsersService {
   constructor(
@@ -389,33 +401,61 @@ class UsersService {
   }
 
   private async getSafeProfile(userId: string) {
-    const rows = await this.prisma.$queryRaw<Array<SafeProfileRow>>(Prisma.sql`
+    const availableColumns = await this.getProfileColumns();
+    const optionalSelects: Record<OptionalProfileColumn, string> = {
+      avatarUploadId: availableColumns.has("avatarUploadId")
+        ? `"avatarUploadId"`
+        : `NULL::text AS "avatarUploadId"`,
+      avatarUrl: availableColumns.has("avatarUrl")
+        ? `"avatarUrl"`
+        : `NULL::text AS "avatarUrl"`,
+      fitPreference: availableColumns.has("fitPreference")
+        ? `"fitPreference"`
+        : `NULL::text AS "fitPreference"`,
+      budgetMin: availableColumns.has("budgetMin")
+        ? `"budgetMin"`
+        : `NULL::double precision AS "budgetMin"`,
+      budgetMax: availableColumns.has("budgetMax")
+        ? `"budgetMax"`
+        : `NULL::double precision AS "budgetMax"`,
+      budgetLabel: availableColumns.has("budgetLabel")
+        ? `"budgetLabel"`
+        : `NULL::text AS "budgetLabel"`,
+      closetStatus: availableColumns.has("closetStatus")
+        ? `"closetStatus"`
+        : `'COMING_SOON'::text AS "closetStatus"`
+    };
+
+    const rows = await this.prisma.$queryRawUnsafe<Array<SafeProfileRow>>(
+      `
       SELECT
         id,
         "userId",
         "firstName",
         "lastName",
-        "avatarUploadId",
-        "avatarUrl",
+        ${optionalSelects.avatarUploadId},
+        ${optionalSelects.avatarUrl},
         gender,
         age,
         "heightCm",
         "weightKg",
         "bodyShape",
-        "fitPreference",
-        "budgetMin",
-        "budgetMax",
-        "budgetLabel",
-        "closetStatus",
+        ${optionalSelects.fitPreference},
+        ${optionalSelects.budgetMin},
+        ${optionalSelects.budgetMax},
+        ${optionalSelects.budgetLabel},
+        ${optionalSelects.closetStatus},
         "stylePreference",
         "preferredColors",
         "avoidedColors",
         "createdAt",
         "updatedAt"
       FROM "Profile"
-      WHERE "userId" = ${userId}
+      WHERE "userId" = $1
       LIMIT 1
-    `);
+    `,
+      userId
+    );
 
     const profile = rows[0];
     if (!profile) {
@@ -429,6 +469,17 @@ class UsersService {
       avoidedColors: profile.avoidedColors ?? [],
       closetStatus: profile.closetStatus ?? "COMING_SOON"
     };
+  }
+
+  private async getProfileColumns() {
+    const rows = await this.prisma.$queryRaw<Array<{ column_name: string }>>(Prisma.sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'Profile'
+    `);
+
+    return new Set(rows.map((row) => row.column_name));
   }
 
   private async getSafeSavedLooks(userId: string) {

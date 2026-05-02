@@ -304,6 +304,7 @@ export function TryMeScreen() {
         name: garmentProduct?.name ?? 'Uploaded garment try-on',
         note: garmentProduct ? undefined : 'Saved from an uploaded garment try-on.',
         tryOnResultId: requestId ?? undefined,
+        tryOnImageUrl: primaryUrl,
         products: garmentProduct ? [garmentProduct] : [],
       });
       const localUri = await saveImageToDevice(primaryUrl, `saved_${savedLook.id}`);

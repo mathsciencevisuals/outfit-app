@@ -246,6 +246,7 @@ export const mobileApi = {
         name: look.name,
         note: look.note,
         tryOnResultId: look.tryOnResultId,
+        tryOnImageUrl: look.tryOnImageUrl,
         productIds: (look.products ?? []).map((product) => product.id),
       }),
     }),

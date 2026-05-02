@@ -49,6 +49,9 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
               userRole: session.user.role,
             });
             isAuthenticated = true;
+            if (session.user.profile) {
+              await AsyncStorage.setItem(ONBOARDED_KEY, 'true');
+            }
           } catch (error) {
             console.warn('[FitMe] Existing session is no longer valid.', error);
             useAppStore.getState().setAccessToken(null);
@@ -69,7 +72,7 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
           router.replace('/onboarding');
           didNavigate = true;
         } else if (value && (inAuth || first === 'onboarding' || first === undefined || first === 'index')) {
-          router.replace('/dashboard');
+          router.replace('/dashboard' as never);
           didNavigate = true;
         }
       } catch (error) {
@@ -146,6 +149,8 @@ export default function RootLayout() {
               <Stack.Screen name="admin-shops" />
               <Stack.Screen name="admin-campaigns" />
               <Stack.Screen name="admin-coupons" />
+              <Stack.Screen name="admin-pinterest" />
+              <Stack.Screen name="admin-pinterest-pin" />
               <Stack.Screen name="admin-tryon" />
               <Stack.Screen name="admin-rewards" />
               <Stack.Screen name="tryon-upload"    options={{ presentation: 'modal' }} />

@@ -198,7 +198,7 @@ export function AdminPinterestPinScreen() {
               </Text>
               {batchResult.results.map((r, i) => (
                 <View key={i} style={styles.batchResultRow}>
-                  <Text style={[styles.batchResultIcon, r.error && styles.batchResultIconFail]}>
+                  <Text style={[styles.batchResultIcon, r.error ? styles.batchResultIconFail : undefined]}>
                     {r.error ? '✗' : '✓'}
                   </Text>
                   <View style={styles.batchResultInfo}>

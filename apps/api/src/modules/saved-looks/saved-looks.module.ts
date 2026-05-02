@@ -36,6 +36,14 @@ class SavedLookDto {
   @IsBoolean()
   isWishlist?: boolean;
 
+  @IsOptional()
+  @IsString()
+  tryOnResultId?: string;
+
+  @IsOptional()
+  @IsString()
+  tryOnImageUrl?: string;
+
   @IsArray()
   productIds!: string[];
 }
@@ -57,10 +65,31 @@ class SavedLooksService {
   async create(user: AuthenticatedUser, dto: SavedLookDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this saved look");
     const lookId = randomUUID();
+    const tryOnImageUrl = await this.resolveTryOnImageUrl(dto.tryOnResultId, dto.tryOnImageUrl);
 
     await this.prisma.$executeRaw(Prisma.sql`
-      INSERT INTO "SavedLook" (id, "userId", name, note, "isWishlist", "createdAt", "updatedAt")
-      VALUES (${lookId}, ${dto.userId}, ${dto.name}, ${dto.note ?? null}, ${dto.isWishlist ?? false}, NOW(), NOW())
+      INSERT INTO "SavedLook" (
+        id,
+        "userId",
+        name,
+        note,
+        "isWishlist",
+        "tryOnResultId",
+        "tryOnImageUrl",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${lookId},
+        ${dto.userId},
+        ${dto.name},
+        ${dto.note ?? null},
+        ${dto.isWishlist ?? false},
+        ${dto.tryOnResultId ?? null},
+        ${tryOnImageUrl},
+        NOW(),
+        NOW()
+      )
     `);
 
     if (dto.productIds.length > 0) {
@@ -84,6 +113,7 @@ class SavedLooksService {
 
     this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot update this saved look");
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot reassign this saved look");
+    const tryOnImageUrl = await this.resolveTryOnImageUrl(dto.tryOnResultId, dto.tryOnImageUrl);
 
     await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: id } });
     await this.prisma.$executeRaw(Prisma.sql`
@@ -91,6 +121,8 @@ class SavedLooksService {
       SET name = ${dto.name},
           note = ${dto.note ?? null},
           "isWishlist" = ${dto.isWishlist ?? false},
+          "tryOnResultId" = ${dto.tryOnResultId ?? null},
+          "tryOnImageUrl" = ${tryOnImageUrl},
           "updatedAt" = NOW()
       WHERE id = ${id}
     `);
@@ -122,9 +154,19 @@ class SavedLooksService {
 
   private async readLookRecord(id: string) {
     const rows = await this.prisma.$queryRaw<
-      Array<{ id: string; userId: string; name: string; note: string | null; isWishlist: boolean; createdAt: Date; updatedAt: Date }>
+      Array<{
+        id: string;
+        userId: string;
+        name: string;
+        note: string | null;
+        isWishlist: boolean;
+        tryOnResultId: string | null;
+        tryOnImageUrl: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>
     >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE id = ${id}
       LIMIT 1
@@ -133,7 +175,18 @@ class SavedLooksService {
     return rows[0] ?? null;
   }
 
-  private async enrichLook(look: { id: string; userId: string; name: string; note: string | null; isWishlist: boolean; createdAt: Date; updatedAt: Date }) {
+  private async enrichLook(look: {
+    id: string;
+    userId: string;
+    name: string;
+    note: string | null;
+    isWishlist: boolean;
+    tryOnResultId: string | null;
+    tryOnImageUrl: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    const tryOnImageUrl = look.tryOnImageUrl ?? await this.resolveTryOnImageUrl(look.tryOnResultId ?? undefined);
     const items = await this.prisma.savedLookItem.findMany({
       where: { savedLookId: look.id },
       include: {
@@ -191,6 +244,7 @@ class SavedLooksService {
 
     return {
       ...look,
+      tryOnImageUrl,
       items: serializedItems,
       products,
       offerSummary: {
@@ -220,15 +274,46 @@ class SavedLooksService {
 
   private async readLooks(userId: string) {
     const looks = await this.prisma.$queryRaw<
-      Array<{ id: string; userId: string; name: string; note: string | null; isWishlist: boolean; createdAt: Date; updatedAt: Date }>
+      Array<{
+        id: string;
+        userId: string;
+        name: string;
+        note: string | null;
+        isWishlist: boolean;
+        tryOnResultId: string | null;
+        tryOnImageUrl: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>
     >(Prisma.sql`
-      SELECT id, "userId", name, note, "isWishlist", "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, "isWishlist", "tryOnResultId", "tryOnImageUrl", "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE "userId" = ${userId}
       ORDER BY "updatedAt" DESC
     `);
 
     return Promise.all(looks.map((look) => this.enrichLook(look)));
+  }
+
+  private async resolveTryOnImageUrl(tryOnResultId?: string, explicitImageUrl?: string) {
+    if (explicitImageUrl) {
+      return explicitImageUrl;
+    }
+
+    if (!tryOnResultId) {
+      return null;
+    }
+
+    const result = await this.prisma.tryOnResult.findFirst({
+      where: {
+        requestId: tryOnResultId
+      },
+      select: {
+        outputImageUrl: true
+      }
+    });
+
+    return result?.outputImageUrl ?? null;
   }
 }
 
