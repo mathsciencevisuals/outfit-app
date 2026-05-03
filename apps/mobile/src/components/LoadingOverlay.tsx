@@ -1,5 +1,5 @@
 import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '../utils/theme';
 
 interface LoadingOverlayProps {
@@ -10,16 +10,24 @@ interface LoadingOverlayProps {
 
 export function LoadingOverlay({ visible, message, progress }: LoadingOverlayProps) {
   const opacity = useRef(new Animated.Value(0)).current;
+  const [rendered, setRendered] = useState(visible);
 
   useEffect(() => {
+    if (visible) {
+      setRendered(true);
+    }
     Animated.timing(opacity, {
       toValue: visible ? 1 : 0,
       duration: 200,
       useNativeDriver: true,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished && !visible) {
+        setRendered(false);
+      }
+    });
   }, [visible]);
 
-  if (!visible && opacity._value === 0) return null;
+  if (!rendered) return null;
 
   return (
     <Animated.View style={[styles.backdrop, { opacity }]} pointerEvents={visible ? 'auto' : 'none'}>

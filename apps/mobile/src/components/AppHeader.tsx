@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Animated, Image, Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View,
+  Alert, Image, Pressable, StyleSheet, Text, View,
 } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { mobileApi } from '../services/api';
@@ -19,8 +19,23 @@ export function AppHeader({ title = 'FITME.AI', onMenuPress }: Props) {
   const { C }  = useTheme();
   const router = useRouter();
   const userId = useAppStore(s => s.userId);
-  const [profileUri, setProfileUri] = useState<string | null>(null);
+  const profile = useAppStore(s => s.profile);
+  const setProfile = useAppStore(s => s.setProfile);
+  const logout = useAppStore(s => s.logout);
+  const [profileUri, setProfileUri] = useState<string | null>(profile?.avatarUrl ?? null);
   const [dropOpen,   setDropOpen]   = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    mobileApi.profile(userId)
+      .then((nextProfile) => {
+        if (!mounted) return;
+        setProfile(nextProfile);
+        setProfileUri(nextProfile.avatarUrl ?? null);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, [setProfile, userId]);
 
   const handleChangePhoto = async () => {
     setDropOpen(false);
@@ -30,8 +45,27 @@ export function AppHeader({ title = 'FITME.AI', onMenuPress }: Props) {
     if (!result.canceled) {
       const uri = result.assets[0].uri;
       setProfileUri(uri);
-      mobileApi.uploadProfilePhoto(userId, uri).catch(() => {});
+      mobileApi.uploadProfilePhoto(userId, uri)
+        .then((uploaded) => {
+          setProfile(profile ? { ...profile, avatarUrl: uploaded.avatarUrl } : profile);
+          setProfileUri(uploaded.avatarUrl);
+        })
+        .catch(() => {});
     }
+  };
+
+  const handleLogout = () => {
+    setDropOpen(false);
+    Alert.alert('Log out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: () => {
+          logout().finally(() => router.replace('/auth'));
+        },
+      },
+    ]);
   };
 
   return (
@@ -61,9 +95,21 @@ export function AppHeader({ title = 'FITME.AI', onMenuPress }: Props) {
         {dropOpen && (
           <View style={[styles.dropdown, { backgroundColor: C.surface, borderColor: C.border }, Shadow.md]}>
             <View style={[styles.dropHeader, { borderBottomColor: C.border }]}>
-              <Text style={[styles.dropName, { color: C.textPrimary }]}>Alex Morgan</Text>
-              <Text style={[styles.dropEmail, { color: C.textSecondary }]}>alex@fitme.ai</Text>
+              <Text style={[styles.dropName, { color: C.textPrimary }]}>
+                {`${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim() || 'FitMe profile'}
+              </Text>
+              <Text style={[styles.dropEmail, { color: C.textSecondary }]}>{profile?.fitPreference ?? 'regular'} fit</Text>
             </View>
+            <Pressable style={[styles.dropItem, { backgroundColor: C.surface2 }]}
+              onPress={() => { setDropOpen(false); router.push('/profile-main' as never); }}>
+              <Ionicons name="person-outline" size={16} color={C.textSecondary} />
+              <Text style={[styles.dropItemText, { color: C.textPrimary }]}>Profile</Text>
+            </Pressable>
+            <Pressable style={[styles.dropItem, { backgroundColor: C.surface2 }]}
+              onPress={() => { setDropOpen(false); router.push('/saved-looks' as never); }}>
+              <Ionicons name="bookmark-outline" size={16} color={C.textSecondary} />
+              <Text style={[styles.dropItemText, { color: C.textPrimary }]}>Saved Looks</Text>
+            </Pressable>
             <Pressable style={[styles.dropItem, { backgroundColor: C.surface2 }]} onPress={handleChangePhoto}>
               <Ionicons name="camera-outline" size={16} color={C.textSecondary} />
               <Text style={[styles.dropItemText, { color: C.textPrimary }]}>Change Photo</Text>
@@ -74,7 +120,7 @@ export function AppHeader({ title = 'FITME.AI', onMenuPress }: Props) {
               <Text style={[styles.dropItemText, { color: C.textPrimary }]}>Settings</Text>
             </Pressable>
             <Pressable style={[styles.dropItem, { backgroundColor: C.surface2 }]}
-              onPress={() => setDropOpen(false)}>
+              onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={16} color="#ef4444" />
               <Text style={[styles.dropItemText, { color: '#ef4444' }]}>Logout</Text>
             </Pressable>

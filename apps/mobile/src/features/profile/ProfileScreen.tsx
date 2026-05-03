@@ -2,12 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View,
 } from 'react-native';
 
 import { ONBOARDED_KEY } from '../../../app/_layout';
+import { CreditBalanceCard } from '../../components/CreditBalanceCard';
 import { EmptyState }    from '../../components/EmptyState';
 import { InfoRow }       from '../../components/InfoRow';
 import { PrimaryButton } from '../../components/PrimaryButton';
@@ -30,17 +31,36 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
   const userRole = useAppStore((s) => s.userRole);
+  const setProfile = useAppStore((s) => s.setProfile);
+  const logout = useAppStore((s) => s.logout);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const { data, loading, error, refetch } = useAsyncResource(
     () => mobileApi.profile(userId),
     [userId],
   );
+  const {
+    data: creditBalance,
+    loading: creditsLoading,
+    error: creditsError,
+    refetch: refetchCredits,
+  } = useAsyncResource(() => mobileApi.tryOnCredits(userId), [userId]);
 
   // Refetch whenever this screen gains focus so saved measurements/prefs appear immediately
   const refetchRef = useRef(refetch);
   refetchRef.current = refetch;
-  useFocusEffect(useCallback(() => { refetchRef.current(); }, []));
+  const refetchCreditsRef = useRef(refetchCredits);
+  refetchCreditsRef.current = refetchCredits;
+  useFocusEffect(useCallback(() => {
+    refetchRef.current();
+    refetchCreditsRef.current();
+  }, []));
+
+  useEffect(() => {
+    if (data) {
+      setProfile(data);
+    }
+  }, [data, setProfile]);
 
   // ── Avatar upload ────────────────────────────────────────────────────────────
 
@@ -92,12 +112,11 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
         text: 'Log out',
         style: 'destructive',
         onPress: () => {
-          useAppStore.getState().setAccessToken(null);
-          router.replace('/auth');
+          logout().finally(() => router.replace('/auth'));
         },
       },
     ]);
-  }, [router]);
+  }, [logout, router]);
 
   // ── Onboarding continue ──────────────────────────────────────────────────────
 
@@ -181,6 +200,14 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
           {data?.email ? <Text style={styles.profileEmail}>{data.email}</Text> : null}
         </View>
 
+        <CreditBalanceCard
+          balance={creditBalance}
+          loading={creditsLoading}
+          error={creditsError}
+          onRetry={refetchCredits}
+          onUpgrade={() => router.push('/premium' as never)}
+        />
+
         {/* Account navigation */}
         <SectionCard>
           <Pressable style={styles.navRow} onPress={() => router.push('/measurements')}>
@@ -191,7 +218,7 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
             <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
           </Pressable>
           <View style={styles.navDivider} />
-          <Pressable style={styles.navRow} onPress={() => router.push('/style-preferences')}>
+          <Pressable style={styles.navRow} onPress={() => router.push('/style-preferences' as never)}>
             <View style={styles.navIconBox}>
               <Ionicons name="color-palette-outline" size={18} color={Colors.primary} />
             </View>
@@ -215,7 +242,7 @@ export function ProfileScreen({ mode = 'onboarding' }: ProfileScreenProps) {
             <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
           </Pressable>
           <View style={styles.navDivider} />
-          <Pressable style={styles.navRow} onPress={() => router.push('/settings')}>
+          <Pressable style={styles.navRow} onPress={() => router.push('/settings' as never)}>
             <View style={styles.navIconBox}>
               <Ionicons name="settings-outline" size={18} color={Colors.primary} />
             </View>

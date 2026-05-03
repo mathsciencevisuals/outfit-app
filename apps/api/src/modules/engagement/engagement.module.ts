@@ -10,11 +10,13 @@ import {
   Query
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsInt, IsObject, IsOptional, IsString, Max, Min } from "class-validator";
+import { randomUUID } from "crypto";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
+import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 import { RewardsModule, RewardsService } from "../rewards/rewards.module";
 
@@ -52,6 +54,15 @@ class CreateShareEventDto {
 
   @IsString()
   channel!: string;
+}
+
+class TrackAppEventDto {
+  @IsString()
+  eventName!: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }
 
 @Injectable()
@@ -163,7 +174,7 @@ class EngagementService {
     const rewardReference = `share:${user.id}:${dto.savedLookId ?? "none"}:${dto.tryOnRequestId ?? "none"}:${dto.channel}`;
     await this.rewardsService.awardPoints({
       userId: user.id,
-      amountPoints: 20,
+      amountPoints: 10,
       reason: "LOOK_SHARE",
       description: `Shared a look via ${dto.channel}`,
       referenceKey: rewardReference
@@ -175,9 +186,61 @@ class EngagementService {
         savedLookId: dto.savedLookId ?? null,
         tryOnRequestId: dto.tryOnRequestId ?? null,
         channel: dto.channel,
-        rewardGranted: 20
+        rewardGranted: 10
       }
     });
+  }
+
+  async trackEvent(user: AuthenticatedUser, dto: TrackAppEventDto) {
+    return (this.prisma as any).appEvent.create({
+      data: {
+        id: randomUUID(),
+        userId: user.id,
+        eventName: dto.eventName,
+        metadata: dto.metadata ?? {}
+      }
+    });
+  }
+
+  async analyticsSummary() {
+    const [
+      tryOns,
+      saves,
+      merchantRegistrations,
+      eventCounts,
+      shareEvents
+    ] = await Promise.all([
+      (this.prisma as any).tryOnRequest.count(),
+      (this.prisma as any).savedLook.count(),
+      (this.prisma as any).shop.count({ where: { ownerUserId: { not: null } } }),
+      (this.prisma as any).appEvent.groupBy({
+        by: ["eventName"],
+        where: {
+          eventName: {
+            in: [
+              "affiliate_link_opened",
+              "shop_link_opened",
+              "share_completed",
+              "merchant_registered"
+            ]
+          }
+        },
+        _count: { _all: true }
+      }),
+      (this.prisma as any).shareEvent.count()
+    ]);
+
+    const eventCount = (eventName: string) =>
+      eventCounts.find((row: any) => row.eventName === eventName)?._count?._all ?? 0;
+
+    return {
+      tryOns,
+      saves,
+      affiliateClicks: eventCount("affiliate_link_opened"),
+      shopClicks: eventCount("shop_link_opened"),
+      shares: Math.max(shareEvents, eventCount("share_completed")),
+      merchantRegistrations: Math.max(merchantRegistrations, eventCount("merchant_registered"))
+    };
   }
 }
 
@@ -215,6 +278,17 @@ class EngagementController {
   @Post("share-events")
   createShareEvent(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateShareEventDto) {
     return this.service.createShareEvent(user, dto);
+  }
+
+  @Post("events")
+  trackEvent(@CurrentUser() user: AuthenticatedUser, @Body() dto: TrackAppEventDto) {
+    return this.service.trackEvent(user, dto);
+  }
+
+  @Roles("ADMIN", "OPERATOR")
+  @Get("analytics-summary")
+  analyticsSummary() {
+    return this.service.analyticsSummary();
   }
 }
 

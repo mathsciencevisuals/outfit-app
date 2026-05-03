@@ -150,6 +150,12 @@ export function serializeProductCard(product: any): any {
     ...product,
     variants,
     occasionTags: inferOccasionTags(product),
-    offerSummary: summarizeOffers(offers)
+    offerSummary: summarizeOffers(offers),
+    recommendationReasons: [
+      product?.trending ? "Trending on Pinterest" : null,
+      (product?.styleTags ?? []).length > 0 ? "Matches your style" : null,
+      offers.length > 0 ? "Available nearby" : null,
+      offers.length > 0 ? "Best price found" : null
+    ].filter((reason): reason is string => Boolean(reason))
   };
 }

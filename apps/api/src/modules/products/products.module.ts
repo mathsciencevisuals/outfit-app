@@ -73,7 +73,7 @@ class ProductDto {
   variants?: VariantDto[];
 }
 
-type TrendSource = "pinterest" | "internal" | "hybrid";
+type TrendSource = "pinterest" | "internal" | "hybrid" | "affiliate";
 
 type PersonalizedTrendItem = {
   name: string;
@@ -82,6 +82,7 @@ type PersonalizedTrendItem = {
   image: string | null;
   cta: string;
   reasons: string[];
+  recommendationReasons?: string[];
   product: any;
 };
 
@@ -93,6 +94,17 @@ type PersonalizedTrendingResponse = {
 
 const TREND_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const trendCache = new Map<string, { expiresAt: number; data: PersonalizedTrendingResponse }>();
+const discoverFeedCache = new Map<string, { expiresAt: number; data: DiscoverFeedResponse }>();
+
+type DiscoverFeedResponse = {
+  forYou: PersonalizedTrendItem[];
+  trendingForYou: PersonalizedTrendItem[];
+  popularNearYou: PersonalizedTrendItem[];
+  underYourBudget: PersonalizedTrendItem[];
+  recentlySavedInspired: PersonalizedTrendItem[];
+  fallbackUsed: boolean;
+  cachedAt: string;
+};
 
 function normalizedToken(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -142,6 +154,21 @@ function trendImage(product: any) {
 
 function clampScore(score: number) {
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(fallback);
+      });
+  });
 }
 
 @Injectable()
@@ -229,7 +256,7 @@ class ProductsService {
             _count: { select: { savedLookItems: true, lookRatings: true } }
           }
         }),
-        this.socialService.getTrending(Math.max(limit, 8))
+        this.socialService.getTrendSignals(Math.max(limit, 8))
       ]);
     } catch (err) {
       console.error("[FitMe] personalizedTrending data fetch failed:", err);
@@ -305,6 +332,11 @@ class ProductsService {
           image: trendImage(serialized),
           cta: "Try this look",
           reasons: reasons.length ? reasons : ["Trending from current product activity"],
+          recommendationReasons: [
+            ...(reasons.length ? reasons : ["Trending on Pinterest"]),
+            serialized.offerSummary?.offerCount > 0 ? "Available nearby" : null,
+            serialized.offerSummary?.lowestPrice != null ? "Best price found" : null
+          ].filter((reason): reason is string => Boolean(reason)),
           product: serialized
         };
       })
@@ -332,6 +364,165 @@ class ProductsService {
     };
 
     trendCache.set(cacheKey, { expiresAt: Date.now() + TREND_CACHE_TTL_MS, data });
+    return data;
+  }
+
+  async discoverFeed(userId: string, limit: number): Promise<DiscoverFeedResponse> {
+    const cacheKey = `${userId}:${limit}`;
+    const cached = discoverFeedCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
+    const now = new Date().toISOString();
+    const [profileResult, savedLooksResult, tryOnRequestsResult, productsResult, pins] = await Promise.all([
+      this.prisma.profile.findUnique({ where: { userId } }).catch(() => null),
+      this.prisma.savedLook.findMany({
+        where: { userId },
+        include: { items: { include: { product: true } } },
+        orderBy: { updatedAt: "desc" },
+        take: 25
+      }).catch(() => []),
+      (this.prisma.tryOnRequest as any).findMany({
+        where: { userId },
+        include: { variant: { include: { product: true } } },
+        orderBy: { requestedAt: "desc" },
+        take: 25
+      }).catch(() => []),
+      this.prisma.product.findMany({
+        include: {
+          brand: true,
+          variants: {
+            include: {
+              inventoryOffers: { include: { shop: true } },
+              sizeChartEntries: true,
+              _count: { select: { tryOnRequests: true } }
+            }
+          },
+          _count: { select: { savedLookItems: true, lookRatings: true } }
+        }
+      }).catch(() => []),
+      withTimeout(this.socialService.getTrendSignals(Math.max(limit, 8)), 1200, [] as any[])
+    ]);
+
+    const profile: any = profileResult;
+    const savedLooks: any[] = savedLooksResult as any[];
+    const tryOnRequests: any[] = tryOnRequestsResult as any[];
+    const products: any[] = productsResult as any[];
+    const savedProducts = savedLooks.flatMap((look) => look.items.map((item: any) => item.product).filter(Boolean));
+    const triedProducts = tryOnRequests.map((request) => request.variant?.product).filter(Boolean);
+    const userStyles = normalizedTokens([
+      ...extractStyleStrings(profile?.stylePreference),
+      ...savedProducts.flatMap((product) => product.styleTags ?? []),
+      ...triedProducts.flatMap((product) => product.styleTags ?? [])
+    ]);
+    const userColors = normalizedTokens([
+      ...(profile?.preferredColors ?? []),
+      ...savedProducts.flatMap((product) => [product.baseColor, ...(product.secondaryColors ?? [])]),
+      ...triedProducts.flatMap((product) => [product.baseColor, ...(product.secondaryColors ?? [])])
+    ]);
+    const savedCategories = normalizedTokens(savedProducts.map((product) => product.category));
+    const triedCategories = normalizedTokens(triedProducts.map((product) => product.category));
+    const userCategories = normalizedTokens([...savedCategories, ...triedCategories]);
+    const hasUserSignals = userStyles.length > 0 || userColors.length > 0 || userCategories.length > 0;
+    const pinText = pins.map((pin: any) => `${pin.title} ${pin.description} ${pin.boardName}`).join(" ").toLowerCase();
+    const maxInternal = Math.max(
+      1,
+      ...products.map((product: any) =>
+        (product._count?.savedLookItems ?? 0) +
+        (product._count?.lookRatings ?? 0) +
+        (product.variants ?? []).reduce((sum: number, variant: any) => sum + (variant._count?.tryOnRequests ?? 0), 0)
+      )
+    );
+
+    const ranked = products
+      .map((product) => {
+        const serialized = serializeProductCard(product);
+        const tokens = productTokens(product);
+        const styleHits = overlapCount(tokens, userStyles);
+        const colorHits = overlapCount(tokens, userColors);
+        const savedCategoryHit = savedCategories.includes(normalizedToken(product.category));
+        const triedCategoryHit = triedCategories.includes(normalizedToken(product.category));
+        const internalCount =
+          (product._count?.savedLookItems ?? 0) +
+          (product._count?.lookRatings ?? 0) +
+          (product.variants ?? []).reduce((sum: number, variant: any) => sum + (variant._count?.tryOnRequests ?? 0), 0);
+        const pinHits = tokens.filter((token) => pinText.includes(token)).length;
+        const offerSummary = serialized.offerSummary;
+        const price = offerSummary?.lowestPrice ?? representativePriceForProduct(serialized);
+        const withinBudget =
+          profile?.budgetMax != null ? price <= profile.budgetMax :
+          profile?.budgetMin != null ? price >= profile.budgetMin :
+          false;
+        const popularityScore = Math.min(20, Math.round((internalCount / maxInternal) * 14) + Math.min(6, pinHits * 2));
+        const source: TrendSource =
+          internalCount > 0 && pinHits > 0 ? "hybrid" :
+          pinHits > 0 ? "pinterest" :
+          internalCount > 0 ? "internal" :
+          offerSummary?.offerCount > 0 ? "affiliate" : "internal";
+        const score = clampScore(
+          Math.min(36, styleHits * 14) +
+          Math.min(24, colorHits * 9) +
+          (savedCategoryHit ? 18 : 0) +
+          (triedCategoryHit ? 12 : 0) +
+          (withinBudget ? 12 : 0) +
+          (offerSummary?.shopCount > 0 ? 8 : 0) +
+          popularityScore
+        );
+        const reasons = [
+          styleHits > 0 ? "Matches your style" : null,
+          colorHits > 0 ? "Matches color preference" : null,
+          withinBudget ? "Fits your budget" : null,
+          savedCategoryHit ? "Similar to saved looks" : null,
+          triedCategoryHit ? "Inspired by your try-ons" : null,
+          pinHits > 0 ? "Trending on Pinterest" : null,
+          offerSummary?.shopCount > 0 ? "Available nearby" : null,
+          offerSummary?.lowestPrice != null ? "Best price found" : null
+        ].filter((reason): reason is string => Boolean(reason));
+
+        return {
+          name: product.name,
+          score: hasUserSignals ? score : clampScore(popularityScore),
+          source,
+          image: trendImage(serialized),
+          cta: "Try this look",
+          reasons: reasons.length ? reasons : ["Trending on Pinterest"],
+          recommendationReasons: reasons.length ? reasons : ["Trending on Pinterest"],
+          product: serialized,
+          price,
+          withinBudget,
+          savedCategoryHit,
+          pinHits,
+          shopCount: offerSummary?.shopCount ?? 0
+        };
+      })
+      .sort((left, right) => right.score - left.score);
+
+    const fallbackRanked = [...ranked].sort((left, right) => {
+      const rightTrend = right.pinHits + (right.source === "pinterest" || right.source === "hybrid" ? 2 : 0);
+      const leftTrend = left.pinHits + (left.source === "pinterest" || left.source === "hybrid" ? 2 : 0);
+      return rightTrend - leftTrend || right.score - left.score;
+    });
+    const forYou = hasUserSignals ? ranked.slice(0, limit) : fallbackRanked.slice(0, limit);
+    const trendingForYou = fallbackRanked
+      .filter((item) => item.pinHits > 0 || item.source === "pinterest" || item.source === "hybrid")
+      .slice(0, limit);
+    const popularNearYou = ranked.filter((item) => item.shopCount > 0).slice(0, limit);
+    const underYourBudget = ranked.filter((item) => item.withinBudget).slice(0, limit);
+    const recentlySavedInspired = ranked.filter((item) => item.savedCategoryHit).slice(0, limit);
+
+    const stripInternal = (items: typeof ranked) => items.map(({ price, withinBudget, savedCategoryHit, pinHits, shopCount, ...item }) => item);
+    const data: DiscoverFeedResponse = {
+      forYou: stripInternal(forYou),
+      trendingForYou: stripInternal(trendingForYou.length ? trendingForYou : fallbackRanked.slice(0, limit)),
+      popularNearYou: stripInternal(popularNearYou),
+      underYourBudget: stripInternal(underYourBudget),
+      recentlySavedInspired: stripInternal(recentlySavedInspired),
+      fallbackUsed: !hasUserSignals,
+      cachedAt: now
+    };
+
+    discoverFeedCache.set(cacheKey, { expiresAt: Date.now() + TREND_CACHE_TTL_MS, data });
     return data;
   }
 
@@ -420,6 +611,18 @@ class ProductsController {
 
     const products = await this.service.trending(parsedLimit);
     return products.map((product) => serializeProductCard(product));
+  }
+
+  @Get("discover-feed")
+  async discoverFeed(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("limit") limit = "8",
+    @Query("userId") userId?: string
+  ) {
+    const targetUserId = userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view this discover feed");
+    const parsedLimit = Math.min(Math.max(Number(limit) || 8, 1), 20);
+    return this.service.discoverFeed(targetUserId, parsedLimit);
   }
 
   @Get(":id")

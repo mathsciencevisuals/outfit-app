@@ -15,6 +15,7 @@ export interface ProductVariant {
   inStock: boolean;
   price: number;
   currency: string;
+  inventoryOffers?: InventoryOffer[];
 }
 
 export interface Product {
@@ -31,6 +32,14 @@ export interface Product {
   imageUrl?: string | null;
   trending?: boolean;
   instagramLikes?: string;
+  recommendationReasons?: string[];
+  offerSummary?: {
+    offerCount?: number;
+    shopCount?: number;
+    lowestPrice?: number | null;
+    highestPrice?: number | null;
+    badges?: string[];
+  };
   variants: ProductVariant[];
 }
 
@@ -125,7 +134,10 @@ export interface InventoryOffer {
   variantId: string;
   price: number;
   currency: string;
+  externalUrl?: string;
+  stock?: number;
   deliveryDays?: number;
+  shop?: Shop;
 }
 
 // ─── Try-On Types ─────────────────────────────────────────────────────────────
@@ -171,6 +183,36 @@ export interface TryOnResult {
   } | null;
 }
 
+export interface TryOnCreditBalance {
+  enabled: boolean;
+  plan: 'FREE' | 'PREMIUM' | string;
+  dailyLimit: number;
+  usedToday: number;
+  remainingToday: number;
+  bonusCredits: number;
+  periodDate: string;
+  premiumUntil?: string | null;
+  limitReached: boolean;
+  features: {
+    standardQuality: boolean;
+    hdTryOn: boolean;
+    advancedStylingNotes: boolean;
+    earlyTrendAccess: boolean;
+  };
+  plans: {
+    free: {
+      dailyTryOns: number;
+      quality: string;
+      features: string[];
+    };
+    premium: {
+      dailyTryOns: number;
+      quality: string;
+      features: string[];
+    };
+  };
+}
+
 // ─── Recommendation Types ──────────────────────────────────────────────────────
 
 export interface Recommendation {
@@ -179,9 +221,27 @@ export interface Recommendation {
   product?: Product;
   score: number;
   explanation: string;
+  reasonTags?: string[];
+  rankingBadges?: string[];
+  recommendationReasons?: string[];
+  budgetLabel?: string;
+  completeLookSlot?: string;
+  completeLookLabel?: string;
 }
 
-export type TrendSource = 'pinterest' | 'internal' | 'hybrid';
+export type TrendSource = 'pinterest' | 'internal' | 'hybrid' | 'affiliate';
+
+export type TrendSourceStatus = 'active' | 'pending approval' | 'error' | 'disabled';
+
+export interface TrendProviderDiagnostic {
+  provider: 'instagram' | 'pinterest' | 'internal' | 'affiliate_catalog';
+  status: TrendSourceStatus;
+  lastFetchStatus: TrendSourceStatus;
+  errorMessage: string | null;
+  lastSuccessfulFetchAt: string | null;
+  updatedAt: string;
+  notes?: string;
+}
 
 export interface PersonalizedTrendItem {
   name: string;
@@ -190,6 +250,7 @@ export interface PersonalizedTrendItem {
   image: string | null;
   cta: string;
   reasons: string[];
+  recommendationReasons?: string[];
   product: Product;
 }
 
@@ -197,6 +258,16 @@ export interface PersonalizedTrendingResponse {
   trendingForYou: PersonalizedTrendItem[];
   popularInApp: PersonalizedTrendItem[];
   globalTrends: PersonalizedTrendItem[];
+}
+
+export interface DiscoverFeedResponse {
+  forYou: PersonalizedTrendItem[];
+  trendingForYou: PersonalizedTrendItem[];
+  popularNearYou: PersonalizedTrendItem[];
+  underYourBudget: PersonalizedTrendItem[];
+  recentlySavedInspired: PersonalizedTrendItem[];
+  fallbackUsed: boolean;
+  cachedAt: string;
 }
 
 // ─── Saved Look Types ─────────────────────────────────────────────────────────
@@ -214,8 +285,14 @@ export interface SavedLook {
   note?: string;
   tryOnResultId?: string;
   tryOnImageUrl?: string;
+  sourceScreen?: string | null;
+  fitScore?: number | null;
+  stylistNote?: string | null;
+  metadata?: Record<string, unknown> | null;
+  savedAt?: string;
   products?: Product[];
   items?: SavedLookItem[];
+  recommendedProducts?: Product[];
   createdAt: string;
 }
 

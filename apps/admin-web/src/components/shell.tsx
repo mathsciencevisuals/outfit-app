@@ -14,6 +14,7 @@ const links = [
   ["/campaigns", "Campaigns"],
   ["/coupons", "Coupons"],
   ["/admin-pinterest", "Pinterest"],
+  ["/trend-diagnostics", "Trend diagnostics"],
   ["/tryon-requests", "Try-on requests"],
   ["/settings", "Provider settings"]
 ] as const;

@@ -6,18 +6,27 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ONBOARDED_KEY } from '../../../app/_layout';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { Screen } from '../../components/Screen';
+import { analytics } from '../../services/analytics';
 import { Colors, FontSize, FontWeight, Spacing } from '../../utils/theme';
 
 export function OnboardingScreen() {
   const router = useRouter();
 
   const handleStart = useCallback(async () => {
+    analytics.track('onboarding_completed', {
+      sourceScreen: 'onboarding',
+      completionPath: 'profile_setup',
+    }).catch(() => {});
     router.push('/profile');
   }, [router]);
 
   const handleSkip = useCallback(async () => {
     // Mark as onboarded so we never show this again
     await AsyncStorage.setItem(ONBOARDED_KEY, 'true');
+    analytics.track('onboarding_completed', {
+      sourceScreen: 'onboarding',
+      completionPath: 'skipped',
+    }).catch(() => {});
     router.replace('/discover');
   }, [router]);
 

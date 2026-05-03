@@ -4,12 +4,11 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
-import { IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsArray, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AuthenticatedUser } from "../../common/auth/auth.types";
-import { Roles } from "../../common/auth/roles.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -34,6 +33,20 @@ class CreateOfferDto {
   @IsString()  externalUrl!: string;
   @IsNumber() @Min(0) price!: number;
   @IsNumber() @Min(0) stock!: number;
+  @IsOptional() @IsString() currency?: string;
+}
+
+class PublishListingDto {
+  @IsString() title!: string;
+  @IsString() category!: string;
+  @IsNumber() @Min(0) price!: number;
+  @IsArray() sizes!: string[];
+  @IsString() location!: string;
+  @IsOptional() @IsString() imageUrl?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() color?: string;
+  @IsOptional() @IsString() externalUrl?: string;
+  @IsOptional() @IsNumber() @Min(0) stock?: number;
   @IsOptional() @IsString() currency?: string;
 }
 
@@ -126,6 +139,84 @@ class MerchantService {
     });
   }
 
+  private slugify(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "listing";
+  }
+
+  private async uniqueSlug(model: "brand" | "product", base: string) {
+    const slug = this.slugify(base);
+    const existing = await (this.prisma[model] as any).findUnique({ where: { slug } });
+    return existing ? `${slug}-${Date.now()}` : slug;
+  }
+
+  private async merchantBrand(shop: any) {
+    const name = shop.name;
+    const existing = await (this.prisma.brand as any).findUnique({ where: { name } });
+    if (existing) {
+      return existing;
+    }
+
+    return (this.prisma.brand as any).create({
+      data: {
+        name,
+        slug: await this.uniqueSlug("brand", name),
+        countryCode: "IN",
+        sizingNotes: "Merchant-provided boutique sizing"
+      }
+    });
+  }
+
+  async publishListing(user: AuthenticatedUser, dto: PublishListingDto) {
+    const shop = await this.getOwnShop(user);
+    const brand = await this.merchantBrand(shop);
+    const sizeLabels = dto.sizes.length > 0 ? dto.sizes : ["Free Size"];
+    const primarySize = sizeLabels[0] ?? "Free Size";
+    const color = dto.color?.trim() || "Assorted";
+    const stock = dto.stock ?? Math.max(sizeLabels.length, 1);
+    const externalUrl = dto.externalUrl?.trim() || shop.url;
+
+    const product = await (this.prisma.product as any).create({
+      data: {
+        brandId: brand.id,
+        name: dto.title.trim(),
+        slug: await this.uniqueSlug("product", `${shop.slug}-${dto.title}`),
+        category: dto.category.trim(),
+        description: dto.description?.trim() || `Boutique listing from ${shop.name} in ${dto.location}.`,
+        baseColor: color,
+        secondaryColors: [],
+        materials: [],
+        styleTags: ["merchant", "boutique", dto.category.trim().toLowerCase()],
+        imageUrl: dto.imageUrl?.trim() || null,
+        variants: {
+          create: {
+            sku: `${shop.slug}-${Date.now()}-${primarySize}`.replace(/[^a-zA-Z0-9_-]/g, "-"),
+            sizeLabel: sizeLabels.join(", "),
+            color,
+            price: new Prisma.Decimal(dto.price),
+            currency: dto.currency ?? "INR",
+            imageUrl: dto.imageUrl?.trim() || null
+          }
+        }
+      },
+      include: { variants: true, brand: true }
+    });
+
+    const variant = product.variants[0];
+    const offer = await (this.prisma.inventoryOffer as any).create({
+      data: {
+        shopId: shop.id,
+        variantId: variant.id,
+        externalUrl,
+        price: new Prisma.Decimal(dto.price),
+        stock,
+        currency: dto.currency ?? "INR"
+      },
+      include: { variant: { include: { product: { include: { brand: true } } } }, shop: true }
+    });
+
+    return { product, offer };
+  }
+
   async updateOffer(user: AuthenticatedUser, offerId: string, dto: UpdateOfferDto) {
     const shop = await this.getOwnShop(user);
     const offer = await (this.prisma.inventoryOffer as any).findUnique({ where: { id: offerId } });
@@ -156,16 +247,48 @@ class MerchantService {
       ),
     ];
 
+    const variantIds = (shop.inventoryOffers as any[]).map((o: any) => o.variantId);
     const tryOnCount = await (this.prisma.tryOnRequest as any).count({
-      where: { variantId: { in: (shop.inventoryOffers as any[]).map((o: any) => o.variantId) } },
+      where: { variantId: { in: variantIds } },
     });
 
     const completedTryOns = await (this.prisma.tryOnRequest as any).count({
       where: {
-        variantId: { in: (shop.inventoryOffers as any[]).map((o: any) => o.variantId) },
+        variantId: { in: variantIds },
         status: "COMPLETED",
       },
     });
+
+    const [shopClicks, affiliateClicks] = await Promise.all([
+      (this.prisma as any).appEvent.count({
+        where: {
+          eventName: "shop_link_opened",
+          metadata: { path: ["shopId"], equals: shop.id }
+        }
+      }).catch(() => 0),
+      (this.prisma as any).appEvent.count({
+        where: {
+          eventName: "affiliate_link_opened",
+          metadata: { path: ["shopName"], equals: shop.name }
+        }
+      }).catch(() => 0)
+    ]);
+
+    const topTriedRows = variantIds.length > 0
+      ? await (this.prisma.tryOnRequest as any).groupBy({
+          by: ["variantId"],
+          where: { variantId: { in: variantIds } },
+          _count: { _all: true },
+          orderBy: { _count: { variantId: "desc" } },
+          take: 5
+        }).catch(() => [])
+      : [];
+    const variantProductMap = new Map(
+      (shop.inventoryOffers as any[]).map((offer: any) => [
+        offer.variantId,
+        offer.variant?.product?.name ?? "Garment"
+      ])
+    );
 
     return {
       shopId: shop.id,
@@ -174,6 +297,13 @@ class MerchantService {
       offerCount: (shop.inventoryOffers as any[]).length,
       tryOnCount,
       completedTryOns,
+      shopClicks,
+      leadsGenerated: shopClicks + affiliateClicks,
+      topTriedGarments: topTriedRows.map((row: any) => ({
+        variantId: row.variantId,
+        name: variantProductMap.get(row.variantId) ?? "Garment",
+        tryOns: row._count?._all ?? 0
+      })),
       conversionRate: tryOnCount > 0 ? Math.round((completedTryOns / tryOnCount) * 100) : 0,
     };
   }
@@ -193,25 +323,26 @@ class MerchantController {
   }
 
   @Get("shop")
-  @Roles("MERCHANT", "ADMIN", "OPERATOR")
   getShop(@CurrentUser() user: AuthenticatedUser) {
     return this.service.getOwnShop(user);
   }
 
   @Put("shop")
-  @Roles("MERCHANT", "ADMIN", "OPERATOR")
   updateShop(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateShopDto) {
     return this.service.updateShop(user, dto);
   }
 
   @Post("offers")
-  @Roles("MERCHANT", "ADMIN", "OPERATOR")
   createOffer(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateOfferDto) {
     return this.service.createOffer(user, dto);
   }
 
+  @Post("listings")
+  publishListing(@CurrentUser() user: AuthenticatedUser, @Body() dto: PublishListingDto) {
+    return this.service.publishListing(user, dto);
+  }
+
   @Put("offers/:id")
-  @Roles("MERCHANT", "ADMIN", "OPERATOR")
   updateOffer(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
@@ -221,13 +352,11 @@ class MerchantController {
   }
 
   @Delete("offers/:id")
-  @Roles("MERCHANT", "ADMIN", "OPERATOR")
   deleteOffer(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.service.deleteOffer(user, id);
   }
 
   @Get("analytics")
-  @Roles("MERCHANT", "ADMIN", "OPERATOR")
   getAnalytics(@CurrentUser() user: AuthenticatedUser) {
     return this.service.getAnalytics(user);
   }

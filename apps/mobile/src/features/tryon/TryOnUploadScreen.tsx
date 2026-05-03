@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { CreditBalanceCard } from '../../components/CreditBalanceCard';
 import { EmptyState } from '../../components/EmptyState';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { PrimaryButton } from '../../components/PrimaryButton';
@@ -19,6 +20,7 @@ import { Screen } from '../../components/Screen';
 import { SectionCard } from '../../components/SectionCard';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { mobileApi } from '../../services/api';
+import { analytics } from '../../services/analytics';
 import { useAppStore } from '../../store/app-store';
 import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
 import type { Product, ProductVariant } from '../../types';
@@ -84,9 +86,16 @@ export function TryOnUploadScreen() {
   const { data: productsData, loading: catalogLoading, error: catalogError } =
     useAsyncResource(() => mobileApi.products({ limit: 20 }), []);
   const products: Product[] = Array.isArray(productsData) ? productsData : [];
+  const {
+    data: creditBalance,
+    loading: creditsLoading,
+    error: creditsError,
+    refetch: refetchCredits,
+  } = useAsyncResource(() => mobileApi.tryOnCredits(userId), [userId]);
 
   const isSubmitting = tryOnStatus === 'uploading' || tryOnStatus === 'processing';
-  const canSubmit    = !!capturedPhotoUri && !!selectedVariant && !isSubmitting;
+  const limitReached = creditBalance?.limitReached === true;
+  const canSubmit    = !!capturedPhotoUri && !!selectedVariant && !isSubmitting && !limitReached;
 
   // ── Photo capture ────────────────────────────────────────────────────────────
 
@@ -129,6 +138,17 @@ export function TryOnUploadScreen() {
 
   const handleSubmit = useCallback(async () => {
     if (!capturedPhotoUri || !selectedVariant) return;
+    if (limitReached) {
+      Alert.alert(
+        'Daily try-on limit reached',
+        'You have used today’s free try-on credits. Premium is prepared, but payments are not enabled yet.',
+        [
+          { text: 'View Premium', onPress: () => router.push('/premium' as never) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
 
     try {
       setTryOnStatus('uploading');
@@ -140,6 +160,14 @@ export function TryOnUploadScreen() {
         selectedVariant.id,
         capturedPhotoUri
       );
+      refetchCredits();
+      analytics.track('tryon_started', {
+        sourceScreen: 'tryon_upload',
+        productId: selectedProduct?.id,
+        variantId: selectedVariant.id,
+        tryOnId: created.id,
+        tryOnRequestId: created.id,
+      }).catch(() => {});
       setLastTryOnRequestId(created.id);
       setTryOnStatus('processing');
       setTryOnProgress(15);
@@ -153,17 +181,28 @@ export function TryOnUploadScreen() {
       router.push('/tryon-result');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong.';
+      analytics.track('tryon_failed', {
+        sourceScreen: 'tryon_upload',
+        productId: selectedProduct?.id,
+        variantId: selectedVariant?.id,
+        errorMessage: message,
+        stage: tryOnStatus,
+      }).catch(() => {});
       setTryOnError(message);
       setTryOnStatus('error');
-      Alert.alert('Try-on failed', message, [
-        { text: 'Retry', onPress: () => setTryOnStatus('idle') },
-        { text: 'Cancel', style: 'cancel', onPress: resetTryOn },
+      const reachedServerLimit = message.toLowerCase().includes('daily try-on limit');
+      Alert.alert(reachedServerLimit ? 'Daily try-on limit reached' : 'Try-on failed', message, [
+        reachedServerLimit
+          ? { text: 'View Premium', onPress: () => router.push('/premium' as never) }
+          : { text: 'Retry', onPress: () => setTryOnStatus('idle') },
+        { text: 'Cancel', style: 'cancel', onPress: reachedServerLimit ? undefined : resetTryOn },
       ]);
     }
   }, [
-    capturedPhotoUri, selectedVariant, userId,
+    capturedPhotoUri, selectedVariant, userId, limitReached,
     setTryOnStatus, setTryOnProgress, setTryOnError,
-    setLastTryOnRequestId, resetTryOn, router,
+    selectedProduct?.id, tryOnStatus,
+    setLastTryOnRequestId, resetTryOn, router, refetchCredits,
   ]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -175,6 +214,15 @@ export function TryOnUploadScreen() {
   return (
     <>
       <Screen>
+        <CreditBalanceCard
+          balance={creditBalance}
+          loading={creditsLoading}
+          error={creditsError}
+          compact
+          onRetry={refetchCredits}
+          onUpgrade={() => router.push('/premium' as never)}
+        />
+
         {/* ── Step 1: Your photo ── */}
         <SectionCard title="Step 1 — Your photo">
           {capturedPhotoUri ? (
@@ -272,7 +320,7 @@ export function TryOnUploadScreen() {
             disabled={!canSubmit}
             loading={isSubmitting}
           >
-            {isSubmitting ? 'Processing…' : '✨  Generate try-on'}
+            {limitReached ? 'Daily limit reached' : isSubmitting ? 'Processing…' : '✨  Generate try-on'}
           </PrimaryButton>
 
           {tryOnStatus === 'error' && (

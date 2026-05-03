@@ -11,6 +11,7 @@
  */
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+const demoMode = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
 
 if (__DEV__ && apiUrl === 'http://localhost:3001') {
   console.warn(
@@ -29,4 +30,7 @@ if (!__DEV__ && apiUrl.includes('YOUR_RAILWAY')) {
 
 export const env = {
   EXPO_PUBLIC_API_URL: apiUrl,
+  EXPO_PUBLIC_DEMO_MODE: demoMode,
 } as const;
+
+export const demoModeEnabled = demoMode;

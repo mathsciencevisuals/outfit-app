@@ -111,7 +111,7 @@ export function MeasurementsScreen() {
     setSaving(true);
     try {
       await mobileApi.saveMeasurements(userId, updates);
-      router.replace('/style-preferences');
+      router.replace('/style-preferences' as never);
     } catch (err) {
       Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
@@ -212,7 +212,7 @@ export function MeasurementsScreen() {
         <PrimaryButton onPress={handleSave} loading={saving}>
           Continue to style →
         </PrimaryButton>
-        <PrimaryButton variant="ghost" onPress={() => router.push('/style-preferences')}>
+        <PrimaryButton variant="ghost" onPress={() => router.push('/style-preferences' as never)}>
           Skip for now
         </PrimaryButton>
       </View>

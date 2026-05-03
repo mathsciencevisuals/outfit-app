@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsNumber, IsObject, IsOptional, IsString } from "class-validator";
 
 import { AuthorizationService } from "../../common/auth/authorization.service";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
@@ -44,11 +44,36 @@ class SavedLookDto {
   @IsString()
   tryOnImageUrl?: string;
 
+  @IsOptional()
+  @IsString()
+  sourceScreen?: string;
+
+  @IsOptional()
+  @IsNumber()
+  fitScore?: number;
+
+  @IsOptional()
+  @IsString()
+  stylistNote?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+
   @IsArray()
   productIds!: string[];
 }
 
-const OPTIONAL_SAVED_LOOK_COLUMNS = ["isWishlist", "tryOnResultId", "tryOnImageUrl"] as const;
+const OPTIONAL_SAVED_LOOK_COLUMNS = [
+  "isWishlist",
+  "tryOnResultId",
+  "tryOnImageUrl",
+  "sourceScreen",
+  "fitScore",
+  "stylistNote",
+  "metadata",
+  "savedAt"
+] as const;
 type OptionalSavedLookColumn = (typeof OPTIONAL_SAVED_LOOK_COLUMNS)[number];
 
 type SavedLookRecord = {
@@ -59,6 +84,11 @@ type SavedLookRecord = {
   isWishlist: boolean;
   tryOnResultId: string | null;
   tryOnImageUrl: string | null;
+  sourceScreen: string | null;
+  fitScore: number | null;
+  stylistNote: string | null;
+  metadata: Record<string, unknown> | null;
+  savedAt: Date;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -79,8 +109,15 @@ class SavedLooksService {
 
   async create(user: AuthenticatedUser, dto: SavedLookDto) {
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot create this saved look");
-    const lookId = randomUUID();
+    const productIds = dto.productIds ?? [];
     const tryOnImageUrl = await this.resolveTryOnImageUrl(dto.tryOnResultId, dto.tryOnImageUrl);
+    const duplicate = await this.findDuplicate(dto.userId, productIds, tryOnImageUrl);
+    if (duplicate) {
+      return this.readLook(duplicate.id);
+    }
+
+    const lookId = randomUUID();
+    const metadataJson = JSON.stringify(dto.metadata ?? {});
 
     await this.prisma.$executeRaw(Prisma.sql`
       INSERT INTO "SavedLook" (
@@ -91,6 +128,11 @@ class SavedLooksService {
         "isWishlist",
         "tryOnResultId",
         "tryOnImageUrl",
+        "sourceScreen",
+        "fitScore",
+        "stylistNote",
+        "metadata",
+        "savedAt",
         "createdAt",
         "updatedAt"
       )
@@ -102,14 +144,19 @@ class SavedLooksService {
         ${dto.isWishlist ?? false},
         ${dto.tryOnResultId ?? null},
         ${tryOnImageUrl},
+        ${dto.sourceScreen ?? null},
+        ${dto.fitScore ?? null},
+        ${dto.stylistNote ?? null},
+        CAST(${metadataJson} AS JSONB),
+        NOW(),
         NOW(),
         NOW()
       )
     `);
 
-    if (dto.productIds.length > 0) {
+    if (productIds.length > 0) {
       await this.prisma.savedLookItem.createMany({
-        data: dto.productIds.map((productId) => ({
+        data: productIds.map((productId) => ({
           id: randomUUID(),
           savedLookId: lookId,
           productId
@@ -129,6 +176,7 @@ class SavedLooksService {
     this.authorizationService.assertSelfOrPrivileged(user, existing.userId, "You cannot update this saved look");
     this.authorizationService.assertSelfOrPrivileged(user, dto.userId, "You cannot reassign this saved look");
     const tryOnImageUrl = await this.resolveTryOnImageUrl(dto.tryOnResultId, dto.tryOnImageUrl);
+    const metadataJson = JSON.stringify(dto.metadata ?? {});
 
     await this.prisma.savedLookItem.deleteMany({ where: { savedLookId: id } });
     await this.prisma.$executeRaw(Prisma.sql`
@@ -138,13 +186,18 @@ class SavedLooksService {
           "isWishlist" = ${dto.isWishlist ?? false},
           "tryOnResultId" = ${dto.tryOnResultId ?? null},
           "tryOnImageUrl" = ${tryOnImageUrl},
+          "sourceScreen" = ${dto.sourceScreen ?? null},
+          "fitScore" = ${dto.fitScore ?? null},
+          "stylistNote" = ${dto.stylistNote ?? null},
+          "metadata" = CAST(${metadataJson} AS JSONB),
           "updatedAt" = NOW()
       WHERE id = ${id}
     `);
 
-    if (dto.productIds.length > 0) {
+    const productIds = dto.productIds ?? [];
+    if (productIds.length > 0) {
       await this.prisma.savedLookItem.createMany({
-        data: dto.productIds.map((productId) => ({
+        data: productIds.map((productId) => ({
           id: randomUUID(),
           savedLookId: id,
           productId
@@ -171,7 +224,7 @@ class SavedLooksService {
     const selects = await this.getSavedLookOptionalSelects();
     const rows = await this.prisma.$queryRawUnsafe<Array<SavedLookRecord>>(
       `
-      SELECT id, "userId", name, note, ${selects.isWishlist}, ${selects.tryOnResultId}, ${selects.tryOnImageUrl}, "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, ${selects.isWishlist}, ${selects.tryOnResultId}, ${selects.tryOnImageUrl}, ${selects.sourceScreen}, ${selects.fitScore}, ${selects.stylistNote}, ${selects.metadata}, ${selects.savedAt}, "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE id = $1
       LIMIT 1
@@ -273,10 +326,10 @@ class SavedLooksService {
     const selects = await this.getSavedLookOptionalSelects();
     const looks = await this.prisma.$queryRawUnsafe<Array<SavedLookRecord>>(
       `
-      SELECT id, "userId", name, note, ${selects.isWishlist}, ${selects.tryOnResultId}, ${selects.tryOnImageUrl}, "createdAt", "updatedAt"
+      SELECT id, "userId", name, note, ${selects.isWishlist}, ${selects.tryOnResultId}, ${selects.tryOnImageUrl}, ${selects.sourceScreen}, ${selects.fitScore}, ${selects.stylistNote}, ${selects.metadata}, ${selects.savedAt}, "createdAt", "updatedAt"
       FROM "SavedLook"
       WHERE "userId" = $1
-      ORDER BY "updatedAt" DESC
+      ORDER BY ${this.getSavedLookOrderBy(selects.savedAt)} DESC
     `,
       userId
     );
@@ -289,8 +342,17 @@ class SavedLooksService {
     return {
       isWishlist: columns.has("isWishlist") ? `"isWishlist"` : `FALSE AS "isWishlist"`,
       tryOnResultId: columns.has("tryOnResultId") ? `"tryOnResultId"` : `NULL::text AS "tryOnResultId"`,
-      tryOnImageUrl: columns.has("tryOnImageUrl") ? `"tryOnImageUrl"` : `NULL::text AS "tryOnImageUrl"`
+      tryOnImageUrl: columns.has("tryOnImageUrl") ? `"tryOnImageUrl"` : `NULL::text AS "tryOnImageUrl"`,
+      sourceScreen: columns.has("sourceScreen") ? `"sourceScreen"` : `NULL::text AS "sourceScreen"`,
+      fitScore: columns.has("fitScore") ? `"fitScore"` : `NULL::double precision AS "fitScore"`,
+      stylistNote: columns.has("stylistNote") ? `"stylistNote"` : `NULL::text AS "stylistNote"`,
+      metadata: columns.has("metadata") ? `"metadata"` : `NULL::jsonb AS "metadata"`,
+      savedAt: columns.has("savedAt") ? `"savedAt"` : `"createdAt" AS "savedAt"`
     };
+  }
+
+  private getSavedLookOrderBy(savedAtSelect: string) {
+    return savedAtSelect === `"savedAt"` ? `"savedAt"` : `"updatedAt"`;
   }
 
   private async getSavedLookColumns() {
@@ -323,6 +385,41 @@ class SavedLooksService {
     });
 
     return result?.outputImageUrl ?? null;
+  }
+
+  private async findDuplicate(userId: string, productIds: string[], tryOnImageUrl: string | null) {
+    const normalizedProductIds = [...new Set(productIds)].sort();
+    if (!tryOnImageUrl && normalizedProductIds.length === 0) {
+      return null;
+    }
+
+    const imagePredicate = tryOnImageUrl
+      ? Prisma.sql`AND "tryOnImageUrl" = ${tryOnImageUrl}`
+      : Prisma.sql`AND "tryOnImageUrl" IS NULL`;
+
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM "SavedLook"
+      WHERE "userId" = ${userId}
+      ${imagePredicate}
+      ORDER BY "updatedAt" DESC
+    `);
+
+    for (const row of rows) {
+      const items = await this.prisma.savedLookItem.findMany({
+        where: { savedLookId: row.id },
+        select: { productId: true }
+      });
+      const existingProductIds = items.map((item) => item.productId).sort();
+      const sameProducts =
+        existingProductIds.length === normalizedProductIds.length &&
+        existingProductIds.every((id, index) => id === normalizedProductIds[index]);
+      if (sameProducts) {
+        return row;
+      }
+    }
+
+    return null;
   }
 }
 

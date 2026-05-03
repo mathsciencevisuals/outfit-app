@@ -5,6 +5,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen }      from '../../components/Screen';
 import { SectionCard } from '../../components/SectionCard';
+import { useAsyncResource } from '../../hooks/useAsyncResource';
+import { mobileApi } from '../../services/api';
 import { useAppStore } from '../../store/app-store';
 import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
 
@@ -31,6 +33,14 @@ const SECTIONS: AdminSection[] = [
 export function AdminDashboardScreen() {
   const router   = useRouter();
   const userRole = useAppStore((s) => s.userRole);
+  const { data: analyticsSummary } = useAsyncResource(
+    () => mobileApi.adminAnalyticsSummary(),
+    [userRole],
+  );
+  const { data: trendDiagnostics } = useAsyncResource(
+    () => mobileApi.adminTrendDiagnostics(),
+    [userRole],
+  );
 
   useEffect(() => {
     if (userRole !== 'ADMIN' && userRole !== 'OPERATOR') {
@@ -75,8 +85,67 @@ export function AdminDashboardScreen() {
           ))}
         </View>
       </SectionCard>
+
+      {analyticsSummary ? (
+        <SectionCard title="Launch analytics" subtitle="Core activation, engagement, and conversion counters.">
+          <View style={styles.metricsGrid}>
+            <Metric label="Try-ons" value={analyticsSummary.tryOns} />
+            <Metric label="Saves" value={analyticsSummary.saves} />
+            <Metric label="Affiliate clicks" value={analyticsSummary.affiliateClicks} />
+            <Metric label="Shop clicks" value={analyticsSummary.shopClicks} />
+            <Metric label="Shares" value={analyticsSummary.shares} />
+            <Metric label="Merchant signups" value={analyticsSummary.merchantRegistrations} />
+          </View>
+        </SectionCard>
+      ) : null}
+
+      {trendDiagnostics ? (
+        <SectionCard title="Trend source diagnostics" subtitle="Instagram is optional; Pinterest, internal, and affiliate catalog signals stay primary.">
+          <View style={styles.diagnosticsList}>
+            {trendDiagnostics.map((item) => (
+              <View key={item.provider} style={styles.diagnosticRow}>
+                <View style={styles.diagnosticText}>
+                  <Text style={styles.diagnosticProvider}>{formatProvider(item.provider)}</Text>
+                  <Text style={styles.diagnosticNote} numberOfLines={2}>
+                    {item.errorMessage ?? item.notes ?? 'No recent errors.'}
+                  </Text>
+                  <Text style={styles.diagnosticMeta}>
+                    Last success: {item.lastSuccessfulFetchAt ? new Date(item.lastSuccessfulFetchAt).toLocaleString() : '—'}
+                  </Text>
+                </View>
+                <View style={[styles.statusPill, statusStyle(item.status)]}>
+                  <Text style={styles.statusText}>{item.status}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </SectionCard>
+      ) : null}
     </Screen>
   );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function formatProvider(provider: string) {
+  return provider
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function statusStyle(status: string) {
+  if (status === 'active') return styles.statusActive;
+  if (status === 'error') return styles.statusError;
+  if (status === 'disabled') return styles.statusDisabled;
+  return styles.statusPending;
 }
 
 const styles = StyleSheet.create({
@@ -149,5 +218,79 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
     lineHeight: 16,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  metricCard: {
+    width: '48%',
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface2,
+    padding: Spacing.md,
+    gap: 3,
+  },
+  metricValue: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  metricLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+  diagnosticsList: {
+    gap: Spacing.sm,
+  },
+  diagnosticRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface2,
+    padding: Spacing.md,
+  },
+  diagnosticText: {
+    flex: 1,
+    gap: 3,
+  },
+  diagnosticProvider: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  diagnosticNote: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  diagnosticMeta: {
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  statusPill: {
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  statusActive: {
+    backgroundColor: Colors.successDim,
+  },
+  statusPending: {
+    backgroundColor: Colors.warningDim,
+  },
+  statusError: {
+    backgroundColor: Colors.errorDim,
+  },
+  statusDisabled: {
+    backgroundColor: Colors.surface,
+  },
+  statusText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+    textTransform: 'capitalize',
   },
 });

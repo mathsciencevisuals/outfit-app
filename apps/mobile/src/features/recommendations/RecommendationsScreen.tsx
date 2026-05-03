@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CompleteLookSection } from '../../components/CompleteLookSection';
 import { ProductCard } from '../../components/ProductCard';
 import { useTheme } from '../../hooks/useTheme';
 import { mobileApi } from '../../services/api';
+import { analytics } from '../../services/analytics';
 import { useAppStore } from '../../store/app-store';
 import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
-import type { Product, Recommendation, TrendingPin } from '../../types';
+import type { Product, Recommendation, TrendingPin, UserProfile } from '../../types';
 
 export function RecommendationsScreen() {
   const { C }  = useTheme();
@@ -13,21 +15,37 @@ export function RecommendationsScreen() {
   const [trending, setTrending] = useState<Product[]>([]);
   const [recs,     setRecs]     = useState<Recommendation[]>([]);
   const [pins,     setPins]     = useState<TrendingPin[]>([]);
+  const [profile,  setProfile]  = useState<UserProfile | null>(null);
 
   useEffect(() => {
     mobileApi.trending(4).then(setTrending).catch(() => {});
     mobileApi.recommendations(userId).then(setRecs).catch(() => {});
     mobileApi.socialTrending(8).then(setPins).catch(() => {});
+    mobileApi.profile(userId).then(setProfile).catch(() => {});
   }, [userId]);
 
   const handleBuy = useCallback(async (product: Product) => {
     try {
-      const { affiliateUrl } = await mobileApi.affiliateLink(product.id);
+      const { affiliateUrl, shopName, price } = await mobileApi.affiliateLink(product.id);
+      analytics.track('affiliate_link_opened', {
+        productId: product.id,
+        sourceScreen: 'recommendations_buy_button',
+        shopName,
+        price,
+      }).catch(() => {});
       await Linking.openURL(affiliateUrl);
     } catch { /* no-op */ }
   }, []);
 
-  const recProducts = recs.map(r => r.product).filter(Boolean) as Product[];
+  const recProducts = useMemo(
+    () => recs.map(r => r.product).filter(Boolean) as Product[],
+    [recs]
+  );
+  const completeLookAnchor = recProducts[0] ?? trending[0] ?? null;
+  const completeLookFallback = useMemo(
+    () => recProducts.length > 1 ? recProducts.slice(1) : trending.slice(1),
+    [recProducts, trending]
+  );
 
   return (
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={styles.container}
@@ -45,10 +63,29 @@ export function RecommendationsScreen() {
       <View style={styles.grid}>
         {trending.map(p => (
           <View key={p.id} style={styles.gridCell}>
-            <ProductCard product={p} onBuy={handleBuy} />
+            <ProductCard
+              product={p}
+              profile={profile}
+              sourceScreen="recommendations_trending"
+              trackReasonsViewed
+              showBestPrice
+              onBuy={handleBuy}
+            />
           </View>
         ))}
       </View>
+
+      {completeLookAnchor ? (
+        <View style={[styles.completeLookSection, { backgroundColor: C.surface }]}>
+          <CompleteLookSection
+            userId={userId}
+            anchorProduct={completeLookAnchor}
+            sourceScreen="recommendations"
+            profile={profile}
+            fallbackProducts={completeLookFallback}
+          />
+        </View>
+      ) : null}
 
       {/* Pinterest Trending */}
       {pins.length > 0 && (
@@ -91,14 +128,33 @@ export function RecommendationsScreen() {
         <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>✨ Recommended for You</Text>
       </View>
       <View style={styles.grid}>
-        {recProducts.map(p => (
-          <View key={p.id} style={styles.gridCell}>
-            <ProductCard product={p} onBuy={handleBuy} />
-          </View>
-        ))}
+        {recs.map(rec => {
+          const p = rec.product;
+          if (!p) return null;
+          return (
+            <View key={p.id} style={styles.gridCell}>
+              <ProductCard
+                product={p}
+                recommendation={rec}
+                profile={profile}
+                sourceScreen="recommendations"
+                trackReasonsViewed
+                showBestPrice
+                onBuy={handleBuy}
+              />
+            </View>
+          );
+        })}
         {recProducts.length === 0 && trending.map(p => (
           <View key={p.id} style={styles.gridCell}>
-            <ProductCard product={p} onBuy={handleBuy} />
+            <ProductCard
+              product={p}
+              profile={profile}
+              sourceScreen="recommendations_fallback"
+              trackReasonsViewed
+              showBestPrice
+              onBuy={handleBuy}
+            />
           </View>
         ))}
       </View>
@@ -114,6 +170,11 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
   grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridCell:    { width: '48%' },
+  completeLookSection: {
+    marginTop: Spacing.lg,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+  },
   // Pinterest pin cards
   pinCard:     { width: '48%', borderRadius: Radius.lg, overflow: 'hidden' },
   pinImage:    { width: '100%', aspectRatio: 3 / 4 },

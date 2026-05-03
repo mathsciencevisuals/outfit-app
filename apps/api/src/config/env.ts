@@ -24,6 +24,9 @@ const baseEnvSchema = z
     MINIO_PUBLIC_URL: z.string().url().optional(),
     TRYON_PROVIDER: z.enum(["mock", "http", "grok", "gemini"]).default("mock"),
     TRYON_HTTP_BASE_URL: z.string().optional(),
+    ENABLE_PREMIUM_FEATURES: z.coerce.boolean().default(false),
+    TRYON_FREE_DAILY_LIMIT: z.coerce.number().int().positive().default(3),
+    TRYON_PREMIUM_DAILY_LIMIT: z.coerce.number().int().positive().default(20),
     GROK_API_KEY: z.string().optional(),
     GROK_USE_PRO: z.coerce.boolean().default(false),
     ANTHROPIC_API_KEY: z.string().optional(),
@@ -31,6 +34,10 @@ const baseEnvSchema = z
     GEMINI_IMAGE_MODEL: z.string().default("gemini-2.5-flash-image"),
     CUELINKS_API_KEY: z.string().optional(),
     CUELINKS_SOURCE_ID: z.string().optional(),
+    INSTAGRAM_TRENDS_ENABLED: z.coerce.boolean().default(false),
+    INSTAGRAM_GRAPH_APPROVED: z.coerce.boolean().default(false),
+    INSTAGRAM_ACCESS_TOKEN: z.string().optional(),
+    INSTAGRAM_BUSINESS_ACCOUNT_ID: z.string().optional(),
     PINTEREST_ACCESS_TOKEN: z.string().optional(),
     PINTEREST_BOARD_ID: z.string().optional()
   })

@@ -47,6 +47,8 @@ function StartupRedirector({ onReady }: { onReady: () => void }) {
               userId: session.user.id,
               accessToken,
               userRole: session.user.role,
+              userEmail: session.user.email,
+              profile: (session.user.profile ?? null) as never,
             });
             isAuthenticated = true;
             if (session.user.profile) {
@@ -141,6 +143,14 @@ export default function RootLayout() {
               <Stack.Screen name="saved-looks" />
               <Stack.Screen name="profile-main" />
               <Stack.Screen name="settings" />
+              <Stack.Screen name="premium" />
+              <Stack.Screen name="merchant" />
+              <Stack.Screen name="rewards" />
+              <Stack.Screen name="referrals" />
+              <Stack.Screen name="coupons" />
+              <Stack.Screen name="challenges" />
+              <Stack.Screen name="budget" />
+              <Stack.Screen name="processing" />
               <Stack.Screen name="admin" />
               <Stack.Screen name="admin-brands" />
               <Stack.Screen name="admin-products" />

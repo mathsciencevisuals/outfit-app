@@ -37,6 +37,9 @@ const { memoryStorage } = require("multer") as { memoryStorage: () => unknown };
 const TRYON_PROVIDERS = ["mock", "http", "grok", "gemini"] as const;
 type TryOnProviderMode = (typeof TRYON_PROVIDERS)[number];
 
+const FREE_PLAN = "FREE";
+const PREMIUM_PLAN = "PREMIUM";
+
 function normalizeTryOnProvider(provider?: string | null): TryOnProviderMode {
   const normalized = provider?.trim().toLowerCase();
   return TRYON_PROVIDERS.includes(normalized as TryOnProviderMode)
@@ -148,6 +151,13 @@ export class TryOnService {
       .then((requests: any[]) => requests.map((request: any) => this.serializeRequest(request)));
   }
 
+  async getCredits(user: AuthenticatedUser, userId?: string) {
+    const targetUserId = userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these try-on credits");
+    const record = await this.ensureTryOnCreditRecord(targetUserId);
+    return this.serializeTryOnCredit(record);
+  }
+
   async get(user: AuthenticatedUser, id: string) {
     const request = await (this.prisma.tryOnRequest as any).findUnique({
       where: { id },
@@ -222,6 +232,8 @@ export class TryOnService {
     const viewAnglesStr = dto.viewAngles ?? "front";
     const comparisonLabel = dto.comparisonLabel ?? viewAnglesStr;
 
+    await this.consumeTryOnCredit(dto.userId);
+
     const request = await (this.prisma.tryOnRequest as any).create({
       data: {
         userId: dto.userId,
@@ -260,6 +272,116 @@ export class TryOnService {
 
     await this.rewardsService.awardFirstTryOn(dto.userId);
     return this.serializeRequest(request);
+  }
+
+  private premiumFeaturesEnabled(): boolean {
+    return this.configService.get<boolean>("ENABLE_PREMIUM_FEATURES") === true;
+  }
+
+  private freeDailyLimit(): number {
+    return this.configService.get<number>("TRYON_FREE_DAILY_LIMIT") ?? 3;
+  }
+
+  private premiumDailyLimit(): number {
+    return this.configService.get<number>("TRYON_PREMIUM_DAILY_LIMIT") ?? 20;
+  }
+
+  private todayKey(date = new Date()): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private isPremiumActive(record?: { plan?: string | null; premiumUntil?: Date | string | null }): boolean {
+    if (record?.plan !== PREMIUM_PLAN) {
+      return false;
+    }
+    if (!record.premiumUntil) {
+      return true;
+    }
+    return new Date(record.premiumUntil).getTime() > Date.now();
+  }
+
+  private planLimit(record?: { plan?: string | null; premiumUntil?: Date | string | null }): number {
+    return this.isPremiumActive(record) ? this.premiumDailyLimit() : this.freeDailyLimit();
+  }
+
+  private async ensureTryOnCreditRecord(userId: string) {
+    const today = this.todayKey();
+    const existing = await ((this.prisma as any).tryOnCredit as any).findUnique({ where: { userId } });
+    if (!existing) {
+      return ((this.prisma as any).tryOnCredit as any).create({
+        data: {
+          userId,
+          plan: FREE_PLAN,
+          dailyLimit: this.freeDailyLimit(),
+          usedToday: 0,
+          bonusCredits: 0,
+          periodDate: today
+        }
+      });
+    }
+
+    const dailyLimit = this.planLimit(existing);
+    if (existing.periodDate !== today || existing.dailyLimit !== dailyLimit) {
+      return ((this.prisma as any).tryOnCredit as any).update({
+        where: { userId },
+        data: {
+          periodDate: today,
+          usedToday: existing.periodDate !== today ? 0 : existing.usedToday,
+          dailyLimit
+        }
+      });
+    }
+
+    return existing;
+  }
+
+  private serializeTryOnCredit(record: any) {
+    const enabled = this.premiumFeaturesEnabled();
+    const remainingToday = Math.max(0, (record.dailyLimit ?? this.freeDailyLimit()) + (record.bonusCredits ?? 0) - (record.usedToday ?? 0));
+    const plan = this.isPremiumActive(record) ? PREMIUM_PLAN : FREE_PLAN;
+
+    return {
+      enabled,
+      plan,
+      dailyLimit: record.dailyLimit ?? this.planLimit(record),
+      usedToday: record.usedToday ?? 0,
+      remainingToday,
+      bonusCredits: record.bonusCredits ?? 0,
+      periodDate: record.periodDate,
+      premiumUntil: record.premiumUntil ?? null,
+      limitReached: enabled ? remainingToday <= 0 : false,
+      features: {
+        standardQuality: true,
+        hdTryOn: plan === PREMIUM_PLAN,
+        advancedStylingNotes: plan === PREMIUM_PLAN,
+        earlyTrendAccess: plan === PREMIUM_PLAN
+      },
+      plans: {
+        free: {
+          dailyTryOns: this.freeDailyLimit(),
+          quality: "standard",
+          features: ["Limited daily try-ons", "Standard quality"]
+        },
+        premium: {
+          dailyTryOns: this.premiumDailyLimit(),
+          quality: "HD",
+          features: ["More try-ons", "HD try-on", "Advanced styling notes", "Early trend access"]
+        }
+      }
+    };
+  }
+
+  private async consumeTryOnCredit(userId: string) {
+    const record = await this.ensureTryOnCreditRecord(userId);
+    const balance = this.serializeTryOnCredit(record);
+    if (balance.limitReached) {
+      throw new BadRequestException("Daily try-on limit reached. Upgrade prompt is available, but payments are not enabled yet.");
+    }
+
+    return ((this.prisma as any).tryOnCredit as any).update({
+      where: { userId },
+      data: { usedToday: { increment: 1 } }
+    });
   }
 
   private async resolveTryOnVariant(variantId?: string, garmentImageUrl?: string | null) {
@@ -865,6 +987,11 @@ YOUR OUTPUT must be a single image showing IMAGE A's person wearing the garment 
 @Controller("try-on")
 class TryOnController {
   constructor(private readonly service: TryOnService) {}
+
+  @Get("credits")
+  getCredits(@CurrentUser() user: AuthenticatedUser, @Query("userId") userId?: string) {
+    return this.service.getCredits(user, userId);
+  }
 
   @Get("requests")
   list(@CurrentUser() user: AuthenticatedUser, @Query("userId") userId?: string) {

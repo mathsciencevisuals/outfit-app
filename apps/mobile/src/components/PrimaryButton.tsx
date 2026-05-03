@@ -8,6 +8,7 @@ interface PrimaryButtonProps {
   loading?: boolean;
   disabled?: boolean;
   style?: ViewStyle;
+  fullWidth?: boolean;
 }
 
 export function PrimaryButton({
@@ -17,6 +18,7 @@ export function PrimaryButton({
   loading = false,
   disabled = false,
   style,
+  fullWidth = false,
 }: PropsWithChildren<PrimaryButtonProps>) {
   const isDisabled = disabled || loading;
 
@@ -28,6 +30,7 @@ export function PrimaryButton({
         styles.base,
         styles[variant],
         isDisabled && styles.disabled,
+        fullWidth && styles.fullWidth,
         pressed && !isDisabled && styles.pressed,
         style,
       ]}
@@ -60,6 +63,7 @@ const styles = StyleSheet.create({
   danger:    { backgroundColor: Colors.error },
 
   disabled:  { opacity: 0.45 },
+  fullWidth: { alignSelf: 'stretch' },
   pressed:   { opacity: 0.80 },
 
   text:         { fontSize: FontSize.base, fontWeight: FontWeight.bold },

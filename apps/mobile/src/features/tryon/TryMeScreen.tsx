@@ -9,13 +9,15 @@ import {
 import type { ScrollView as ScrollViewRef } from 'react-native';
 
 import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { SaveLookButton } from '../../components/SaveLookButton';
 import { Toast } from '../../components/Toast';
 import { useTheme } from '../../hooks/useTheme';
 import { mobileApi } from '../../services/api';
+import { analytics } from '../../services/analytics';
 import { useAppStore, type UserGarment } from '../../store/app-store';
 import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../../utils/theme';
 import { formatPrice } from '../../utils/currency';
-import type { Product, ProductVariant, ViewAngle } from '../../types';
+import type { Product, ProductVariant, SavedLook, ViewAngle } from '../../types';
 import { VIEW_ANGLE_LABELS } from '../../types';
 
 const CATEGORIES = ['All', 'Tops', 'Dresses', 'Outerwear', 'Bottoms'] as const;
@@ -63,8 +65,6 @@ export function TryMeScreen() {
   const [fitInsight,     setFitInsight]     = useState<TryOnFitInsight | null>(null);
   const [activeView,     setActiveView]     = useState<ViewAngle>('front');
   const [requestId,      setRequestId]      = useState<string | null>(null);
-  const [savingLook,     setSavingLook]     = useState(false);
-  const [lookSaved,      setLookSaved]      = useState(false);
   const [savedCount,     setSavedCount]     = useState(0);
   const [savingToDevice, setSavingToDevice] = useState(false);
 
@@ -198,7 +198,7 @@ export function TryMeScreen() {
   };
 
   const resetResult = () => {
-    setGeneratedViews({}); setPrimaryUrl(null); setFitInsight(null); setLookSaved(false); setSavedCount(0);
+    setGeneratedViews({}); setPrimaryUrl(null); setFitInsight(null); setSavedCount(0);
   };
 
   // ── View angle toggle ─────────────────────────────────────────────────────────
@@ -235,6 +235,14 @@ export function TryMeScreen() {
         viewAngles: angles,
         garmentPhotoUri: garmentUri ?? undefined,
       });
+      analytics.track('tryon_started', {
+        sourceScreen: 'try_me',
+        productId: garmentProduct?.id,
+        variantId: garmentVariant?.id,
+        tryOnId: created.id,
+        tryOnRequestId: created.id,
+        garmentSource: garmentUri ? 'upload' : 'catalog',
+      }).catch(() => {});
       setRequestId(created.id); setLastTryOnId(created.id); setGenProgress(15);
 
       // Poll manually so we can display partial views as each angle completes.
@@ -284,29 +292,35 @@ export function TryMeScreen() {
         }
 
         if (result.status === 'FAILED') {
+          analytics.track('tryon_failed', {
+            sourceScreen: 'try_me',
+            productId: garmentProduct?.id,
+            variantId: garmentVariant?.id,
+            tryOnId: created.id,
+            tryOnRequestId: created.id,
+            stage: 'polling',
+            errorMessage: 'Try-on processing failed on the server.',
+          }).catch(() => {});
           throw new Error('Try-on processing failed on the server.');
         }
       }
     } catch (err) {
+      analytics.track('tryon_failed', {
+        sourceScreen: 'try_me',
+        productId: garmentProduct?.id,
+        variantId: garmentVariant?.id,
+        tryOnRequestId: requestId,
+        stage: 'generate',
+        errorMessage: err instanceof Error ? err.message : 'Please try again.',
+      }).catch(() => {});
       Alert.alert('Generation failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setGenerating(false); setGenProgress(0); setPendingViews(false);
     }
   };
 
-  // ── Save look ─────────────────────────────────────────────────────────────────
-  const handleSaveLook = async () => {
-    if (!primaryUrl) return;
-    setSavingLook(true);
-    try {
-      const savedLook = await mobileApi.saveLook({
-        userId,
-        name: garmentProduct?.name ?? 'Uploaded garment try-on',
-        note: garmentProduct ? undefined : 'Saved from an uploaded garment try-on.',
-        tryOnResultId: requestId ?? undefined,
-        tryOnImageUrl: primaryUrl,
-        products: garmentProduct ? [garmentProduct] : [],
-      });
+  const handleLookSaved = async (savedLook: SavedLook) => {
+    if (primaryUrl) {
       const localUri = await saveImageToDevice(primaryUrl, `saved_${savedLook.id}`);
       setLocalSavedLookPreview({
         lookId: savedLook.id,
@@ -314,13 +328,12 @@ export function TryMeScreen() {
         imageUri: localUri,
         createdAt: new Date().toISOString(),
       });
-      setLookSaved(true);
-      showToast('Look saved!');
-    } catch (err) {
-      Alert.alert('Save failed', err instanceof Error ? err.message : 'Please try again.');
-    } finally {
-      setSavingLook(false);
     }
+    showToast('Look saved!');
+  };
+
+  const handleLookUnsaved = () => {
+    showToast('Look removed');
   };
 
   // ── Save to device ────────────────────────────────────────────────────────────
@@ -586,16 +599,28 @@ export function TryMeScreen() {
             {activeImageUrl && (
               <View style={styles.resultImageWrap}>
                 <Image source={{ uri: activeImageUrl }} style={styles.resultImage} resizeMode="cover" />
-                <Pressable
-                  style={[
-                    styles.imageSaveBtn,
-                    { backgroundColor: lookSaved ? C.success : C.primary },
-                  ]}
-                  onPress={handleSaveLook}
-                  disabled={savingLook || lookSaved}
-                >
-                  <Ionicons name={lookSaved ? 'checkmark' : 'bookmark'} size={18} color="#fff" />
-                </Pressable>
+                <SaveLookButton
+                  product={garmentProduct}
+                  generatedImageUrl={activeImageUrl}
+                  tryOnResultId={requestId}
+                  fitScore={fitInsight?.fitScore ?? undefined}
+                  stylistNote={fitInsight?.stylistNote ?? undefined}
+                  sourceScreen="try_me_image"
+                  mode="icon"
+                  style={styles.imageSaveBtn}
+                  note={garmentProduct ? undefined : 'Saved from an uploaded garment try-on.'}
+                  metadata={{
+                    saveType: 'try_me_result',
+                    activeView,
+                    generatedViews,
+                    sizeRecommendation: fitInsight?.sizeRecommendation,
+                    colourMatch: fitInsight?.colourMatch,
+                    occasion: fitInsight?.occasion,
+                    styleNotes: fitInsight?.styleNotes,
+                  }}
+                  onSaved={handleLookSaved}
+                  onUnsaved={handleLookUnsaved}
+                />
               </View>
             )}
 
@@ -657,21 +682,27 @@ export function TryMeScreen() {
               )}
 
               {/* Save look */}
-              {lookSaved ? (
-                <View style={[styles.savedBadge, { backgroundColor: C.successDim, flex: 1 }]}>
-                  <Ionicons name="checkmark-circle" size={14} color={C.success} />
-                  <Text style={[styles.savedTxt, { color: C.success }]}>Saved to looks</Text>
-                </View>
-              ) : (
-                <Pressable
-                  style={[styles.actionBtn, { backgroundColor: C.primary, flex: 1 }]}
-                  onPress={handleSaveLook}
-                  disabled={savingLook}
-                >
-                  <Ionicons name="bookmark" size={14} color="#fff" />
-                  <Text style={styles.actionBtnTxt}>{savingLook ? 'Saving…' : 'Save Look'}</Text>
-                </Pressable>
-              )}
+              <SaveLookButton
+                product={garmentProduct}
+                generatedImageUrl={primaryUrl}
+                tryOnResultId={requestId}
+                fitScore={fitInsight?.fitScore ?? undefined}
+                stylistNote={fitInsight?.stylistNote ?? undefined}
+                sourceScreen="try_me_result"
+                mode="full"
+                style={{ flex: 1 }}
+                note={garmentProduct ? undefined : 'Saved from an uploaded garment try-on.'}
+                metadata={{
+                  saveType: 'try_me_result',
+                  generatedViews,
+                  sizeRecommendation: fitInsight?.sizeRecommendation,
+                  colourMatch: fitInsight?.colourMatch,
+                  occasion: fitInsight?.occasion,
+                  styleNotes: fitInsight?.styleNotes,
+                }}
+                onSaved={handleLookSaved}
+                onUnsaved={handleLookUnsaved}
+              />
             </View>
           </View>
         )}

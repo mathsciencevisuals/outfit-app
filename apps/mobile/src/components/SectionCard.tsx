@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Colors, FontSize, FontWeight, Radius, Shadow, Spacing } from '../utils/theme';
 
 interface SectionCardProps {
+  eyebrow?: string;
   title?: string;
   subtitle?: string;
   style?: ViewStyle;
@@ -10,6 +11,7 @@ interface SectionCardProps {
 }
 
 export function SectionCard({
+  eyebrow,
   title,
   subtitle,
   children,
@@ -18,9 +20,10 @@ export function SectionCard({
 }: PropsWithChildren<SectionCardProps>) {
   return (
     <View style={[styles.card, noPadding && styles.noPadding, Shadow.sm, style]}>
+      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      <View style={[styles.content, (title || subtitle) && styles.contentGap]}>
+      <View style={[styles.content, Boolean(title || subtitle || eyebrow) && styles.contentGap]}>
         {children}
       </View>
     </View>
@@ -36,6 +39,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   noPadding: { padding: 0, overflow: 'hidden' },
+  eyebrow: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
   title: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,

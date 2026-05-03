@@ -21,6 +21,7 @@ export const productSchema = z.object({
   secondaryColors: z.array(z.string()),
   materials: z.array(z.string()),
   styleTags: z.array(z.string()),
+  recommendationReasons: z.array(z.string()).optional(),
   variants: z.array(productVariantSchema).default([])
 });
 

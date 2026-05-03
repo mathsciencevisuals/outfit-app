@@ -99,6 +99,7 @@ model User {
   recommendations         Recommendation[]
   savedLooks              SavedLook[]
   uploads                 Upload[]
+  tryOnCredit             TryOnCredit?
   rewardWallet            RewardWallet?
   rewardTransactions      RewardTransaction[]
   referralCode            ReferralCode?
@@ -107,6 +108,7 @@ model User {
   couponRedemptions       CouponRedemption[]
   lookRatings             LookRating[]
   shareEvents             ShareEvent[]
+  appEvents               AppEvent[]
   challengeParticipations ChallengeParticipation[]
 }
 
@@ -301,6 +303,20 @@ model TryOnResult {
   request           TryOnRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 }
 
+model TryOnCredit {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  plan              String   @default("FREE")
+  dailyLimit        Int      @default(3)
+  usedToday         Int      @default(0)
+  bonusCredits      Int      @default(0)
+  periodDate        String
+  premiumUntil      DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model FitAssessment {
   id                String   @id @default(cuid())
   userId            String
@@ -342,6 +358,11 @@ model SavedLook {
   isWishlist        Boolean      @default(false)
   tryOnResultId     String?
   tryOnImageUrl     String?
+  sourceScreen      String?
+  fitScore          Float?
+  stylistNote       String?
+  metadata          Json?
+  savedAt           DateTime     @default(now())
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -534,6 +555,17 @@ model ShareEvent {
   user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   savedLook           SavedLook?    @relation(fields: [savedLookId], references: [id], onDelete: SetNull)
   tryOnRequest        TryOnRequest? @relation(fields: [tryOnRequestId], references: [id], onDelete: SetNull)
+}
+
+model AppEvent {
+  id                  String        @id @default(cuid())
+  userId              String
+  eventName           String
+  metadata            Json?
+  createdAt           DateTime      @default(now())
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, eventName, createdAt])
 }
 
 model ChallengeParticipation {

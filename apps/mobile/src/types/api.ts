@@ -192,6 +192,7 @@ export interface Product {
   cheaperAlternatives?: Product[];
   completeTheLook?: Product[];
   priceAnchor?: number | null;
+  recommendationReasons?: string[];
 }
 
 export interface InventoryOffer {
@@ -221,11 +222,14 @@ export interface Recommendation {
   fitWarning?: string | null;
   reasonTags?: string[];
   rankingBadges?: string[];
+  recommendationReasons?: string[];
   occasionTags?: Occasion[];
   budgetLabel?: string | null;
   colorInsight?: ColorInsight | null;
   offerSummary?: OfferSummary | null;
   cheaperAlternative?: Product | null;
+  completeLookSlot?: string;
+  completeLookLabel?: string;
 }
 
 export interface SavedLookItem {
@@ -236,13 +240,23 @@ export interface SavedLookItem {
 
 export interface SavedLook {
   id: string;
+  userId?: string;
   name: string;
   note?: string | null;
   isWishlist?: boolean;
+  tryOnResultId?: string | null;
+  tryOnImageUrl?: string | null;
+  sourceScreen?: string | null;
+  fitScore?: number | null;
+  stylistNote?: string | null;
+  metadata?: Record<string, unknown> | null;
+  savedAt?: string;
   items?: SavedLookItem[];
+  products?: Product[];
   offerSummary?: OfferSummary | null;
   recommendedProducts?: Product[];
   occasionTags?: Occasion[];
+  createdAt?: string;
 }
 
 export interface UserProfile {

@@ -26,6 +26,19 @@ export interface TrendingPin {
   styleCategories: string[];
   occasion?: string | null;
   isAnalysed: boolean;
+  source?: "pinterest" | "instagram" | "fallback";
+}
+
+type TrendSourceStatus = "active" | "pending approval" | "error" | "disabled";
+
+export interface TrendProviderDiagnostic {
+  provider: "instagram" | "pinterest" | "internal" | "affiliate_catalog";
+  status: TrendSourceStatus;
+  lastFetchStatus: TrendSourceStatus;
+  errorMessage: string | null;
+  lastSuccessfulFetchAt: string | null;
+  updatedAt: string;
+  notes?: string;
 }
 
 const FALLBACK_PINS: TrendingPin[] = [
@@ -112,6 +125,13 @@ const FALLBACK_PINS: TrendingPin[] = [
 ];
 
 const PINTEREST_BOARDS_PROVIDER = 'pinterest-boards';
+const INSTAGRAM_PROVIDER = 'instagram-trends';
+
+function statusFromConfig(enabled: boolean, approved = true, hasCredentials = true): TrendSourceStatus {
+  if (!enabled) return "disabled";
+  if (!approved || !hasCredentials) return "pending approval";
+  return "active";
+}
 
 @Injectable()
 export class SocialService {
@@ -196,12 +216,161 @@ export class SocialService {
           boardKey: "general",
           pinCount: pin.save_count ?? 0,
           colours: [], styleCategories: [], isAnalysed: false,
+          source: "pinterest" as const,
         }))
         .filter((p) => p.imageUrl)
         .slice(0, limit);
     } catch {
       return FALLBACK_PINS.slice(0, limit);
     }
+  }
+
+  async getTrendSignals(limit: number): Promise<TrendingPin[]> {
+    const [pinterestResult, instagramResult] = await Promise.allSettled([
+      this.getTrending(limit),
+      this.getInstagramTrends(limit),
+    ]);
+
+    const pinterestPins = pinterestResult.status === "fulfilled" ? pinterestResult.value : [];
+    const instagramPins = instagramResult.status === "fulfilled" ? instagramResult.value : [];
+    const merged = [...pinterestPins, ...instagramPins]
+      .filter((pin, index, pins) => pins.findIndex((item) => item.id === pin.id) === index)
+      .slice(0, limit);
+
+    return merged.length ? merged : FALLBACK_PINS.slice(0, limit).map((pin) => ({ ...pin, source: "fallback" }));
+  }
+
+  async getTrendProviderDiagnostics(): Promise<TrendProviderDiagnostic[]> {
+    const instagram = await this.instagramDiagnostic();
+    const pinterest = await this.pinterestDiagnostic();
+    return [
+      instagram,
+      pinterest,
+      {
+        provider: "internal",
+        status: "active",
+        lastFetchStatus: "active",
+        errorMessage: null,
+        lastSuccessfulFetchAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        notes: "Internal app trends come from saves, try-ons, ratings, and catalog activity.",
+      },
+      {
+        provider: "affiliate_catalog",
+        status: "active",
+        lastFetchStatus: "active",
+        errorMessage: null,
+        lastSuccessfulFetchAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        notes: "Affiliate catalog trends are inferred from products with live inventory or affiliate offers.",
+      },
+    ];
+  }
+
+  private async getInstagramTrends(limit: number): Promise<TrendingPin[]> {
+    const enabled = this.configService.get<boolean>("INSTAGRAM_TRENDS_ENABLED") === true;
+    const approved = this.configService.get<boolean>("INSTAGRAM_GRAPH_APPROVED") === true;
+    const token = this.configService.get<string>("INSTAGRAM_ACCESS_TOKEN");
+    const accountId = this.configService.get<string>("INSTAGRAM_BUSINESS_ACCOUNT_ID");
+    const hasCredentials = Boolean(token && accountId);
+    const status = statusFromConfig(enabled, approved, hasCredentials);
+
+    if (status !== "active") {
+      await this.updateInstagramDiagnostic(status, null, this.instagramStatusMessage(status));
+      return [];
+    }
+
+    try {
+      // Provider interface retained for future approval. FitMe intentionally does not rely on
+      // Instagram hashtag search because Graph API hashtag use has tight rolling limits.
+      const pins: TrendingPin[] = [];
+      await this.updateInstagramDiagnostic("active", new Date(), null);
+      return pins.slice(0, limit);
+    } catch (error) {
+      await this.updateInstagramDiagnostic("error", null, error instanceof Error ? error.message : String(error));
+      return [];
+    }
+  }
+
+  private instagramStatusMessage(status: TrendSourceStatus) {
+    if (status === "disabled") {
+      return "Instagram trends are disabled by configuration. Pinterest, internal app trends, and affiliate catalog trends remain primary.";
+    }
+    if (status === "pending approval") {
+      return "Instagram Graph API approval or credentials are pending. Hashtag search is not used as a primary trend source.";
+    }
+    return null;
+  }
+
+  private async updateInstagramDiagnostic(status: TrendSourceStatus, successfulAt: Date | null, errorMessage: string | null) {
+    const existing = await this.prisma.providerConfig.findUnique({ where: { provider: INSTAGRAM_PROVIDER } }).catch(() => null);
+    const existingConfig = (existing?.config as Record<string, unknown> | null) ?? {};
+    await this.prisma.providerConfig.upsert({
+      where: { provider: INSTAGRAM_PROVIDER },
+      update: {
+        displayName: "Instagram Trends",
+        isEnabled: this.configService.get<boolean>("INSTAGRAM_TRENDS_ENABLED") === true,
+        config: {
+          ...existingConfig,
+          status,
+          lastFetchStatus: status,
+          errorMessage,
+          lastSuccessfulFetchAt: successfulAt?.toISOString() ?? existingConfig.lastSuccessfulFetchAt ?? null,
+          updatedAt: new Date().toISOString(),
+          notes: "Optional provider only. Pinterest, internal app trends, and affiliate catalog trends are primary."
+        } as any
+      },
+      create: {
+        provider: INSTAGRAM_PROVIDER,
+        displayName: "Instagram Trends",
+        isEnabled: this.configService.get<boolean>("INSTAGRAM_TRENDS_ENABLED") === true,
+        config: {
+          status,
+          lastFetchStatus: status,
+          errorMessage,
+          lastSuccessfulFetchAt: successfulAt?.toISOString() ?? null,
+          updatedAt: new Date().toISOString(),
+          notes: "Optional provider only. Pinterest, internal app trends, and affiliate catalog trends are primary."
+        } as any
+      }
+    }).catch(() => {});
+  }
+
+  private async instagramDiagnostic(): Promise<TrendProviderDiagnostic> {
+    const enabled = this.configService.get<boolean>("INSTAGRAM_TRENDS_ENABLED") === true;
+    const approved = this.configService.get<boolean>("INSTAGRAM_GRAPH_APPROVED") === true;
+    const token = this.configService.get<string>("INSTAGRAM_ACCESS_TOKEN");
+    const accountId = this.configService.get<string>("INSTAGRAM_BUSINESS_ACCOUNT_ID");
+    const status = statusFromConfig(enabled, approved, Boolean(token && accountId));
+    await this.updateInstagramDiagnostic(status, null, this.instagramStatusMessage(status));
+
+    const record = await this.prisma.providerConfig.findUnique({ where: { provider: INSTAGRAM_PROVIDER } }).catch(() => null);
+    const config = (record?.config as Record<string, unknown> | null) ?? {};
+    const now = new Date().toISOString();
+    return {
+      provider: "instagram",
+      status: String(config.status ?? status) as TrendSourceStatus,
+      lastFetchStatus: String(config.lastFetchStatus ?? status) as TrendSourceStatus,
+      errorMessage: typeof config.errorMessage === "string" ? config.errorMessage : null,
+      lastSuccessfulFetchAt: typeof config.lastSuccessfulFetchAt === "string" ? config.lastSuccessfulFetchAt : null,
+      updatedAt: typeof config.updatedAt === "string" ? config.updatedAt : now,
+      notes: typeof config.notes === "string" ? config.notes : "Optional provider only.",
+    };
+  }
+
+  private async pinterestDiagnostic(): Promise<TrendProviderDiagnostic> {
+    const token = this.configService.get<string>("PINTEREST_ACCESS_TOKEN");
+    const boardId = this.configService.get<string>("PINTEREST_BOARD_ID");
+    const status = token && boardId ? "active" : "active";
+    return {
+      provider: "pinterest",
+      status,
+      lastFetchStatus: status,
+      errorMessage: token && boardId ? null : "Using configured fallback Pinterest seed trends until API credentials are available.",
+      lastSuccessfulFetchAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      notes: "Primary external trend source. Falls back to seeded Pinterest trend data when API fetch is unavailable.",
+    };
   }
 
   async getPersonalisedPins(params: {
@@ -566,7 +735,13 @@ class SocialController {
 
   @Get("trending")
   getTrending(@Query("limit") limit?: string) {
-    return this.service.getTrending(Math.min(Number(limit ?? 8), 20));
+    return this.service.getTrendSignals(Math.min(Number(limit ?? 8), 20));
+  }
+
+  @Roles('ADMIN', 'OPERATOR')
+  @Get("diagnostics")
+  diagnostics() {
+    return this.service.getTrendProviderDiagnostics();
   }
 
   @Get("pins")

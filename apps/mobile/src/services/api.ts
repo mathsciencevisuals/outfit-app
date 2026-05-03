@@ -1,11 +1,16 @@
 import { env } from '../utils/env';
 import { useAppStore } from '../store/app-store';
+import { analytics } from './analytics';
 import type {
   UserProfile, UserStats, Measurement, Product,
   Recommendation, SavedLook, Shop, PersonalizedTrendingResponse,
-  TryOnRequest, TryOnResult, TrendingPin, ViewAngle,
+  TryOnRequest, TryOnResult, TrendingPin, ViewAngle, DiscoverFeedResponse,
+  TryOnCreditBalance, TrendProviderDiagnostic,
 } from '../types';
-import type { AuthResponse, SessionResponse, UploadSession } from '../types/api';
+import type {
+  AuthResponse, SessionResponse, UploadSession,
+  Coupon, CouponRedemption, ReferralEvent, RewardTransaction, RewardWallet,
+} from '../types/api';
 
 const DEMO_EMAIL = 'demo@fitme.dev';
 const DEMO_PASSWORD = 'fitme1234';
@@ -96,6 +101,8 @@ export const mobileApi = {
           userId: session.user.id,
           accessToken: store.accessToken,
           userRole: session.user.role,
+          userEmail: session.user.email,
+          profile: (session.user.profile ?? null) as never,
           authEmail: preferredEmail,
           authPassword: preferredPassword,
         });
@@ -111,6 +118,8 @@ export const mobileApi = {
         userId: auth.user.id,
         accessToken: auth.accessToken,
         userRole: auth.user.role,
+        userEmail: auth.user.email,
+        profile: (auth.user.profile ?? null) as never,
         authEmail: preferredEmail,
         authPassword: preferredPassword,
       });
@@ -132,6 +141,8 @@ export const mobileApi = {
         userId: auth.user.id,
         accessToken: auth.accessToken,
         userRole: auth.user.role,
+        userEmail: auth.user.email,
+        profile: (auth.user.profile ?? null) as never,
         authEmail: fallbackAccount.email,
         authPassword: fallbackAccount.password,
       });
@@ -148,12 +159,18 @@ export const mobileApi = {
       method: 'PUT', body: JSON.stringify(updates),
     }),
 
-  uploadProfilePhoto: (userId: string, localImageUri: string): Promise<{ avatarUrl: string }> => {
+  uploadProfilePhoto: async (userId: string, localImageUri: string): Promise<{ avatarUrl: string }> => {
     const form = new FormData();
     form.append('userId', userId);
     const filename = localImageUri.split('/').pop() ?? 'avatar.jpg';
     form.append('photo', { uri: localImageUri, name: filename, type: 'image/jpeg' } as unknown as Blob);
-    return apiUpload<{ avatarUrl: string }>(`/profile/${userId}/photo`, form);
+    const result = await apiUpload<{ avatarUrl: string }>(`/profile/${userId}/photo`, form);
+    analytics.track('profile_photo_uploaded', {
+      userId,
+      sourceScreen: 'profile',
+      avatarUrl: result.avatarUrl,
+    }).catch(() => {});
+    return result;
   },
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -166,10 +183,18 @@ export const mobileApi = {
   measurements: (userId: string): Promise<Measurement[]> =>
     apiFetch<Measurement[]>(`/measurements?userId=${userId}`),
 
-  saveMeasurements: (userId: string, data: Partial<Measurement>): Promise<Measurement> =>
-    apiFetch<Measurement>('/measurements', {
+  saveMeasurements: async (userId: string, data: Partial<Measurement>): Promise<Measurement> => {
+    const result = await apiFetch<Measurement>('/measurements', {
       method: 'POST', body: JSON.stringify({ userId, ...data }),
-    }),
+    });
+    analytics.track('measurements_saved', {
+      userId,
+      sourceScreen: 'measurements',
+      measurementId: result.id,
+      source: data.source,
+    }).catch(() => {});
+    return result;
+  },
 
   // ── Products ──────────────────────────────────────────────────────────────
   products: (params?: { category?: string; limit?: number; trending?: boolean }): Promise<Product[]> => {
@@ -188,6 +213,9 @@ export const mobileApi = {
 
   personalizedTrending: (userId: string, limit = 8): Promise<PersonalizedTrendingResponse> =>
     apiFetch<PersonalizedTrendingResponse>(`/products/trending?userId=${encodeURIComponent(userId)}&limit=${limit}`),
+
+  discoverFeed: (userId: string, limit = 8): Promise<DiscoverFeedResponse> =>
+    apiFetch<DiscoverFeedResponse>(`/products/discover-feed?userId=${encodeURIComponent(userId)}&limit=${limit}`),
 
   // ── Saved Products ────────────────────────────────────────────────────────
   // GET /users/:userId/saved-products
@@ -247,6 +275,10 @@ export const mobileApi = {
         note: look.note,
         tryOnResultId: look.tryOnResultId,
         tryOnImageUrl: look.tryOnImageUrl,
+        sourceScreen: look.sourceScreen,
+        fitScore: look.fitScore,
+        stylistNote: look.stylistNote,
+        metadata: look.metadata,
         productIds: (look.products ?? []).map((product) => product.id),
       }),
     }),
@@ -319,25 +351,105 @@ export const mobileApi = {
   referralCode: (): Promise<{ id: string; code: string; userId: string }> =>
     apiFetch('/referrals/code'),
 
+  referralEvents: (): Promise<ReferralEvent[]> =>
+    apiFetch('/referrals/events'),
+
+  createReferralEvent: async (data: { eventType: string; metadata?: Record<string, unknown> }): Promise<ReferralEvent> => {
+    const result = await apiFetch<ReferralEvent>('/referrals/events', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (data.eventType === 'INVITE_SENT') {
+      analytics.track('referral_code_shared', {
+        sourceScreen: 'referrals',
+        channel: typeof data.metadata?.channel === 'string' ? data.metadata.channel : undefined,
+      }).catch(() => {});
+    }
+    return result;
+  },
+
   recordShare: (data: { tryOnRequestId?: string; savedLookId?: string; channel: string }): Promise<void> =>
     apiFetch('/engagement/share-events', { method: 'POST', body: JSON.stringify(data) }),
 
+  trackEvent: (eventName: 'look_saved' | 'look_unsaved' | string, metadata?: Record<string, unknown>): Promise<void> =>
+    apiFetch('/engagement/events', { method: 'POST', body: JSON.stringify({ eventName, metadata }) }),
+
   // ── Merchant Portal ───────────────────────────────────────────────────────
-  merchantRegister: (data: { name: string; url: string; region: string; description?: string }): Promise<{ id: string; name: string; slug: string }> =>
-    apiFetch('/merchant/register', { method: 'POST', body: JSON.stringify(data) }),
+  merchantRegister: async (data: { name: string; url: string; region: string; description?: string }): Promise<{ id: string; name: string; slug: string }> => {
+    const result = await apiFetch<{ id: string; name: string; slug: string }>('/merchant/register', { method: 'POST', body: JSON.stringify(data) });
+    analytics.track('merchant_registered', {
+      sourceScreen: 'merchant_portal',
+      merchantId: result.id,
+      shopName: result.name,
+    }).catch(() => {});
+    return result;
+  },
 
   merchantShop: (): Promise<{
     id: string; name: string; slug: string; url: string; region: string;
     description: string | null;
-    inventoryOffers: Array<{ id: string; price: number; stock: number; externalUrl: string; variantId: string; variant?: { id: string; product?: { id: string; name: string } } }>;
+    inventoryOffers: Array<{
+      id: string; price: number; stock: number; externalUrl: string; variantId: string;
+      variant?: { id: string; imageUrl?: string | null; product?: { id: string; name: string; imageUrl?: string | null } };
+    }>;
   }> =>
     apiFetch('/merchant/shop'),
 
   merchantUpdateShop: (data: { name?: string; url?: string; region?: string; description?: string }): Promise<void> =>
     apiFetch('/merchant/shop', { method: 'PUT', body: JSON.stringify(data) }),
 
-  merchantCreateOffer: (data: { variantId: string; externalUrl: string; price: number; stock: number; currency?: string }): Promise<{ id: string }> =>
-    apiFetch('/merchant/offers', { method: 'POST', body: JSON.stringify(data) }),
+  merchantCreateOffer: async (data: { variantId: string; externalUrl: string; price: number; stock: number; currency?: string }): Promise<{ id: string }> => {
+    const result = await apiFetch<{ id: string }>('/merchant/offers', { method: 'POST', body: JSON.stringify(data) });
+    analytics.track('merchant_offer_created', {
+      sourceScreen: 'merchant_portal',
+      offerId: result.id,
+      variantId: data.variantId,
+      price: data.price,
+    }).catch(() => {});
+    return result;
+  },
+
+  merchantPublishListing: async (data: {
+    title: string;
+    category: string;
+    price: number;
+    sizes: string[];
+    location: string;
+    imageUrl?: string;
+    description?: string;
+    color?: string;
+    externalUrl?: string;
+    stock?: number;
+    currency?: string;
+  }): Promise<{ product: Product; offer: { id: string; price: number; stock: number; externalUrl: string } }> => {
+    const result = await apiFetch<{ product: Product; offer: { id: string; price: number; stock: number; externalUrl: string } }>('/merchant/listings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    analytics.track('merchant_listing_published', {
+      sourceScreen: 'merchant_portal',
+      productId: result.product.id,
+      offerId: result.offer.id,
+      price: data.price,
+    }).catch(() => {});
+    analytics.track('merchant_offer_created', {
+      sourceScreen: 'merchant_portal',
+      productId: result.product.id,
+      offerId: result.offer.id,
+      price: data.price,
+    }).catch(() => {});
+    return result;
+  },
+
+  adminAnalyticsSummary: (): Promise<{
+    tryOns: number;
+    saves: number;
+    affiliateClicks: number;
+    shopClicks: number;
+    shares: number;
+    merchantRegistrations: number;
+  }> =>
+    apiFetch('/engagement/analytics-summary'),
 
   merchantUpdateOffer: (offerId: string, data: { price?: number; stock?: number; externalUrl?: string }): Promise<void> =>
     apiFetch(`/merchant/offers/${offerId}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -345,9 +457,79 @@ export const mobileApi = {
   merchantDeleteOffer: (offerId: string): Promise<void> =>
     apiFetch(`/merchant/offers/${offerId}`, { method: 'DELETE' }),
 
+  rewardsWallet: (): Promise<RewardWallet> =>
+    apiFetch('/rewards/wallet'),
+
+  rewardTransactions: (): Promise<RewardTransaction[]> =>
+    apiFetch('/rewards/transactions'),
+
+  coupons: (): Promise<Coupon[]> =>
+    apiFetch('/coupons'),
+
+  campaigns: (): Promise<any[]> =>
+    apiFetch('/campaigns'),
+
+  challenges: async (): Promise<any[]> => {
+    const campaigns = await apiFetch<any[]>('/campaigns');
+    return campaigns.map((campaign) => ({
+      ...campaign,
+      participation: Array.isArray(campaign.challengeParticipations)
+        ? campaign.challengeParticipations[0] ?? null
+        : campaign.participation ?? null,
+    }));
+  },
+
+  challengeParticipation: async (): Promise<any[]> => {
+    const campaigns = await apiFetch<any[]>('/campaigns');
+    return campaigns.flatMap((campaign) =>
+      Array.isArray(campaign.challengeParticipations) ? campaign.challengeParticipations : []
+    );
+  },
+
+  joinChallenge: async (campaignId: string): Promise<any> => {
+    analytics.track('coupon_unlocked', {
+      sourceScreen: 'challenges',
+      couponId: campaignId,
+      action: 'challenge_joined',
+    } as never).catch(() => {});
+    return { id: campaignId, status: 'JOINED' };
+  },
+
+  completeChallenge: async (campaignId: string): Promise<any> => {
+    analytics.track('coupon_redeemed', {
+      sourceScreen: 'challenges',
+      couponId: campaignId,
+      action: 'challenge_completed',
+    } as never).catch(() => {});
+    return { id: campaignId, status: 'COMPLETED', rewardPoints: 0 };
+  },
+
+  couponRedemptions: (): Promise<CouponRedemption[]> =>
+    apiFetch('/coupons/redemptions'),
+
+  unlockCoupon: async (couponId: string): Promise<CouponRedemption> => {
+    const result = await apiFetch<CouponRedemption>(`/coupons/${couponId}/unlock`, { method: 'POST' });
+    analytics.track('coupon_unlocked', {
+      sourceScreen: 'coupons',
+      couponId,
+    }).catch(() => {});
+    return result;
+  },
+
+  redeemCoupon: async (couponId: string): Promise<CouponRedemption> => {
+    const result = await apiFetch<CouponRedemption>(`/coupons/${couponId}/redeem`, { method: 'POST' });
+    analytics.track('coupon_redeemed', {
+      sourceScreen: 'coupons',
+      couponId,
+    }).catch(() => {});
+    return result;
+  },
+
   merchantAnalytics: (): Promise<{
     shopName: string; productCount: number; offerCount: number;
     tryOnCount: number; completedTryOns: number; conversionRate: number;
+    shopClicks?: number; leadsGenerated?: number;
+    topTriedGarments?: Array<{ variantId: string; name: string; tryOns: number }>;
   }> =>
     apiFetch('/merchant/analytics'),
 
@@ -393,6 +575,11 @@ export const mobileApi = {
       body: JSON.stringify({ userId, tryOnRequestId }),
     }),
 
+  completeLookRecommendations: (userId: string, productId: string): Promise<Recommendation[]> =>
+    apiFetch<Recommendation[]>(
+      `/recommendations/complete-look?userId=${encodeURIComponent(userId)}&productId=${encodeURIComponent(productId)}`
+    ),
+
   // ── Uploads ───────────────────────────────────────────────────────────────
   createUploadSession: (userId: string, mimeType: string, purpose: string): Promise<UploadSession> =>
     apiFetch<UploadSession>('/uploads/presign', {
@@ -409,6 +596,9 @@ export const mobileApi = {
   },
 
   // ── Try-On ────────────────────────────────────────────────────────────────
+  tryOnCredits: (userId: string): Promise<TryOnCreditBalance> =>
+    apiFetch<TryOnCreditBalance>(`/try-on/credits?userId=${encodeURIComponent(userId)}`),
+
   createTryOn: async (
     userId: string,
     variantId: string | undefined,
@@ -518,6 +708,9 @@ export const mobileApi = {
   // ── Admin: Pinterest Boards ───────────────────────────────────────────────
   adminGetPinterestBoards: (): Promise<Array<{ key: string; boardId: string }>> =>
     apiFetch<Array<{ key: string; boardId: string }>>('/social/boards'),
+
+  adminTrendDiagnostics: (): Promise<TrendProviderDiagnostic[]> =>
+    apiFetch<TrendProviderDiagnostic[]>('/social/diagnostics'),
 
   adminUpdatePinterestBoards: (boards: Array<{ key: string; boardId: string }>): Promise<{ updated: number }> =>
     apiFetch<{ updated: number }>('/social/boards', {

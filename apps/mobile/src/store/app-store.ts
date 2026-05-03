@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Product, ProductVariant, TryOnStatus } from '../types';
+import type { Product, ProductVariant, TryOnStatus, UserProfile } from '../types';
 
 export type AccentColor = 'teal' | 'purple' | 'blue' | 'pink';
 export type ThemeMode  = 'light' | 'dark';
@@ -24,6 +24,8 @@ interface AppState {
   accessToken:       string | null;
   authEmail:         string | null;
   authPassword:      string | null;
+  userEmail:         string | null;
+  profile:           UserProfile | null;
   theme:             ThemeMode;
   accent:            AccentColor;
   savedProductIds:   string[];
@@ -42,7 +44,17 @@ interface AppState {
 
   setUserId:              (id: string) => void;
   setAccessToken:         (token: string | null) => void;
-  setSession:             (session: { userId: string; accessToken: string | null; userRole?: string; authEmail?: string | null; authPassword?: string | null }) => void;
+  setSession:             (session: {
+    userId: string;
+    accessToken: string | null;
+    userRole?: string;
+    authEmail?: string | null;
+    authPassword?: string | null;
+    userEmail?: string | null;
+    profile?: UserProfile | null;
+  }) => void;
+  setProfile:             (profile: UserProfile | null) => void;
+  logout:                 () => Promise<void>;
   setTheme:               (t: ThemeMode) => void;
   setAccent:              (a: AccentColor) => void;
   toggleSavedProduct:     (id: string) => void;
@@ -69,6 +81,8 @@ export const useAppStore = create<AppState>()(
       accessToken:        null,
       authEmail:          null,
       authPassword:       null,
+      userEmail:          null,
+      profile:            null,
       theme:              'light',
       accent:             'teal',
       savedProductIds:    [],
@@ -85,14 +99,28 @@ export const useAppStore = create<AppState>()(
 
       setUserId:  (id)  => set({ userId: id }),
       setAccessToken: (token) => set({ accessToken: token }),
-      setSession: ({ userId, accessToken, userRole, authEmail, authPassword }) =>
+      setSession: ({ userId, accessToken, userRole, authEmail, authPassword, userEmail, profile }) =>
         set((state) => ({
           userId,
           accessToken,
           userRole:     userRole     ?? state.userRole,
           authEmail:    authEmail    ?? state.authEmail,
           authPassword: authPassword ?? state.authPassword,
+          userEmail:    userEmail    ?? authEmail ?? state.userEmail,
+          profile:      profile      ?? state.profile,
         })),
+      setProfile: (profile) => set({ profile }),
+      logout: async () => {
+        set({
+          accessToken: null,
+          authPassword: null,
+          userRole: 'USER',
+          profile: null,
+          savedProductIds: [],
+          compareProductIds: [],
+          lastTryOnRequestId: null,
+        });
+      },
       setTheme:   (t) => set({ theme: t }),
       setAccent:  (a) => set({ accent: a }),
 
@@ -152,6 +180,8 @@ export const useAppStore = create<AppState>()(
         accessToken:        state.accessToken,
         authEmail:          state.authEmail,
         authPassword:       state.authPassword,
+        userEmail:          state.userEmail,
+        profile:            state.profile,
         theme:              state.theme,
         accent:             state.accent,
         savedProductIds:    state.savedProductIds,

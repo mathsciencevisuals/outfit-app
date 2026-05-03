@@ -16,7 +16,7 @@ export function AppProfileStrip({ tone = "light" }: { tone?: "light" | "dark" })
   const displayName =
     `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() || userEmail || "Fit profile";
   const measurementCount = profile?.measurements?.filter(
-    (entry) =>
+    (entry: any) =>
       entry.chestCm != null ||
       entry.waistCm != null ||
       entry.hipsCm != null ||
@@ -24,12 +24,12 @@ export function AppProfileStrip({ tone = "light" }: { tone?: "light" | "dark" })
       entry.shoulderCm != null ||
       entry.footLengthCm != null
   ).length;
-  const canExitToFeed = pathname !== "/feed" && pathname !== "/(tabs)/feed";
+  const canExitToFeed = pathname !== "/dashboard";
 
   const handleLogout = async () => {
     await logout();
     (router as { dismissAll?: () => void }).dismissAll?.();
-    router.replace("/onboarding");
+    router.replace("/auth");
   };
 
   return (
@@ -58,9 +58,9 @@ export function AppProfileStrip({ tone = "light" }: { tone?: "light" | "dark" })
       </View>
 
       <View style={styles.actions}>
-        <StripButton label="Profile" icon="user" onPress={() => router.push("/account")} tone={tone} />
+        <StripButton label="Profile" icon="user" onPress={() => router.push("/profile-main" as never)} tone={tone} />
         <StripButton label="Measurements" icon="sliders" onPress={() => router.push("/measurements")} tone={tone} />
-        {canExitToFeed ? <StripButton label="Exit" icon="x" onPress={() => router.push("/feed")} tone={tone} /> : null}
+        {canExitToFeed ? <StripButton label="Exit" icon="x" onPress={() => router.push("/dashboard" as never)} tone={tone} /> : null}
         <StripButton label="Logout" icon="log-out" onPress={() => void handleLogout()} tone={tone} destructive />
       </View>
     </View>

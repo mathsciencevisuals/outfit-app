@@ -133,6 +133,120 @@ function buildExplanation(item: {
   return lines.join(" ");
 }
 
+function categoryToken(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function categoryMatches(product: any, tokens: string[]) {
+  const haystack = [
+    product?.category,
+    product?.name,
+    product?.description,
+    ...(product?.styleTags ?? []),
+    ...(product?.occasionTags ?? [])
+  ].map(categoryToken).join(" ");
+
+  return tokens.some((token) => haystack.includes(token));
+}
+
+function completeLookSlots(anchorCategory: string) {
+  const category = categoryToken(anchorCategory);
+
+  if (category.includes("kurta")) {
+    return [
+      { slot: "bottom", label: "Bottom", tokens: ["legging", "leggings", "palazzo", "trouser", "pants", "bottom"] },
+      { slot: "shoes", label: "Footwear", tokens: ["shoe", "sneaker", "sandal", "juti", "jutti", "footwear"] },
+      { slot: "accessory", label: "Accessory", tokens: ["accessory", "bag", "earring", "dupatta", "scarf", "jewellery", "jewelry"] }
+    ];
+  }
+
+  if (category.includes("shirt") || category.includes("top") || category.includes("tee") || category.includes("blouse")) {
+    return [
+      { slot: "bottom", label: "Bottom", tokens: ["jeans", "trouser", "pants", "chino", "skirt", "bottom"] },
+      { slot: "shoes", label: "Shoes", tokens: ["shoe", "sneaker", "loafer", "sandal", "footwear"] }
+    ];
+  }
+
+  if (category.includes("dress")) {
+    return [
+      { slot: "shoes", label: "Footwear", tokens: ["shoe", "heel", "sandal", "sneaker", "footwear"] },
+      { slot: "accessory", label: "Accessory", tokens: ["accessory", "bag", "earring", "necklace", "jewellery", "jewelry"] },
+      { slot: "layer", label: "Layer", tokens: ["jacket", "shrug", "blazer", "cardigan", "layer"] }
+    ];
+  }
+
+  if (category.includes("bottom") || category.includes("jean") || category.includes("trouser") || category.includes("pant") || category.includes("skirt")) {
+    return [
+      { slot: "top", label: "Top", tokens: ["shirt", "top", "tee", "kurta", "blouse"] },
+      { slot: "shoes", label: "Shoes", tokens: ["shoe", "sneaker", "loafer", "sandal", "footwear"] },
+      { slot: "accessory", label: "Accessory", tokens: ["accessory", "bag", "belt", "watch"] }
+    ];
+  }
+
+  return [
+    { slot: "top", label: "Top", tokens: ["shirt", "top", "tee", "kurta", "blouse"] },
+    { slot: "bottom", label: "Bottom", tokens: ["jeans", "trouser", "pants", "palazzo", "legging", "bottom"] },
+    { slot: "shoes", label: "Shoes", tokens: ["shoe", "sneaker", "loafer", "sandal", "footwear"] },
+    { slot: "accessory", label: "Accessory", tokens: ["accessory", "bag", "belt", "watch", "jewellery", "jewelry"] }
+  ];
+}
+
+function stylePreferences(profile: any) {
+  const value = profile?.stylePreference;
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  return [
+    ...((value as any).preferredStyles ?? []),
+    ...((value as any).styles ?? []),
+    ...((value as any).vibes ?? [])
+  ].map(categoryToken).filter(Boolean);
+}
+
+function scoreCompleteLookCandidate(params: {
+  product: any;
+  anchor: any;
+  profile: any;
+  slot: { slot: string; label: string; tokens: string[] };
+}) {
+  const { product, anchor, profile, slot } = params;
+  const serialized = serializeProductCard(product);
+  const productStyles = (serialized.styleTags ?? []).map(categoryToken);
+  const anchorStyles = (anchor.styleTags ?? []).map(categoryToken);
+  const preferredStyles = stylePreferences(profile);
+  const productColors = [serialized.baseColor, ...(serialized.secondaryColors ?? [])].map(categoryToken);
+  const preferredColors = (profile?.preferredColors ?? []).map(categoryToken);
+  const anchorColors = [anchor.baseColor, ...(anchor.secondaryColors ?? [])].map(categoryToken);
+  const price = serialized.offerSummary?.lowestPrice ?? representativePriceForProduct(serialized);
+  const withinBudget =
+    profile?.budgetMax != null ? price <= Number(profile.budgetMax) :
+    profile?.budgetMin != null ? price >= Number(profile.budgetMin) :
+    false;
+  const styleOverlap = productStyles.filter((tag: string) => anchorStyles.includes(tag) || preferredStyles.includes(tag)).length;
+  const colorOverlap = productColors.filter((color: string) => preferredColors.includes(color) || anchorColors.includes(color)).length;
+  const offerCount = serialized.offerSummary?.offerCount ?? 0;
+  const shopCount = serialized.offerSummary?.shopCount ?? 0;
+
+  const score =
+    (categoryMatches(serialized, slot.tokens) ? 48 : 0) +
+    Math.min(18, styleOverlap * 6) +
+    Math.min(12, colorOverlap * 4) +
+    (withinBudget ? 12 : 0) +
+    (offerCount > 0 ? 8 : 2) +
+    (shopCount > 0 ? 6 : 0);
+
+  const reasons = [
+    `Completes the ${slot.label.toLowerCase()} slot`,
+    styleOverlap > 0 ? "Matches your style" : null,
+    colorOverlap > 0 ? "Works with this color palette" : null,
+    withinBudget ? "Fits your budget" : null,
+    offerCount > 0 ? "Best price found" : null,
+    shopCount > 0 ? "Available nearby" : null
+  ].filter((reason): reason is string => Boolean(reason));
+
+  return { serialized, score, reasons, withinBudget };
+}
+
 @Injectable()
 class RecommendationsService {
   constructor(
@@ -368,6 +482,14 @@ Sort by score descending. Include all ${candidates.length} products.`,
         bestFitLabel: fitPreview?.fitLabel ?? null,
         fitWarning: fitPreview?.issues?.[0]?.message ?? null,
         reasonTags: item.reasons,
+        recommendationReasons: [
+          ...item.reasons,
+          ...(item.badges ?? []),
+          item.budgetLabel === "Within budget" || item.budgetLabel === "Value pick" ? "Fits your budget" : null,
+          fitPreview?.recommendedSize ? "Good fit for your measurements" : null,
+          product.offerSummary?.offerCount > 0 ? "Available nearby" : null,
+          product.offerSummary?.lowestPrice != null ? "Best price found" : null
+        ].filter((reason): reason is string => Boolean(reason)),
         rankingBadges: item.badges,
         occasionTags: product.occasionTags,
         budgetLabel: item.budgetLabel,
@@ -431,6 +553,98 @@ Sort by score descending. Include all ${candidates.length} products.`,
 
     return ranked;
   }
+
+  async completeLook(user: AuthenticatedUser, query: RecommendationQueryDto) {
+    const targetUserId = query.userId ?? user.id;
+    this.authorizationService.assertSelfOrPrivileged(user, targetUserId, "You cannot view these recommendations");
+    if (!query.productId) {
+      return [];
+    }
+
+    const [profile, anchorProduct, products] = await Promise.all([
+      (this.prisma.profile as any).findUnique({ where: { userId: targetUserId } }),
+      this.prisma.product.findUnique({
+        where: { id: query.productId },
+        include: {
+          brand: true,
+          variants: { include: { inventoryOffers: { include: { shop: true } }, sizeChartEntries: true } }
+        }
+      }),
+      this.prisma.product.findMany({
+        include: {
+          brand: true,
+          variants: { include: { inventoryOffers: { include: { shop: true } }, sizeChartEntries: true } },
+          _count: { select: { savedLookItems: true, lookRatings: true } }
+        }
+      })
+    ]);
+
+    if (!anchorProduct) {
+      return [];
+    }
+
+    const slots = completeLookSlots(anchorProduct.category);
+    const selectedIds = new Set<string>([anchorProduct.id]);
+    const results: any[] = [];
+
+    for (const slot of slots) {
+      const candidates = products
+        .filter((product) => !selectedIds.has(product.id))
+        .map((product) => scoreCompleteLookCandidate({ product, anchor: anchorProduct, profile, slot }))
+        .filter((item) => item.score > 0)
+        .sort((left, right) => right.score - left.score);
+
+      const best = candidates[0];
+      if (!best) {
+        continue;
+      }
+
+      selectedIds.add(best.serialized.id);
+      results.push({
+        id: `${targetUserId}-${anchorProduct.id}-${slot.slot}-${best.serialized.id}`,
+        productId: best.serialized.id,
+        product: best.serialized,
+        score: Math.min(100, Math.round(best.score)),
+        explanation: `Recommended as the ${slot.label.toLowerCase()} piece for ${anchorProduct.name}.`,
+        reasonTags: best.reasons,
+        recommendationReasons: best.reasons,
+        rankingBadges: [
+          slot.label,
+          best.serialized.offerSummary?.offerCount > 0 ? "Affiliate-ready" : null,
+          best.serialized.offerSummary?.shopCount > 0 ? "Local inventory" : null
+        ].filter((badge): badge is string => Boolean(badge)),
+        budgetLabel: best.withinBudget ? "Within budget" : "Compare price",
+        offerSummary: best.serialized.offerSummary,
+        completeLookSlot: slot.slot,
+        completeLookLabel: slot.label
+      });
+    }
+
+    if (results.length > 0) {
+      return results;
+    }
+
+    return products
+      .filter((product) => product.id !== anchorProduct.id)
+      .map((product) => {
+        const serialized = serializeProductCard(product);
+        return {
+          id: `${targetUserId}-${anchorProduct.id}-fallback-${serialized.id}`,
+          productId: serialized.id,
+          product: serialized,
+          score: 35,
+          explanation: `Fallback styling pick for ${anchorProduct.name}.`,
+          reasonTags: ["Completes your look"],
+          recommendationReasons: ["Completes your look", serialized.offerSummary?.offerCount > 0 ? "Best price found" : "Style match"].filter(Boolean),
+          rankingBadges: ["Fallback"],
+          budgetLabel: "Compare price",
+          offerSummary: serialized.offerSummary,
+          completeLookSlot: "fallback",
+          completeLookLabel: "Suggested"
+        };
+      })
+      .slice(0, 4);
+  }
 }
 
 @ApiBearerAuth()
@@ -442,6 +656,11 @@ class RecommendationsController {
   @Get()
   list(@CurrentUser() user: AuthenticatedUser, @Query() query: RecommendationQueryDto) {
     return this.service.list(user, query);
+  }
+
+  @Get("complete-look")
+  completeLook(@CurrentUser() user: AuthenticatedUser, @Query() query: RecommendationQueryDto) {
+    return this.service.completeLook(user, query);
   }
 
   @Post("generate")
